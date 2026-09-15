@@ -1,0 +1,18 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "win32",
+      "displayName": "Windows x86 (Visual Studio 2022)",
+      "description": "SiN is a 32-bit game, so everything is built for Win32.",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "Win32",
+      "binaryDir": "${sourceDir}/build/win32"
+    }
+  ],
+  "buildPresets": [
+    { "name": "release", "configurePreset": "win32", "configuration": "Release" },
+    { "name": "debug", "configurePreset": "win32", "configuration": "Debug" }
+  ]
+}
