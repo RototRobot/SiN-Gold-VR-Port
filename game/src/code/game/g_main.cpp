@@ -208,6 +208,7 @@ only happens when a new game is begun
 void G_InitGame(void)
 {
    gi.dprintf("==== InitGame ====\n");
+   gi.printf("SiN Gold VR game module, built " __DATE__ " " __TIME__ "\n");
 
    // Install our own error handler, since we can't
    // call the EXE's handler from within a C++ class
