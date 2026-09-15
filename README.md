@@ -8,6 +8,8 @@ movement and tracked motion controllers.
 > records how the engine drives the renderer, and can show the game on a virtual screen in the
 > headset. Stereo rendering, head tracking and controllers come next (see the roadmap).
 
+**New to the project?** Start with [docs/HANDOFF.md](docs/HANDOFF.md).
+
 ## How it works
 
 SiN runs on a modified Quake II engine. The engine (`sin.exe`) and its OpenGL renderer (`ref_gl.dll`)
@@ -89,8 +91,8 @@ Applying them resets `vid_ref` to `gl`, which swaps the VR renderer out.
 ## Roadmap
 
 1. ✅ Pass-through renderer, game DLL built from source, and a 32-bit OpenXR loader
-2. 🚧 Virtual screen in the headset, from an OpenXR session on SiN's own GL context
-3. Stereo rendering and head tracking, driven by the engine's own two-pass stereo loop
+2. ✅ Virtual screen in the headset, from an OpenXR session on SiN's own GL context
+3. 🚧 Stereo rendering and head tracking, driven by the engine's own two-pass stereo loop
 4. HUD and menus in VR
 5. Motion controllers: aiming through the game DLL, and buttons
 6. Locomotion, turning and roomscale
