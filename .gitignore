@@ -1,0 +1,22 @@
+# Build trees
+/build/
+/out/
+CMakeUserPresets.json
+
+# Editors
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Stray build output anywhere in the tree
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+
+# Logs
+*.log
