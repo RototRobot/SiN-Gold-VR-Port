@@ -43,6 +43,20 @@ The build takes about 36 s and produces:
 | Useful extensions | `XR_EXT_hp_mixed_reality_controller`, `XR_KHR_composition_layer_depth`, `XR_KHR_visibility_mask`, `XR_EXT_local_floor`, `XR_KHR_locate_spaces` |
 | Side effect | Creating the instance started SteamVR's `vrserver` within about 3 s. |
 
+## First session on SiN's own GL context (2026-09-15)
+
+This was `ref_vr` with `vr_enable 1`, in an unattended run with the headset on the desk.
+
+- **Layers and instance.** The three VIVE layers were switched off automatically, and `xrCreateInstance` succeeded with API 1.0.
+- **Start-up time.** `xrCreateInstance` took about 12 s, because it started SteamVR (`vrserver`, `vrmonitor`,
+  `vrcompositor`). SteamVR stays running after the game quits.
+- **Session.** `xrCreateSession` on ref_gl's legacy `wglCreateContext` context (GL 4.6 compatibility) worked first
+  time, and the session went IDLE → READY → SYNCHRONIZED → VISIBLE → FOCUSED.
+- **Swapchain.** The virtual-screen swapchain was 640×480 in `GL_SRGB8_ALPHA8` (0x8C43), with 3 images. The first frame was
+  submitted 0.3 s after the session was created, and 315 frames were shown before a clean shutdown.
+- **Focus with nobody wearing the headset.** Focus dropped to VISIBLE/SYNCHRONIZED and then returned. Expect this whenever the
+  headset idles or the SteamVR dashboard opens.
+
 ## Trap: implicit layers registered for 32-bit that ship only 64-bit DLLs
 
 **The problem.** The VIVE driver registers three implicit API layers (hand tracking, facial tracking and SRWorks) under

@@ -132,6 +132,26 @@ Useful sin.exe RVAs:
 - RenderFrame callers: 0x16C90 (probably `timerefresh`, which also has BeginFrame and EndFrame),
   0x27150 (probably V_RenderView), and 0x48A60 and 0x48E50.
 
+## Observed at runtime (ref_vr call trace, 2026-09-15)
+
+These come from `sinvr.log` in an unattended run: start the game, `map bank`, take two screenshots, quit.
+
+- **A world frame in normal play (`cl_stereo 0`) is a single pass:**
+  `BeginFrame(0.0)`, `slot+0x64` ×2–25, `RenderFrame`, `DrawFadeScreen`, then the HUD (`DrawChar`, `slot+0x68`),
+  then `EndFrame`.
+  - `slot+0x40` ("DrawFadeScreen") runs after *every* world view. So it is more likely SiN's full-screen blend
+    than Quake 2's menu fade.
+  - `slot+0x64` is also called in between `RegisterModel` calls while a level loads, so it looks like a per-model query.
+- **Loading and menu frames** use `slot+0x6C` and `slot+0x70` together with `DrawGetPicSize`.
+- **The world view** was a 640×480 viewport at `fov_x` 90.0 / `fov_y` 73.7, with `rdflags` 0.
+- **Call counts over the run:** `DrawChar` 14.8k, `slot+0x68` 13.5k, `slot+0x64` 1.1k, `RenderFrame` 409.
+- **Where the mod folder's files go.** With `+set game sinvr`, the engine writes its config, saves and screenshots under
+  `sinvr\players\blade\`. The normal `base` config is never touched.
+- **Load time.** Loading `bank` stalled a single frame for about 22 s before the first world frame. This is worth comparing
+  with a stock launch.
+- **Missing renderer.** If `vid_ref` is `vr` but `ref_vr.dll` is missing, the engine prints `LoadLibrary("ref_vr.dll") failed` and
+  falls back to `ref_gl.dll` by itself.
+
 ## Game DLL: what matters for VR
 
 - **Aiming.** `Weapon::GetMuzzlePosition` (weapon.cpp:324) calls `owner->GunPosition()` and
