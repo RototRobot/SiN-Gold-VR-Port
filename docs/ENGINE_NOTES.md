@@ -205,6 +205,54 @@ show the engine behaving exactly as the disassembly suggested:
   rendered frame; escape then opens the menu rather than closing anything, because by that point the
   key destination is the game again.
 
+## The import table, and how input gets in (2026-09-16)
+
+**`refimport_t` is Quake II's, with two extra entries before the cvar calls.** sin.exe fills it on the
+stack at 0x49F2DE onwards, which gives the layout directly. By slot, with sin.exe RVAs:
+
+| Slot | RVA | What it is |
+|---|---|---|
+| 0 | 0x09E980 | `Sys_Error` |
+| 1 | 0x077250 | `Cmd_AddCommand` |
+| 2 | 0x077300 | `Cmd_RemoveCommand` |
+| 3 | 0x076E00 | `Cmd_Argc` - returns a global int |
+| 4 | 0x076E10 | `Cmd_Argv` - bounds-checked array of strings |
+| 5 | 0x076360 | **`Cbuf_ExecuteText(exec_when, text)`** - switch on arg 0: 0 now, 1 next, 2 queued |
+| 6 | 0x09E8C0 | `Con_Printf` |
+| 7-11 | 0x016440, 0x054120, 0x0541B0, 0x054630, 0x0548D0 | file system and friends, not yet named |
+| 12 | 0x080570 | `Cvar_Get` |
+| 13 | 0x080920 | `Cvar_Set` |
+| 14 | 0x080A20 | `Cvar_SetValue` |
+
+Slot 5 is what lets the renderer act as a player: queueing `+attack` there is indistinguishable from a
+key bind firing.
+
+**Quake II's joystick support is intact, and nothing else uses it.** sin.exe imports exactly the three
+winmm calls `IN_StartupJoystick` needs - `joyGetNumDevs`, `joyGetDevCapsA`, `joyGetPosEx` - and all of
+Quake II's joystick cvars are in the binary (`joy_advanced`, `joy_advaxisx`..`joy_advaxisv`,
+`joy_forwardsensitivity`, `joy_yawsensitivity`, the thresholds, and the `joy_advancedupdate` command).
+Answering those three imports in-process presents a joystick that does not exist, and the engine then
+does the movement work itself. The console says `joystick detected` where it used to say
+`joystick not found -- no valid joysticks (a5)` (0xa5 is `JOYERR_PARMS`).
+
+- Axis values are raw, 0..65535, and the engine reads `value / 32768 - 1`, so 32768 is the centre.
+- With `joy_advanced 1` the mapping comes from the `joy_advaxis*` cvars: 1 forward, 2 look, 3 side,
+  4 turn. `AxisTurn` adds to the yaw, which grows to the *left*, so a rightward stick has to be negated.
+- Buttons are better left at zero: the engine would turn them into `K_JOY*` key events, and whatever the
+  player has bound to those would fire as well.
+
+**Other client behaviour worth knowing:**
+
+- **A `wait` stops the command buffer for that frame,** including anything appended behind it. A cfg full
+  of `wait`s therefore swallows commands the renderer queues, until it drains.
+- **Single-player levels open on a cinematic** that holds the player still, and the camera in `refdef_t`
+  is the cinematic's, not the player's. Deathmatch maps (`sindm6`, `biodm`, `oilrigdm`, `sindm9` with
+  `deathmatch 1`) start the player in control, which is what input tests want.
+- **There is almost no air control**, as in Quake II, so a test that presses a movement key while the
+  player is still falling from a spawn point measures nothing.
+- `viewpos` prints the player's position and yaw, which is the cheapest way to measure input from a
+  script.
+
 ## Game DLL: what matters for VR
 
 - **Aiming.** `Weapon::GetMuzzlePosition` (weapon.cpp:324) calls `owner->GunPosition()` and

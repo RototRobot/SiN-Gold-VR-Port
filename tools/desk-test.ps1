@@ -35,7 +35,8 @@ param(
     [int]$TimeoutSeconds = 180,
     [string]$ExtraArgs = "",
     [string]$Commands = "",
-    [switch]$Foreground
+    [switch]$Foreground,
+    [switch]$KeepRunning
 )
 
 $ErrorActionPreference = "Stop"
@@ -50,10 +51,15 @@ New-Item -ItemType Directory -Force $OutDir | Out-Null
 $cfgName = "sinvr_desk_test.cfg"
 # -Commands runs once the level is up and the first screenshot is taken. The
 # engine splits it on semicolons, as it would a line typed into the console.
+#
+# A "wait" holds up everything behind it in the command buffer, including the
+# commands the mod itself queues for a controller button, so -KeepRunning leaves
+# the "quit" out: the cfg then runs dry, those commands get their turn, and the
+# watchdog stops the game at -TimeoutSeconds.
 $lines = @("// written by tools\desk-test.ps1", "map $Map") +
     (@("wait") * $WaitFrames) + @("screenshot") +
     @($Commands) + (@("wait") * $WaitFrames) + @("screenshot") +
-    (@("wait") * 20) + @("quit")
+    (@("wait") * 20) + $(if ($KeepRunning) { @() } else { @("quit") })
 Set-Content -Path (Join-Path $modDir $cfgName) -Value $lines -Encoding ASCII
 
 # vr_force_render: the runtime says an untouched headset needs no picture, and an

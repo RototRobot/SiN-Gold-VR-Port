@@ -4,7 +4,7 @@ This is the handoff for anyone joining the project, whether a person or an AI. I
 why it is shaped the way it is, how to build and test it, what has already been learned the hard way,
 and what comes next. The detailed evidence lives in the other files in `docs/`; this one is the map.
 
-*Last updated 2026-09-16 (second pass).*
+*Last updated 2026-09-16 (third pass).*
 
 ## 1. Where the project is
 
@@ -14,8 +14,9 @@ and what comes next. The detailed evidence lives in the other files in `docs/`; 
 | 2. Virtual "theatre" screen in the headset | ✅ Done. The owner confirmed it in the headset on 2026-09-15: it loads, doesn't crash, and the colours are right. It is low resolution, as expected. |
 | 3. Stereo rendering with head tracking | ✅ Built and verified at the desk on 2026-09-16: 406 projection-layer frames in one run, correct per-eye poses and fields of view, ~87 frames/s at 2444×2392 per eye. Not yet seen in the headset by a person. How it works: [§9](#9-how-stereo-works) |
 | 4. HUD, crosshair and console in VR | ✅ Built 2026-09-16. The 2D goes into a panel `vr_hud_fov` degrees wide, `vr_hud_depth` metres away, centred on each eye's own axis - which is also what stops the crosshair from doubling. [§9](#9-how-stereo-works) |
-| 5. Motion controllers | **Next.** Nothing built. The plan is in [§11](#11-next-motion-controllers) |
-| 6–9 | Locomotion, weapons in the hand, Wages of Sin, and packaging (see the roadmap in the [README](../README.md)) |
+| 5. Motion controller input | ✅ Built 2026-09-16: buttons run console commands, the sticks arrive as a joystick the engine polls. Measured at the desk. [§11](#11-controller-input) |
+| 6. Tracked hands | **Next.** The poses are already located; getting them to the game DLL is the work. [§12](#12-next-tracked-hands) |
+| 7–9 | Roomscale comfort, Wages of Sin, and packaging (see the roadmap in the [README](../README.md)) |
 
 ## 2. How it fits together
 
@@ -94,7 +95,12 @@ The mod adds these cvars:
 | `vr_hud_fov` | 60 | Width of the HUD panel, in degrees (archived) |
 | `vr_hud_depth` | 6 | How far away the HUD panel appears, in metres; 0 is infinity (archived) |
 | `vr_recenter` | 0 | Set to 1 to measure the head afresh from where the player is now; clears itself |
+| `vr_input` | 1 | Take input from the controllers (archived) |
+| `vr_deadzone` | 0.15 | Stick deadzone, applied to both axes together (archived) |
+| `vr_bind_*` | see §11 | The console command each button runs (archived) |
 | `vr_dump_eye` | 0 | Set to 1 to write the next frame's eye images beside `sin.exe` as `sinvr_eye0/1.tga` |
+| `vr_fake_axes` | | Desk testing: "`<forward> <side> <turn>`" pretends the sticks are held there |
+| `vr_fake_press` | | Desk testing: the name of a button to press for a few frames, e.g. `jump` |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. Needed for unattended VR runs |
 | `vr_trace` | 1 | Log the renderer calls of each new kind of frame |
 
@@ -132,6 +138,15 @@ are parameters. What to expect:
   opaque blend and a PAUSE sign, so a background run renders no world at all.
 - Beware that an **unknown console command is forwarded to the server and ends up as chat** ("Blade: foo"),
   so a typo in `-Commands` fails silently. `cl_paused` and `sv_paused` are not SiN cvars; `paused` is.
+- `-KeepRunning` leaves the `quit` out of the cfg and lets the watchdog stop the game. Needed whenever
+  the mod itself queues console commands - a controller button, say - because a `wait` holds up
+  everything behind it in the command buffer, and the cfg is full of them (§8).
+- **Input can be tested without controllers**: `vr_fake_axes "0.9 0 0"` holds the sticks somewhere, and
+  `vr_fake_press jump` presses a button for a few frames, both through the real path. `viewpos` prints the
+  player's position and yaw, which is how the axes were checked.
+- For input, load a **deathmatch map** (`-Map sindm6 -ExtraArgs "+set deathmatch 1"`): the single-player
+  levels open on a cinematic that holds the player still, and a player who is still falling from a spawn
+  point has almost no control in the air.
 - A VR run adds about 12 s while SteamVR starts, and SteamVR stays running afterwards.
 - `-Vr` passes `vr_force_render 1`. Without it the runtime reports `shouldRender = false` for a headset lying
   on the desk and nothing at all is drawn for the headset.
@@ -189,6 +204,9 @@ python -c "from PIL import Image; im = Image.open('sinvr_eye0.tga').convert('L')
 | `src/ref_vr/vr_xr.c` | OpenXR: instance, session on ref_gl's GL context, event loop, the theatre-screen quad layer, and the per-eye swapchains and projection layer |
 | `src/ref_vr/vr_gl.c` | Redirects ref_gl's `glFrustum`, `glOrtho`, `glViewport` and `glScissor` while an eye is bound, by hooking its `GetProcAddress` import. Holds the HUD panel geometry |
 | `src/ref_vr/vr_view.c` | Turns an OpenXR eye pose into the engine's `refdef_t` (axes, scale, angles, field of view) and back |
+| `src/ref_vr/vr_input.c` | OpenXR actions and bindings, and the mapping from them to console commands and stick axes |
+| `src/ref_vr/vr_joy.c` | The joystick that only exists in this process, which is how the sticks reach the engine |
+| `src/ref_vr/vr_hook.c` | Patching another module's imports, shared by the GL and joystick hooks |
 | `src/ref_vr/xr_layers.c` | Implicit-layer hygiene for 32-bit processes (shared with xrprobe) |
 | `src/ref_vr/vrlog.c` | `sinvr.log` |
 | `game/` | Night Dive's source (SiN in `src/code/game`, WoS in `src/code/game2015`, shared `elib`) plus `game/CMakeLists.txt`. `git diff 07ae69c -- game` shows everything we changed there; today that is one line in `g_main.cpp`. |
@@ -236,6 +254,12 @@ The short version for AI tools is [AGENTS.md](../AGENTS.md).
 
 **Testing**
 
+- **A `wait` in the command buffer holds up everything behind it,** including commands the mod queues
+  itself. A controller button appends `+attack` the way a key bind does, so with a `wait`-heavy cfg
+  running it will not be seen until the cfg drains - or never, if the cfg ends in `quit`. It cost an
+  afternoon of "the button does nothing": `desk-test.ps1 -KeepRunning` is the answer.
+- **Archived cvars keep whatever a test left in them**, in `sinvr\players\blade\config.cfg`. A test that
+  rebinds `vr_bind_jump` to an `echo` and then quits cleanly leaves it that way for the next run.
 - **A level starts on a "PRESS ANY KEY TO CONTINUE" card** - Blade against a circuit-board background -
   drawn by `sin.exe` after the last precache line (`sky`). While it is up the engine renders nothing new
   and **executes no console commands**, so a `+exec` script stops dead there and the main thread spins at
@@ -347,33 +371,68 @@ Still to do, in the order it matters:
 - Wages of Sin: its game DLL builds, but how to deploy it next to the `2015` data is still undecided.
 - The licence for the mod's own code (`src/`, `tools/`, `cmake/`) has not been chosen.
 
-## 11. Next: motion controllers
+## 11. Controller input
 
-The owner's verdict after the first stereo test (2026-09-16): the world reads correctly in stereo and the
-view is properly decoupled from the arms; the HUD sat too far out and the crosshair doubled (both now
-fixed by the panel); and the gun arm looks too big. That last one is best answered here rather than by
-tweaking projections, by putting the weapon in a tracked hand at a chosen scale.
+Built 2026-09-16, and measured at the desk. The client that reads input is closed, so nothing here
+touches it: the controllers arrive the way a player's own binds and joystick would.
 
-The client is closed, so input has to come in from the side. Four pieces, in the order they pay off:
+1. **OpenXR actions** (`vr_input.c`). One action set, `gameplay`, created with the session and attached to
+   it before the first frame - a session takes its action sets once only, so the pose actions for the
+   hands are created now too, ahead of being used. Bindings are suggested for the Reverb G2
+   (`/interaction_profiles/hp/mixed_reality_controller`, which needs `XR_EXT_hp_mixed_reality_controller`
+   enabled at instance creation for the lettered buttons), plain WMR controllers, Oculus Touch, Valve
+   Index, and the Khronos simple controller as a floor. A runtime refuses profiles it does not know, which
+   is fine; it keeps the ones it does.
+2. **Buttons run console commands.** `refimport_t` slot 5 is Quake II's `Cbuf_ExecuteText(exec_when, text)`
+   - confirmed from the disassembly, a three-way switch on the first argument, and from where sin.exe
+   fills the table (§ENGINE_NOTES). A press queues the command in `vr_bind_<name>`; a release queues the
+   `-` form of a `+` command. That is exactly what the engine's own key binds do, so `+attack`, `+use`,
+   `weapnext` and the rest work with no client hook at all.
+3. **The sticks are a joystick** (`vr_joy.c`). SiN still carries Quake II's joystick support and imports
+   `joyGetNumDevs`, `joyGetDevCapsA` and `joyGetPosEx` from `winmm`, so answering those three in this
+   process presents a stick that does not exist: no driver, nothing installed. The engine then does the
+   rest of the work itself - acceleration, `cl_forwardspeed`, turning. `vr_input_startup()` runs from the
+   renderer's `Init`, which is just before the engine looks for a joystick, and sets `in_joystick 1`,
+   `joy_advanced 1` and the axis mapping (x side, y forward, r turn) with sensitivity 1 and no threshold,
+   so the values arrive as given. The deadzone is applied in `vr_input.c` instead, where both axes of a
+   stick can be judged together.
+   - Signs, measured rather than assumed: forward on the stick walks the way the player faces; `side`
+     positive strafes right; `turn` positive turns right, which means *negating* it for the engine, whose
+     yaw grows to the left.
+4. **Focus.** `xrSyncActions` returns `XR_SESSION_NOT_FOCUSED` while the runtime is showing something of
+   its own, and then everything held is released and the sticks centre. The same happens if a controller's
+   action goes inactive while a button is held, or the session goes away.
 
-1. **Poses and buttons in `ref_vr`.** An OpenXR action set with aim/grip poses for both hands and the
-   usual buttons, bound for `/interaction_profiles/hp/mixed_reality_controller` with the Khronos simple
-   controller as a fallback. Locate the hands at the same `predictedDisplayTime` as the eyes, in the same
-   recentred space, so the hands and the head agree.
-2. **Buttons as console commands.** `refimport_t` carries Quake II's `Cmd_ExecuteText`, which is almost
-   certainly **slot 5** - the order is `Sys_Error`, `Cmd_AddCommand`, `Cmd_RemoveCommand`, `Cmd_Argc`,
-   `Cmd_Argv`, `Cmd_ExecuteText`, `Con_Printf`, and `Con_Printf` is slot 6 as we already use it. Verify by
-   calling it with a harmless `echo`. Then a trigger becomes `+attack`, and so on. The import table is
-   logged at startup, so the slot can be checked against `sinvr.log`.
-3. **Sticks as a joystick.** `sin.exe` imports `joyGetPosEx` from `winmm`, and `vr_gl.c` already has the
-   IAT patching needed to answer it ourselves - the same trick used on ref_gl's `GetProcAddress`, applied
-   to `sin.exe` this time. A virtual joystick gives smooth movement and turning through the engine's own
-   input path, with `in_joystick 1` and the `joy_advanced` cvars set to taste. This avoids hooking the
-   client's command builder.
-4. **Hands into the game DLL.** Aiming from the controller, and a weapon held in the hand, need the poses
-   inside `gamex86.dll`. Both DLLs are ours, so a small shared-memory block (a named section, or a file
-   mapping) written by `ref_vr` and read by the game is the least invasive channel. Game-side, the places
-   to look are `Player::GunPosition`/`GetGunOrientation` for aiming and the view-model attachment for the
-   weapon; `refdef_t` and `entity_t` still need mapping past `rdflags`.
+What the desk runs showed, on `sindm6` with `deathmatch 1`:
 
-Hand tracking (`XR_EXT_hand_tracking`) comes after controllers: the same pose channel, a different source.
+- the engine prints `joystick detected` instead of `joystick not found -- no valid joysticks (a5)`;
+- `vr_fake_axes "0.9 0 0"` walked the player from (432 -751) to (318 -638) at yaw 135, which is exactly
+  along the facing direction;
+- `vr_fake_axes "0 0 0.6"` turned the yaw from 135 to 80 and moved the player nowhere;
+- `vr_fake_axes "0 0.9 0"` strafed to the right of the facing direction;
+- a button bound to `echo` printed in the console, and with the default binding the log shows
+  `input: jump pressed -> "+moveup"` and a release 125 ms later.
+
+## 12. Next: tracked hands
+
+The owner's verdict after trying the HUD panel (2026-09-16): the HUD and crosshair read correctly now,
+but the crosshair follows the headset rather than where the gun points - which is the next thing, since
+aiming has to come from the hand.
+
+The hand poses are already located in the same recentred space as the eyes (`ACT_HAND_LEFT`,
+`ACT_HAND_RIGHT` exist and are bound to `/input/aim/pose`); what is missing is a way to get them into the
+game, and a weapon that follows them.
+
+1. **A channel between the two DLLs.** Both are ours, so a named shared-memory block written by `ref_vr`
+   and read by `gamex86.dll` is the least invasive way: head and hand poses, in game units, plus the
+   recentring, written once a frame.
+2. **Aiming from the hand.** Game-side, `Player::GunPosition` and `GetGunOrientation` (in
+   `game/src/code/game/player.cpp`) decide where shots come from and go. Overriding them with the right
+   hand's pose gives real VR aiming, and the crosshair then belongs on the weapon's own axis rather than
+   the head's - which is also when the HUD crosshair should stop being drawn in the panel.
+3. **The weapon in the hand.** The view model is drawn by the engine from `refdef_t`; the size the owner
+   noticed ("the gun arm looked too big") is best fixed by attaching the weapon to the hand at a chosen
+   scale rather than by changing projections. `refdef_t` past `rdflags` and `entity_t` still need mapping.
+4. **Then comfort:** snap turning, crouching, and the body following the head.
+
+Hand tracking (`XR_EXT_hand_tracking`) comes after that: the same channel, a different source.

@@ -25,6 +25,7 @@
 
 #include "ref_vr.h"
 #include "vr_gl.h"
+#include "vr_input.h"
 #include "vr_xr.h"
 #include "xr_layers.h"
 
@@ -287,6 +288,8 @@ static void xr_release(xr_target_t *t)
 /* Everything created so far, in reverse. Keeps the failed flag. */
 static void xr_teardown(void)
 {
+	vr_input_destroy();
+
 	int failed = xr.failed;
 
 	if (xr.bound_eye)
@@ -361,9 +364,47 @@ static int xr_choose_format(void)
 	return xr.format != 0;
 }
 
+/* Whether the runtime offers an extension, asked before there is an instance. */
+static int xr_extension_available(const char *name)
+{
+	XrExtensionProperties *list;
+	uint32_t count = 0, i;
+	int found = 0;
+
+	if (XR_FAILED(xrEnumerateInstanceExtensionProperties(NULL, 0, &count, NULL)) || count == 0)
+	{
+		return 0;
+	}
+
+	list = (XrExtensionProperties *)calloc(count, sizeof(*list));
+	if (!list)
+	{
+		return 0;
+	}
+	for (i = 0; i < count; ++i)
+	{
+		list[i].type = XR_TYPE_EXTENSION_PROPERTIES;
+	}
+
+	if (XR_SUCCEEDED(xrEnumerateInstanceExtensionProperties(NULL, count, &count, list)))
+	{
+		for (i = 0; i < count; ++i)
+		{
+			if (strcmp(list[i].extensionName, name) == 0)
+			{
+				found = 1;
+			}
+		}
+	}
+
+	free(list);
+	return found;
+}
+
 static int xr_start(void)
 {
-	const char *extensions[] = { XR_KHR_OPENGL_ENABLE_EXTENSION_NAME };
+	const char *extensions[2];
+	uint32_t extension_count = 0;
 	XrInstanceCreateInfo instance_info = { XR_TYPE_INSTANCE_CREATE_INFO };
 	XrInstanceProperties instance_props = { XR_TYPE_INSTANCE_PROPERTIES };
 	XrSystemGetInfo system_info = { XR_TYPE_SYSTEM_GET_INFO };
@@ -398,7 +439,12 @@ static int xr_start(void)
 	instance_info.applicationInfo.engineVersion = 113;
 	/* SteamVR's 32-bit runtime refuses 1.1 (docs/OPENXR_NOTES.md). */
 	instance_info.applicationInfo.apiVersion = XR_API_VERSION_1_0;
-	instance_info.enabledExtensionCount = 1;
+	extensions[extension_count++] = XR_KHR_OPENGL_ENABLE_EXTENSION_NAME;
+	if (xr_extension_available(vr_input_extension()))
+	{
+		extensions[extension_count++] = vr_input_extension();
+	}
+	instance_info.enabledExtensionCount = extension_count;
 	instance_info.enabledExtensionNames = extensions;
 	if (!xr_check(xrCreateInstance(&instance_info, &xr.instance), "xrCreateInstance"))
 	{
@@ -477,6 +523,8 @@ static int xr_start(void)
 	{
 		swap_interval(0);
 	}
+
+	vr_input_create(xr.instance, xr.session);
 
 	vr_printf("VR: session created");
 	return 1;
@@ -691,6 +739,16 @@ void vr_xr_frame(float screen_distance, float screen_width, int force_render)
 void vr_xr_request_recenter(void)
 {
 	xr.recenter_wanted = 1;
+}
+
+void vr_xr_input(void)
+{
+	if (!xr_ready())
+	{
+		return;
+	}
+
+	vr_input_frame(xr.session);
 }
 
 int vr_xr_stereo_possible(void)

@@ -26,6 +26,12 @@
  */
 void vr_xr_frame(float screen_distance, float screen_width, int force_render);
 
+/*
+ * Once per engine frame, before anything is drawn: brings the session up if it
+ * is not, handles its events, and reads the controllers (vr_input.c).
+ */
+void vr_xr_input(void);
+
 /* True while stereo frames can be rendered: a session running and eye targets
    possible. */
 int vr_xr_stereo_possible(void);

@@ -23,6 +23,7 @@
 #include "refapi.h"
 #include "ref_vr.h"
 #include "vr_gl.h"
+#include "vr_input.h"
 #include "vr_view.h"
 #include "vr_xr.h"
 #include "vrlog.h"
@@ -40,6 +41,9 @@ typedef void (*re_draw_fade_screen_t)(float red, float green, float blue, float 
 typedef void (*con_printf_t)(int print_level, const char *fmt, ...);
 typedef cvar_t *(*cvar_get_t)(const char *name, const char *value, int flags);
 typedef cvar_t *(*cvar_set_t)(const char *name, const char *value);
+typedef void (*cmd_execute_text_t)(int exec_when, const char *text);
+
+#define EXEC_APPEND 2 /* the command buffer runs it in turn, like a bind */
 
 static HMODULE g_self;
 static HMODULE g_refgl;
@@ -378,9 +382,30 @@ static void register_cvars(void)
 	cl_stereo = cvar_get("cl_stereo", "0", 0);
 }
 
-static void set_cvar(const char *name, const char *value)
+cvar_t *vr_cvar(const char *name, const char *value, int flags)
+{
+	cvar_get_t cvar_get = (cvar_get_t)g_ri.slot[RI_CVAR_GET];
+
+	return cvar_get ? cvar_get(name, value, flags) : NULL;
+}
+
+void vr_cvar_set(const char *name, const char *value)
 {
 	((cvar_set_t)g_ri.slot[RI_CVAR_SET])(name, value);
+}
+
+void vr_command(const char *text)
+{
+	cmd_execute_text_t execute = (cmd_execute_text_t)g_ri.slot[RI_CMD_EXECUTE_TEXT];
+	char line[192];
+
+	if (!execute || !text || !text[0])
+	{
+		return;
+	}
+
+	sprintf(line, "%.180s\n", text);
+	execute(EXEC_APPEND, line);
 }
 
 /* The world goes to the headset in stereo when that is asked for and a session is running. */
@@ -419,7 +444,7 @@ static void update_stereo(void)
 		return;
 	}
 
-	set_cvar("cl_stereo", want ? "1" : "0");
+	vr_cvar_set("cl_stereo", want ? "1" : "0");
 
 	if (!want)
 	{
@@ -427,14 +452,14 @@ static void update_stereo(void)
 		return;
 	}
 
-	set_cvar("cl_stereo_separation", "0");
+	vr_cvar_set("cl_stereo_separation", "0");
 
 	/* View bob and roll move the camera without the head moving. */
 	if (!g_comfort_applied)
 	{
 		for (i = 0; i < sizeof(view_motion) / sizeof(view_motion[0]); ++i)
 		{
-			set_cvar(view_motion[i], "0");
+			vr_cvar_set(view_motion[i], "0");
 		}
 		g_comfort_applied = 1;
 	}
@@ -470,7 +495,13 @@ static int vr_Init(void *hinstance, void *wndproc)
 	   is done; update_stereo() turns it on once the headset is running. */
 	if (vr_enable->value != 0.0f && cl_stereo->value != 0.0f)
 	{
-		set_cvar("cl_stereo", "0");
+		vr_cvar_set("cl_stereo", "0");
+	}
+
+	/* Before the engine's own input start-up, which comes after this. */
+	if (vr_enable->value != 0.0f)
+	{
+		vr_input_startup();
 	}
 
 	result = ((re_init_t)g_real_slot[RE_INIT])(hinstance, wndproc);
@@ -551,16 +582,21 @@ static void vr_BeginFrame(float camera_separation)
 		g_stereo_frame = stereo_wanted() && g_last_frame_had_world && cl_stereo->value != 0.0f;
 	}
 
+	if (pass == 0 && vr_enable && vr_enable->value != 0.0f)
+	{
+		vr_xr_input();
+	}
+
 	/* "vr_recenter 1" and "vr_dump_eye 1" in the console, answered and cleared here. */
 	if (pass == 0 && vr_recenter && vr_recenter->value != 0.0f)
 	{
 		vr_xr_request_recenter();
-		set_cvar("vr_recenter", "0");
+		vr_cvar_set("vr_recenter", "0");
 	}
 	if (pass == 0 && vr_dump_eye && vr_dump_eye->value != 0.0f)
 	{
 		vr_xr_request_eye_dump();
-		set_cvar("vr_dump_eye", "0");
+		vr_cvar_set("vr_dump_eye", "0");
 	}
 
 	if (g_stereo_frame && pass < 2)

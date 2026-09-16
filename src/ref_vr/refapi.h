@@ -57,6 +57,7 @@ enum
 /* refimport_t slots ref_vr calls. The rest are passed through untouched. */
 enum
 {
+	RI_CMD_EXECUTE_TEXT = 5, /* void  (*)(int exec_when, const char *text); 0 now, 1 next, 2 queued */
 	RI_CON_PRINTF = 6,     /* void    (*)(int print_level, const char *fmt, ...) */
 	RI_CVAR_GET = 12,      /* cvar_t *(*)(const char *name, const char *value, int flags) */
 	RI_CVAR_SET = 13,      /* cvar_t *(*)(const char *name, const char *value) */

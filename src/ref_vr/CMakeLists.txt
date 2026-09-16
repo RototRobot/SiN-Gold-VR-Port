@@ -6,6 +6,12 @@ add_library(ref_vr SHARED
 	refapi.h
 	vr_gl.c
 	vr_gl.h
+	vr_hook.c
+	vr_hook.h
+	vr_input.c
+	vr_input.h
+	vr_joy.c
+	vr_joy.h
 	vr_view.c
 	vr_view.h
 	vr_xr.c
@@ -24,7 +30,7 @@ target_compile_definitions(ref_vr PRIVATE
 target_compile_options(ref_vr PRIVATE /W3)
 
 # openxr_loader.dll is delay-loaded, so a missing loader costs VR, not the game.
-target_link_libraries(ref_vr PRIVATE OpenXR::openxr_loader OpenXR::headers opengl32 delayimp)
+target_link_libraries(ref_vr PRIVATE OpenXR::openxr_loader OpenXR::headers opengl32 winmm delayimp)
 target_link_options(ref_vr PRIVATE /DELAYLOAD:openxr_loader.dll)
 
 # Static CRT: nothing to install beyond the DLL itself.

@@ -5,9 +5,9 @@ The goal is a native-feeling VR game: stereo rendering in the headset, 6DoF head
 movement and tracked motion controllers.
 
 > **Status: early development.** The mod runs the game through its own renderer and game module,
-> renders the world **in stereo with 3DoF head tracking** through an OpenXR projection layer, and
-> shows menus and loading screens on a virtual screen. Roomscale movement and motion controllers
-> come next (see the roadmap).
+> renders the world **in stereo with head tracking** through an OpenXR projection layer, keeps the HUD
+> in a readable panel, and **plays with the VR controllers**: sticks to move and turn, buttons for
+> everything else. Tracked hands and a weapon held in the hand come next (see the roadmap).
 
 **New to the project?** Start with [docs/HANDOFF.md](docs/HANDOFF.md).
 
@@ -24,6 +24,10 @@ are closed source. The game logic was released as source by Night Dive Studios i
   panel in front of you rather than across the whole field of view.
 - **`sinvr\gamex86.dll`** is the game logic, built from Night Dive's source. It is where VR gameplay
   changes (aiming, comfort) will go. The engine loads it for `+set game sinvr`.
+
+The client that reads input is closed, so the controllers reach the game the way a player's own key
+binds and joystick would: buttons run console commands, and the thumbsticks arrive as a joystick the
+engine polls for itself.
 
 Background: [docs/ENGINE_NOTES.md](docs/ENGINE_NOTES.md) (how the engine fits together),
 [docs/OPENXR_NOTES.md](docs/OPENXR_NOTES.md) (the 32-bit OpenXR path) and
@@ -78,6 +82,29 @@ It also adds two launchers beside `sin.exe`:
 `tools\deploy.ps1 -Uninstall` removes exactly what was installed. Launching SiN from Steam as normal is
 unaffected either way.
 
+## Controls
+
+| Control (Reverb G2) | Does |
+|---|---|
+| Left stick | Move and strafe |
+| Right stick, left/right | Turn |
+| Right trigger | Fire |
+| Left trigger | Use |
+| Right **A** | Jump |
+| Left **X** | Crouch |
+| Right **B** | Next weapon |
+| Left **Y** | Previous weapon |
+| Left grip | Run |
+| Left menu | Game menu |
+
+Other headsets get the same layout where their controllers have the buttons for it; Touch and Index
+controllers are covered, and anything else falls back to trigger, menu and the sticks.
+
+Each one is a cvar, so it can be rebound to any console command without rebuilding: `vr_bind_fire`,
+`vr_bind_use`, `vr_bind_jump`, `vr_bind_crouch`, `vr_bind_weapon_next`, `vr_bind_weapon_prev`,
+`vr_bind_run`, `vr_bind_menu`. A `+command` is released as its `-command`, exactly as a key bind would
+be. Setting one to nothing unbinds it.
+
 These console variables control the mod:
 
 | Cvar | Default | Meaning |
@@ -90,6 +117,8 @@ These console variables control the mod:
 | `vr_hud_fov` | 60 | How wide the HUD, crosshair and console panel is, in degrees. Smaller brings it closer to the middle. |
 | `vr_hud_depth` | 6 | How far away that panel appears, in metres. 0 puts it at infinity. |
 | `vr_recenter` | 0 | Set it to 1 to measure the head afresh from where you are standing and facing now. Clears itself. |
+| `vr_input` | 1 | Take input from the VR controllers. |
+| `vr_deadzone` | 0.15 | How far a stick must move before the game sees it. |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. For testing with the headset off. |
 | `vr_dump_eye` | 0 | Set it to 1 to write the next frame's two eye images beside `sin.exe`, for checking a build at the desk. |
 | `vr_trace` | 1 | Record the renderer calls of each new kind of frame in `sinvr.log`. |
@@ -115,9 +144,9 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 2. ✅ Virtual screen in the headset, from an OpenXR session on SiN's own GL context
 3. ✅ Stereo rendering and head-tracked views, driven by the engine's own two-pass stereo loop
 4. ✅ HUD, crosshair and console in a panel at a comfortable distance
-5. 🚧 Motion controllers: aiming through the game DLL, and buttons
-6. Locomotion, turning and roomscale
-7. Weapons held in the hand
+5. ✅ Motion controller input: sticks to move and turn, buttons bound to commands
+6. 🚧 Tracked hands: aiming and the weapon held in the hand, through the game DLL
+7. Roomscale comfort: snap turning, crouching, and the body following the head
 8. Wages of Sin
 9. Release packaging
 

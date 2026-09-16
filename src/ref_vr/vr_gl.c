@@ -5,6 +5,7 @@
 
 #include "ref_vr.h"
 #include "vr_gl.h"
+#include "vr_hook.h"
 
 vr_gl_t vrgl;
 
@@ -265,64 +266,9 @@ static FARPROC WINAPI hook_GetProcAddress(HMODULE module, LPCSTR name)
 	return proc;
 }
 
-/* Points one of a module's imports at replacement. Returns 0 if it has no such import. */
-static int patch_import(HMODULE module, const char *dll, const char *function, void *replacement)
-{
-	BYTE *base = (BYTE *)module;
-	const IMAGE_NT_HEADERS *nt = (const IMAGE_NT_HEADERS *)(base + ((const IMAGE_DOS_HEADER *)base)->e_lfanew);
-	const IMAGE_DATA_DIRECTORY *directory = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-	const IMAGE_IMPORT_DESCRIPTOR *import;
-
-	if (!directory->VirtualAddress)
-	{
-		return 0;
-	}
-
-	for (import = (const IMAGE_IMPORT_DESCRIPTOR *)(base + directory->VirtualAddress); import->Name; ++import)
-	{
-		const IMAGE_THUNK_DATA *names;
-		IMAGE_THUNK_DATA *slots;
-
-		if (_stricmp((const char *)(base + import->Name), dll) != 0)
-		{
-			continue;
-		}
-
-		names = (const IMAGE_THUNK_DATA *)(base + (import->OriginalFirstThunk ? import->OriginalFirstThunk : import->FirstThunk));
-		slots = (IMAGE_THUNK_DATA *)(base + import->FirstThunk);
-
-		for (; names->u1.AddressOfData; ++names, ++slots)
-		{
-			const IMAGE_IMPORT_BY_NAME *by_name;
-			DWORD protection;
-
-			if (IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal))
-			{
-				continue;
-			}
-
-			by_name = (const IMAGE_IMPORT_BY_NAME *)(base + names->u1.AddressOfData);
-			if (strcmp((const char *)by_name->Name, function) != 0)
-			{
-				continue;
-			}
-
-			if (!VirtualProtect(&slots->u1.Function, sizeof(slots->u1.Function), PAGE_READWRITE, &protection))
-			{
-				return 0;
-			}
-			slots->u1.Function = (DWORD)(DWORD_PTR)replacement;
-			VirtualProtect(&slots->u1.Function, sizeof(slots->u1.Function), protection, &protection);
-			return 1;
-		}
-	}
-
-	return 0;
-}
-
 int vr_gl_hook_refgl(HMODULE refgl)
 {
-	if (!patch_import(refgl, "KERNEL32.dll", "GetProcAddress", (void *)hook_GetProcAddress))
+	if (!vr_hook_import(refgl, "KERNEL32.dll", "GetProcAddress", (void *)hook_GetProcAddress, NULL))
 	{
 		vr_printf("could not hook ref_gl.dll's GL lookups - stereo will not work");
 		return 0;

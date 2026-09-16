@@ -19,7 +19,11 @@ test workflow, and the traps already hit.
      passes it);
    - a level starts on a "PRESS ANY KEY TO CONTINUE" card, and the engine runs no console commands while
      it is up, so an unattended `+exec` run hangs there. `desk-test.ps1` posts a keypress every second.
-     When a run stops making progress, capture the screen before theorising about it.
+     When a run stops making progress, capture the screen before theorising about it;
+   - a `wait` holds up everything behind it in the command buffer, so a `wait`-heavy test cfg swallows
+     console commands the mod itself queues - use `desk-test.ps1 -KeepRunning` for those;
+   - SiN pauses and paints over the view when its window is not active (`-Foreground`), and archived
+     cvars keep whatever a test left in them.
 7. **Record what you learn**, and how you learned it, in `docs/ENGINE_NOTES.md` or `docs/OPENXR_NOTES.md`.
 8. **Don't mix `Remove-Item` with Program Files paths.** On the development machine the command harness refuses any
    command containing both `Remove-Item` and a `C:\Program Files` path. Move test artifacts out of the game folder instead.
