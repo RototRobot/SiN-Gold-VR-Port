@@ -52,8 +52,18 @@ set(SINVR_GAME_WOS_SOURCES
 )
 list(TRANSFORM SINVR_GAME_WOS_SOURCES PREPEND src/code/game2015/)
 
+# Ours, not Night Dive's: the link to the VR renderer's head and hand poses.
+set(SINVR_GAME_VR_SOURCES
+	"${CMAKE_SOURCE_DIR}/src/game_vr/vr_link.cpp"
+	"${CMAKE_SOURCE_DIR}/src/game_vr/vr_link.h"
+	"${CMAKE_SOURCE_DIR}/src/shared/sinvr_poses.h"
+)
+
 function(sinvr_game_dll target sources def_file extra_definitions stage_subdir)
-	add_library(${target} SHARED ${SINVR_GAME_ELIB_SOURCES} ${sources} ${def_file})
+	add_library(${target} SHARED ${SINVR_GAME_ELIB_SOURCES} ${sources} ${SINVR_GAME_VR_SOURCES} ${def_file})
+
+	# So that the game sources can say #include "game_vr/vr_link.h".
+	target_include_directories(${target} PRIVATE "${CMAKE_SOURCE_DIR}/src")
 
 	target_compile_definitions(${target} PRIVATE
 		WIN32 _WINDOWS _USRDLL GAMEX86_EXPORTS BUILDING_REF_GL SIN ELIB_GAMEDLL

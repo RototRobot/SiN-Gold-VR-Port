@@ -17,6 +17,7 @@
 
 #include <setjmp.h>
 #include "limits.h"
+#include "game_vr/vr_link.h"
 #include "g_local.h"
 #include "g_utils.h"
 #include "Entity.h"
@@ -1168,6 +1169,16 @@ Advances the world by 0.1 seconds
 */
 void G_RunFrame(void)
 {
+   // SiN Gold VR: say when the renderer's head and hand poses come and go.
+   {
+      int vr_link = VR_TrackingChanged();
+
+      if(vr_link > 0)
+         gi.printf("SiN Gold VR: tracking the player's head and hands\n");
+      else if(vr_link < 0)
+         gi.printf("SiN Gold VR: no longer tracking\n");
+   }
+
    edict_t	*edict;
    Entity	*ent;
    int		num;

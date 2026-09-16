@@ -390,6 +390,10 @@ public:
    void              CTF_DropTech(Event *ev);
    void              CTF_SoundEvent(Event *ev);
    void              SetViewAngles(Vector ang);
+
+   // SiN Gold VR: aiming comes from the tracked hand when there is one.
+   virtual Vector    GunPosition();
+   virtual void      GetGunOrientation(Vector pos, Vector *forward, Vector *right, Vector *up);
    void              DropWeaponEvent(Event *ev);
    void              CTF_DropFlag(Event *ev);
 };

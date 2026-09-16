@@ -36,6 +36,7 @@
 #include "deadbody.h"
 #include "actor.h"
 #include "ctf.h"
+#include "game_vr/vr_link.h"
 
 #include <windows.h>
 
@@ -6414,6 +6415,73 @@ void Player::DropWeaponEvent(Event *ev)
 void Player::SetViewAngles(Vector ang)
 {
    v_angle = ang;
+}
+
+/*
+ * SiN Gold VR: shots come from the player's right hand, and go where it points.
+ *
+ * The renderer gives the hand in the frame it recentred - from the player's
+ * eyes, with +x the way their body faces - so the player's own yaw turns it
+ * into the world. Without a tracked hand, or with gravity turned on its side,
+ * or with vr_aim off, this is the ordinary SiN behaviour.
+ */
+static cvar_t *vr_aim = NULL;
+static qboolean vr_said_aiming = false;
+
+static qboolean vr_hand_wanted(void)
+{
+   if(!vr_aim)
+   {
+      vr_aim = gi.cvar("vr_aim", "1", 0);
+   }
+
+   return vr_aim->value != 0;
+}
+
+Vector Player::GunPosition(void)
+{
+   float    origin[3];
+   float    angles[3];
+   float    yaw;
+   float    s, c;
+   int      tracked;
+
+   tracked = VR_HandPose(VR_HAND_RIGHT, origin, angles);
+
+   if(tracked && !vr_said_aiming)
+   {
+      vr_said_aiming = true;
+      gi.printf("SiN Gold VR: shots come from the tracked right hand\n");
+   }
+
+   if(!vr_hand_wanted() || gravaxis || !tracked)
+   {
+      return Sentient::GunPosition();
+   }
+
+   yaw = worldangles[YAW] * (M_PI / 180.0f);
+   s = sin(yaw);
+   c = cos(yaw);
+
+   return EyePosition() + Vector(origin[0] * c - origin[1] * s,
+                                 origin[0] * s + origin[1] * c,
+                                 origin[2]);
+}
+
+void Player::GetGunOrientation(Vector pos, Vector *forward, Vector *right, Vector *up)
+{
+   float    origin[3];
+   float    angles[3];
+   Vector   hand;
+
+   if(!vr_hand_wanted() || gravaxis || !VR_HandPose(VR_HAND_RIGHT, origin, angles))
+   {
+      Sentient::GetGunOrientation(pos, forward, right, up);
+      return;
+   }
+
+   hand = Vector(angles[0], angles[1] + worldangles[YAW], angles[2]);
+   hand.AngleVectors(forward, right, up);
 }
 
 void Player::GetPlayerView(Vector *pos, Vector *angle)
