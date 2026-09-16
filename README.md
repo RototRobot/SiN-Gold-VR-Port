@@ -83,7 +83,7 @@ These console variables control the mod:
 |---|---|---|
 | `vr_enable` | 0 | Show the game in the headset. The launchers set it. |
 | `vr_stereo` | 1 | Render the world once per eye. With 0, everything stays on the virtual screen. |
-| `vr_worldscale` | 39.37 | Game units per metre. Larger makes the world feel bigger. |
+| `vr_worldscale` | 39.37 | Game units per metre, for head movement. Lower values make the world feel bigger. |
 | `vr_screen_distance` | 2.5 | Virtual screen distance, in metres. |
 | `vr_screen_width` | 2.4 | Virtual screen width, in metres. |
 | `vr_recenter` | 0 | Set it to 1 to measure the head afresh from where you are standing and facing now. Clears itself. |
