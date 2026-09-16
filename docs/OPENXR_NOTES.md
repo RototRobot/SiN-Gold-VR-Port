@@ -57,6 +57,30 @@ This was `ref_vr` with `vr_enable 1`, in an unattended run with the headset on t
 - **Focus with nobody wearing the headset.** Focus dropped to VISIBLE/SYNCHRONIZED and then returned. Expect this whenever the
   headset idles or the SteamVR dashboard opens.
 
+## Stereo through a projection layer (2026-09-16)
+
+Same session, now with per-eye swapchains and an `XrCompositionLayerProjection`. From an unattended run with
+the headset on the desk (`tools\desk-test.ps1 -Vr`, which sets `vr_force_render 1`):
+
+- **Eye swapchains** were created at the recommended 2444x2392 in `GL_SRGB8_ALPHA8` (0x8C43), one per eye,
+  each given our own `DEPTH24_STENCIL8` renderbuffer in an FBO of ours. The runtime hands out the colour
+  texture only; depth is the app's problem unless `XR_KHR_composition_layer_depth` is used.
+- **406 projection frames** were submitted in one run at about 87 frames/s for both eyes on a GTX 1080 Ti.
+  `xrWaitFrame` paces the loop, so the GL swap interval must stay at 0.
+- **`xrLocateViews` numbers** were sane: per-eye asymmetric tangents, mirrored between the eyes
+  (left `L-1.300 R0.886 D-1.050 U1.056`, right `L-0.886 R1.300 D-1.050 U1.056`), and eye positions 66 mm
+  apart, which is this headset's IPD.
+- **`XR_VIEW_STATE_ORIENTATION_VALID_BIT`** is the gate on using those poses. When it is clear, the frame is
+  submitted with no layers rather than with a guessed pose.
+- **An idle headset stops the session at `SYNCHRONIZED`** and every `xrWaitFrame` returns
+  `shouldRender = false`. The session only reaches VISIBLE/FOCUSED once the headset is picked up. Honouring
+  `shouldRender` therefore means an unattended desk run renders *nothing*, and the log said nothing about
+  why - which cost a full test round. Two lessons, both now in the code: say it in the log when the runtime
+  asks for no frames, and keep a way to render anyway (`vr_force_render 1`). Submitting layers while
+  `shouldRender` is false is legal; the compositor may ignore them.
+- **Menus and loading screens** are not stereo frames, so they still go on the quad layer. Switching between
+  a projection layer and a quad layer from frame to frame is fine: the same session, one layer each frame.
+
 ## Trap: implicit layers registered for 32-bit that ship only 64-bit DLLs
 
 **The problem.** The VIVE driver registers three implicit API layers (hand tracking, facial tracking and SRWorks) under
@@ -72,8 +96,8 @@ not only ours.
    `DISABLE_XR_APILAYER_VIVE_HAND_TRACKING_1`, `DISABLE_XR_APILAYER_VIVE_FACIAL_TRACKING_1` and
    `DISABLE_XR_APILAYER_VIVE_SRWORKS_1`.
 
-`tools\xrprobe` already does this. **`ref_vr.dll` must do it too**, because every player with VIVE software installed will hit
-the same failure.
+`tools\xrprobe` already does this, and so does `ref_vr.dll` (`src/ref_vr/xr_layers.c` is shared by both),
+because every player with VIVE software installed would hit the same failure.
 
 ## Diagnostics
 

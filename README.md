@@ -5,8 +5,9 @@ The goal is a native-feeling VR game: stereo rendering in the headset, 6DoF head
 movement and tracked motion controllers.
 
 > **Status: early development.** The mod runs the game through its own renderer and game module,
-> records how the engine drives the renderer, and can show the game on a virtual screen in the
-> headset. Stereo rendering, head tracking and controllers come next (see the roadmap).
+> renders the world **in stereo with 3DoF head tracking** through an OpenXR projection layer, and
+> shows menus and loading screens on a virtual screen. Roomscale movement and motion controllers
+> come next (see the roadmap).
 
 **New to the project?** Start with [docs/HANDOFF.md](docs/HANDOFF.md).
 
@@ -17,7 +18,9 @@ are closed source. The game logic was released as source by Night Dive Studios i
 [`game/`](game). The mod works within that split, and replaces nothing that ships with the game:
 
 - **`ref_vr.dll`** is a renderer the engine loads when started with `+set vid_ref vr`. It loads the
-  stock `ref_gl.dll`, passes the engine's calls through to it, and adds the VR side over OpenXR.
+  stock `ref_gl.dll`, passes the engine's calls through to it, and adds the VR side over OpenXR. The
+  world is rendered twice per frame through the engine's own stereo loop, once into each eye's
+  headset buffer, with the view taken from the headset.
 - **`sinvr\gamex86.dll`** is the game logic, built from Night Dive's source. It is where VR gameplay
   changes (aiming, comfort) will go. The engine loads it for `+set game sinvr`.
 
@@ -68,7 +71,7 @@ It also adds two launchers beside `sin.exe`:
 
 | Launcher | What it does |
 |---|---|
-| `SiN VR.bat` | VR on: the game appears on a virtual screen in the headset. Start SteamVR first. |
+| `SiN VR.bat` | VR on: the world is drawn in stereo in the headset, menus on a virtual screen. Start SteamVR first. |
 | `SiN VR (flatscreen).bat` | The same mod with VR off. Use it to check that the pass-through changes nothing. |
 
 `tools\deploy.ps1 -Uninstall` removes exactly what was installed. Launching SiN from Steam as normal is
@@ -79,21 +82,36 @@ These console variables control the mod:
 | Cvar | Default | Meaning |
 |---|---|---|
 | `vr_enable` | 0 | Show the game in the headset. The launchers set it. |
+| `vr_stereo` | 1 | Render the world once per eye. With 0, everything stays on the virtual screen. |
+| `vr_worldscale` | 39.37 | Game units per metre. Larger makes the world feel bigger. |
 | `vr_screen_distance` | 2.5 | Virtual screen distance, in metres. |
 | `vr_screen_width` | 2.4 | Virtual screen width, in metres. |
+| `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. For testing with the headset off. |
 | `vr_trace` | 1 | Record the renderer calls of each new kind of frame in `sinvr.log`. |
+
+While stereo is on, the mod sets `cl_stereo 1`, `cl_stereo_separation 0`, and switches off view bob
+and roll (`bob_up`, `bob_pitch`, `bob_roll`, `run_pitch`, `run_roll`, `sv_rollangle`), which move the
+camera without the head moving.
 
 The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes to `sinvr\qconsole.log`.
 
-**Known issue:** do not apply changes in the game's video options while running through the mod.
-Applying them resets `vid_ref` to `gl`, which swaps the VR renderer out.
+**Known issues**
+
+- Do not apply changes in the game's video options while running through the mod. Applying them
+  resets `vid_ref` to `gl`, which swaps the VR renderer out.
+- The HUD and the console are drawn inside each eye's image, stretched across the whole field of
+  view. They are legible but uncomfortable; VR HUD placement is the next piece of work.
+- View pitch and yaw come from the headset, but the player still moves and turns with the keyboard
+  and mouse, and the body does not move with the headset yet.
+- Loading a map sometimes takes the stock game a very long time (a minute or more of one core at
+  100%) before the first frame appears. It happens without the mod too.
 
 ## Roadmap
 
 1. ✅ Pass-through renderer, game DLL built from source, and a 32-bit OpenXR loader
 2. ✅ Virtual screen in the headset, from an OpenXR session on SiN's own GL context
-3. 🚧 Stereo rendering and head tracking, driven by the engine's own two-pass stereo loop
-4. HUD and menus in VR
+3. ✅ Stereo rendering and head-tracked views, driven by the engine's own two-pass stereo loop
+4. 🚧 HUD and menus in VR
 5. Motion controllers: aiming through the game DLL, and buttons
 6. Locomotion, turning and roomscale
 7. Weapons held in the hand
@@ -106,7 +124,7 @@ Applying them resets `vid_ref` to `gl`, which swaps the VR renderer out.
 |---|---|
 | `src/ref_vr/` | The VR renderer DLL |
 | `game/` | Night Dive's SiN Gold game source (SiN and Wages of Sin) plus the CMake build |
-| `tools/` | `deploy.ps1`, and `xrprobe` (an OpenXR diagnostic) |
+| `tools/` | `deploy.ps1`, `desk-test.ps1` (an unattended run), and `xrprobe` (an OpenXR diagnostic) |
 | `cmake/` | Build helpers (the OpenXR loader) |
 | `docs/` | Research notes |
 

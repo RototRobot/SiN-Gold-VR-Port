@@ -4,7 +4,7 @@ This is the handoff for anyone joining the project, whether a person or an AI. I
 why it is shaped the way it is, how to build and test it, what has already been learned the hard way,
 and what comes next. The detailed evidence lives in the other files in `docs/`; this one is the map.
 
-*Last updated 2026-09-15.*
+*Last updated 2026-09-16.*
 
 ## 1. Where the project is
 
@@ -12,8 +12,9 @@ and what comes next. The detailed evidence lives in the other files in `docs/`; 
 |---|---|
 | 1. Pass-through renderer, game DLL built from source, 32-bit OpenXR loader | ✅ Done, verified in unattended runs |
 | 2. Virtual "theatre" screen in the headset | ✅ Done. The owner confirmed it in the headset on 2026-09-15: it loads, doesn't crash, and the colours are right. It is low resolution, as expected. |
-| 3. Stereo rendering with head tracking | **Next.** The plan is in [§9](#9-next-stereo-rendering-with-head-tracking) |
-| 4–9 | HUD and menus, controllers, locomotion, weapons in the hand, Wages of Sin, and packaging (see the roadmap in the [README](../README.md)) |
+| 3. Stereo rendering with head tracking | ✅ Built and verified at the desk on 2026-09-16: 406 projection-layer frames in one run, correct per-eye poses and fields of view, ~87 frames/s at 2444×2392 per eye. Not yet seen in the headset by a person. How it works: [§9](#9-how-stereo-works) |
+| 4. HUD and menus in VR | **Next.** The 2D overlay currently lands inside each eye image, stretched over the whole field of view |
+| 5–9 | Controllers, locomotion, weapons in the hand, Wages of Sin, and packaging (see the roadmap in the [README](../README.md)) |
 
 ## 2. How it fits together
 
@@ -85,8 +86,11 @@ The mod adds these cvars:
 | Cvar | Default | Meaning |
 |---|---|---|
 | `vr_enable` | 0 | Show the game in the headset |
+| `vr_stereo` | 1 | Render the world once per eye (archived). With 0 everything stays on the theatre screen |
+| `vr_worldscale` | 39.37 | Game units per metre (archived) |
 | `vr_screen_distance` | 2.5 | Theatre screen distance, in metres (archived) |
 | `vr_screen_width` | 2.4 | Theatre screen width, in metres (archived) |
+| `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. Needed for unattended VR runs |
 | `vr_trace` | 1 | Log the renderer calls of each new kind of frame |
 
 There are two logs:
@@ -100,24 +104,26 @@ There are two logs:
 Headset time is scarce: the owner does those tests. So prove everything you can at the desk first, then hand
 over a launcher with a short list of what to look for.
 
-**Unattended runs.** Put a cfg in `sinvr\`, launch with `+exec` on it, and let it run:
+**Unattended runs.** `tools\desk-test.ps1` does the whole thing: it writes a cfg that loads a map, waits,
+takes two screenshots and quits, runs the game with a watchdog, then collects the logs and screenshots and
+converts the screenshots to PNG.
 
 ```
-map bank
-wait        (x400: one wait is one engine frame)
-screenshot
-wait        (x400)
-screenshot
-wait        (x20)
-quit
+powershell -ExecutionPolicy Bypass -File tools\desk-test.ps1 -OutDir %TEMP%\sinvr-flat
+powershell -ExecutionPolicy Bypass -File tools\desk-test.ps1 -Vr -OutDir %TEMP%\sinvr-vr
 ```
 
-Launch it with
-`sin.exe +set game sinvr +set vid_ref vr +set vr_enable 0|1 +set logfile 2 +exec <cfg>` and a watchdog. Here is what to expect:
+`-Map`, `-WaitFrames`, `-TimeoutSeconds` and `-ExtraArgs` (`"+set r_fullbright 1"` makes a dark map legible)
+are parameters. What to expect:
 
-- The flatscreen run takes about 40 s. Loading `bank` stalls a single frame for around 22 s.
+- A good run takes 20-40 s. **Loading a map stalls for anywhere between 8 s and over four minutes**, one core
+  at 100%, before the first world frame. The stock game does it too (§8), so expect to repeat runs.
 - A VR run adds about 12 s while SteamVR starts, and SteamVR stays running afterwards.
-- Screenshots land in `sinvr\players\blade\scrnshot\sinNNN.tga`. These are 24-bit, bottom-up TGA files; convert them to PNG to view.
+- `-Vr` passes `vr_force_render 1`. Without it the runtime reports `shouldRender = false` for a headset lying
+  on the desk and nothing at all is drawn for the headset.
+- Screenshots land in `sinvr\players\blade\scrnshot\sinNNN.tga`, 24-bit bottom-up TGA, which the script
+  converts to PNG. They come from the window, so a stereo run's screenshots show the left eye, cropped to the
+  window's 4:3 shape out of the square-ish eye image.
 
 **A healthy `sinvr.log`** has these pieces:
 
@@ -130,11 +136,19 @@ Launch it with
 With VR on, it also shows these, in order:
 
 1. the switched-off layers
-2. `VR: SteamVR/OpenXR 2.17.9, headset: ...`
+2. `VR: SteamVR/OpenXR 2.17.10, headset: ...`
 3. `session created`
-4. IDLE → READY → SYNCHRONIZED → VISIBLE → FOCUSED
-5. `virtual screen 640x480, format 0x8C43`
-6. `N frames shown`
+4. `session IDLE` → `READY` → `SYNCHRONIZED`, and, once the headset is worn, → `VISIBLE` → `FOCUSED`
+5. `theatre screen 640x480, format 0x8C43, 3 images`
+6. `N frames shown on the theatre screen`
+7. `VR: stereo on; view bob and roll off`
+8. at the first world frame, `VR: stereo eye buffers 2444x2392` and two `eye 0:` / `eye 1:` lines giving the
+   tangents, the headset-space position in metres and the resulting Quake view
+9. `VR: 1 frames rendered in stereo`, then every 5400 frames
+10. `VR: shutting down after N stereo and M theatre frames` — menus and loading screens are the theatre ones
+
+A stereo world frame's trace line has **two** `BeginFrame ... RenderFrame` groups and one `EndFrame`, with
+`camera_separation` −0.0000 then 0.0000 (both zero: the eye offsets come from the headset, not the engine).
 
 **`xrprobe`** checks the OpenXR path without the game: loader, runtime, headset, GL requirements.
 
@@ -144,12 +158,14 @@ With VR on, it also shows these, in order:
 |---|---|
 | `src/ref_vr/ref_vr.c` | `GetRefAPI`, loading ref_gl, the 36 recording thunks, C wrappers for Init/Shutdown/BeginFrame/RenderFrame/EndFrame, the frame tracer and cvars |
 | `src/ref_vr/refapi.h` | The renderer interface reconstructed from the binaries, with compile-time checks of sizes and offsets |
-| `src/ref_vr/vr_xr.c` | OpenXR: instance, session on ref_gl's GL context, event loop, and the theatre-screen swapchain and quad layer |
+| `src/ref_vr/vr_xr.c` | OpenXR: instance, session on ref_gl's GL context, event loop, the theatre-screen quad layer, and the per-eye swapchains and projection layer |
+| `src/ref_vr/vr_gl.c` | Redirects ref_gl's `glFrustum`, `glViewport` and `glScissor` while an eye is bound, by hooking its `GetProcAddress` import |
+| `src/ref_vr/vr_view.c` | Turns an OpenXR eye pose into the engine's `refdef_t` (axes, scale, angles, field of view) and back |
 | `src/ref_vr/xr_layers.c` | Implicit-layer hygiene for 32-bit processes (shared with xrprobe) |
 | `src/ref_vr/vrlog.c` | `sinvr.log` |
 | `game/` | Night Dive's source (SiN in `src/code/game`, WoS in `src/code/game2015`, shared `elib`) plus `game/CMakeLists.txt`. `git diff 07ae69c -- game` shows everything we changed there; today that is one line in `g_main.cpp`. |
 | `cmake/openxr.cmake` | Builds the loader from the sibling SDK, or fetches `release-1.1.63` |
-| `tools/deploy.ps1`, `tools/xrprobe/` | Install/uninstall, and the OpenXR probe |
+| `tools/deploy.ps1`, `tools/desk-test.ps1`, `tools/xrprobe/` | Install/uninstall, an unattended run, and the OpenXR probe |
 | `docs/ENGINE_NOTES.md` | How the engine works: the slot map, RVAs, `refdef_t`, the stereo path and runtime observations |
 | `docs/OPENXR_NOTES.md` | The 32-bit OpenXR path: building the loader, probe results, the layer trap, the first session |
 | `docs/Q2VR_REFERENCE.md` | What carries over from the Quake II VR ports, and what doesn't |
@@ -178,6 +194,9 @@ The short version for AI tools is [AGENTS.md](../AGENTS.md).
 **OpenXR**
 
 - **SteamVR's 32-bit OpenXR runtime rejects API 1.1.** Request 1.0.
+- **A headset nobody is wearing gets `XrFrameState.shouldRender = false`,** and the session stops at
+  `SYNCHRONIZED` instead of reaching `VISIBLE`. Skipping the render then means an unattended run proves
+  nothing, which cost a whole test round: `vr_force_render 1` draws and submits anyway.
 - **VIVE's implicit OpenXR layers are 64-bit only** but registered for 32-bit, which makes `xrCreateInstance` fail with −32.
   `xr_layers.c` handles this.
 
@@ -187,55 +206,91 @@ The short version for AI tools is [AGENTS.md](../AGENTS.md).
 - **With `WIN32_LEAN_AND_MEAN`, include `<unknwn.h>` before `openxr_platform.h`.**
 - **In Windows PowerShell 5.1, `$PSScriptRoot` is empty inside `param()` default values.** Compute paths in the script body.
 
+**The engine's own slowness**
+
+- **Loading a map stalls before the first world frame,** one core at 100%, for 8 s to over four minutes
+  from the same command line. Measured on the stock game (`vid_ref gl`, no mod) as well: three passes of
+  `map bank` took 7.4 s, 6.8 s and 42.4 s, against 8.0 s, 11.5 s and 9.0 s through the mod. **It is SiN's
+  own behaviour, not ours.** The main thread is burning CPU throughout (sampled with
+  `Get-Process sin | % Threads`), so it is a computation, not a deadlock, and the renderer is not involved:
+  the stall sits between the last loading-plaque frame and the first world frame.
+
 **The development machine**
 
 - **The command harness refuses any command containing both `Remove-Item` and a `C:\Program Files` path.** Move test artifacts
   out of the game folder instead of deleting them, or delete in a separate command.
 - **Vsync must be off in VR.** `vr_xr.c` turns it off, because the desktop refresh rate would otherwise fight `xrWaitFrame`.
 
-## 9. Next: stereo rendering with head tracking
+## 9. How stereo works
 
-This is the plan. None of it is built yet.
+Built and verified at the desk on 2026-09-16. The pieces, in the order a frame goes through them:
 
-1. **Use the engine's own two-pass loop.** After ref_gl's Init returns, set `cl_stereo 1` and `cl_stereo_separation 0`.
-   Keeping `cl_stereo` at 0 *during* Init stops ref_gl from asking for a quad-buffer pixel format that it would then
-   reset. With the separation at 0 its sign cannot identify the eye, so count the BeginFrame calls within each frame instead:
-   the first is the left eye, the second the right.
-2. **Per-eye render targets.** Create one swapchain per eye at the recommended size (2444×2392 here), each with our own `DEPTH24_STENCIL8`
-   buffer. Bind the eye target *after* ref_gl's BeginFrame, because its `glDrawBuffer(GL_BACK)` must hit the default framebuffer, and clear it on bind.
-3. **Intercept GL calls.** Before Init, hook ref_gl's import of `GetProcAddress` so that its GL loader resolves `glFrustum`,
-   `glViewport` and `glScissor` to our versions.
-   - Viewport and scissor: scale from window coordinates to eye-buffer coordinates.
-   - Frustum: replace it with the eye's asymmetric tangents. This must apply at every call site, including the view weapon's.
-4. **Per-eye view.** At the first BeginFrame of a frame, call `xrWaitFrame`, `xrBeginFrame` and `xrLocateViews`.
-   In RenderFrame, put the eye pose on top of the engine's view:
-   - **Axes:** OpenXR to Quake is `x = −z`, `y = −x`, `z = y`.
-   - **Scale:** about 39.4 units per metre.
-   - **Angles:** yaw is the engine's yaw plus the head's yaw; pitch and roll come from the head alone.
-   - **FOV:** widen `fov_x` and `fov_y` enough to enclose the eye frustum, so ref_gl's culling doesn't clip the edges.
-   - **Restore** the refdef fields after the call.
-5. **Submit.** End the frame with a projection layer that carries the *same* poses and FOVs used for rendering, and mirror the left eye to the
-   desktop window, cropped. Frames that draw no world (menus, loading screens) keep using the theatre screen.
-6. **Comfort, for now.** Turn off view bob and roll through the game's cvars.
+1. **The engine's own two-pass loop drives it.** SiN kept Quake II's `cl_stereo` support: with `cl_stereo`
+   set, `SCR_UpdateScreen` calls `BeginFrame(-sep/2)`, draws, calls `BeginFrame(+sep/2)`, draws again, and
+   ends with a single `EndFrame`. `ref_vr` sets `cl_stereo 1` and `cl_stereo_separation 0` once the headset
+   is running (`update_stereo()`), so the engine renders the world twice and adds no offset of its own; the
+   eye offsets come from the headset. `cl_stereo` stays 0 *during* ref_gl's `Init`, or ref_gl asks for a
+   quad-buffer pixel format, fails to get one, and switches `cl_stereo` off itself.
+   With the separation at 0 its sign cannot name the eye, so the passes are counted instead: pass 0 is the
+   left eye, pass 1 the right.
+2. **Per-eye swapchains.** One `XrSwapchain` per eye at the runtime's recommended size (2444×2392 on this
+   headset), each wrapped in our own FBO with a `DEPTH24_STENCIL8` renderbuffer. The eye target is bound
+   *after* ref_gl's `BeginFrame`, whose `glDrawBuffer(GL_BACK)` needs the default framebuffer, and is
+   cleared on bind because nothing else clears it.
+3. **ref_gl's GL calls are redirected** while an eye is bound (`vr_gl.c`). ref_gl resolves GL entry points
+   through `GetProcAddress`, so its import of `GetProcAddress` is patched before `Init` and three functions
+   come back as ours: `glViewport` and `glScissor` scale window coordinates to the eye buffer, and
+   `glFrustum` is replaced with the eye's own asymmetric frustum. Hooking `glFrustum` covers every call
+   site at once, including the view weapon's second projection.
+4. **The view comes from the headset** (`vr_view.c`). Pass 0 calls `xrWaitFrame`, `xrBeginFrame` and
+   `xrLocateViews`; `RenderFrame` then puts the eye pose on top of the engine's `refdef_t` and restores it
+   afterwards, because the engine may render the same refdef again:
+   - axes OpenXR → Quake are `x = -z`, `y = -x`, `z = y`, scaled by `vr_worldscale` units per metre;
+   - the head offset is rotated by the player's yaw before it is added to `vieworg`;
+   - yaw is the engine's yaw plus the head's, while pitch and roll come from the head alone;
+   - `fov_x` and `fov_y` are widened to enclose the eye frustum so ref_gl's culling keeps the edges.
+5. **Submit.** `EndFrame` ends the pass-1 eye and submits one `XrCompositionLayerProjection` carrying the
+   same poses and fields of view the eyes were rendered with. The left eye is blitted to the window first,
+   cropped to its shape, so the monitor and screenshots show something. Frames with no world in them -
+   menus, loading screens, the console over nothing - are not stereo frames and keep going to the theatre
+   screen, which is why a run reports both counts.
+6. **Comfort.** View bob and roll move the camera without the head moving, so `bob_up`, `bob_pitch`,
+   `bob_roll`, `run_pitch`, `run_roll` and `sv_rollangle` are zeroed once when stereo comes on.
 
-Risks to watch:
+What one desk run proved: 406 stereo frames submitted, ~87 frames/s with both eyes at 2444×2392 on a
+1080 Ti, eye tangents mirrored between the eyes (left `L-1.300 R0.886`, right `L-0.886 R1.300`), the two eye
+positions 66 mm apart, and that separation surviving the conversion into game units (2.6 units at 39.37
+units per metre).
 
-- Screenshots and any screen-copy effects still assume window coordinates.
-- The HUD will appear at infinite depth.
-- The view weapon follows the mouse, not the head. Hands come in milestone 7.
+Still to do, in the order it matters:
+
+- **The HUD and the console** are drawn into each eye's image, so the glFrustum/viewport scaling stretches
+  them across the whole field of view. They want their own head-locked quad layer, or a 2D pass into a
+  smaller part of the eye image.
+- **The body does not follow the head.** Pitch and yaw are the head's, but movement, turning and the
+  player's collision position still come from the keyboard and mouse.
+- **The view weapon** follows the engine's angles, not the head, and will move to the hand in milestone 7.
+- **Screen-copy effects** (screenshots, and anything that reads the window) still assume window coordinates.
 
 ## 10. Open questions and backlog
 
 **Resolution and rendering**
 
 - The theatre screen uses the window's resolution (640×480 by default). A higher `gl_mode` would sharpen it.
-- Loading `bank` stalls for about 22 s. Compare this with a stock launch.
+  The stereo path does not care: it renders at the runtime's recommended eye size regardless of `gl_mode`.
+- The eye buffers are the recommended 2444×2392. A `vr_resolution` scale would trade sharpness for frames
+  on weaker cards, and is easy to add: the swapchains are created in one place.
+- Loading a map stalls before the first frame, 8 s to over four minutes, in the stock game as well (§8).
+  Worth chasing eventually, since it is a bad first impression: the game source is available, so the place
+  to look is what the server does between the last precache (`sky`) and the first server frame.
 - `refdef_t` beyond `rdflags` and `entity_t` are unmapped. They are needed to put the weapon in the hand (see
   [Q2VR_REFERENCE](Q2VR_REFERENCE.md), "weapon model in the hand").
 
 **Input**
 
 - Movement and aiming input need hooks in `sin.exe`'s client (`CL_BaseMove`, `cl.viewangles`), or joystick emulation.
+- The head pose is already in the renderer. Getting it to the game DLL - for aiming, and for the body to
+  follow the head - needs a channel between the two DLLs (a shared memory block, or cvars for a first cut).
 
 **Content and release**
 

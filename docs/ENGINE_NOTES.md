@@ -118,7 +118,8 @@ Quake 2's quad-buffer stereo support survived in both binaries. The pieces:
 - **`GLimp_InitGL` (0x1F960)** requests `PFD_STEREO` when `cl_stereo` is set. In Quake 2 this
   function resets `cl_stereo` to 0 through `ri.Cvar_SetValue` when quad-buffer stereo is unavailable, which
   is the case on GeForce cards. The strings and the `cl_stereo` reference are present, but the reset has
-  **not yet been observed at runtime**.
+  **not yet been observed at runtime** - `ref_vr` keeps `cl_stereo` at 0 across `Init` and never gives it
+  the chance.
 - **Projection is set only by `glFrustum`**, called in `R_SetupGL` (0x114C0, which also calls
   `glViewport`), `R_DrawAliasModel` (0xC2D0), `SINMDL_DrawModel` (0x19910) and the gl_log wrapper.
 - **Other `EndFrame` callers** (sin.exe 0x404D0, 0x46540, 0x485D0, which look like loading screens and menus) render a
@@ -147,10 +148,34 @@ These come from `sinvr.log` in an unattended run: start the game, `map bank`, ta
 - **Call counts over the run:** `DrawChar` 14.8k, `slot+0x68` 13.5k, `slot+0x64` 1.1k, `RenderFrame` 409.
 - **Where the mod folder's files go.** With `+set game sinvr`, the engine writes its config, saves and screenshots under
   `sinvr\players\blade\`. The normal `base` config is never touched.
-- **Load time.** Loading `bank` stalled a single frame for about 22 s before the first world frame. This is worth comparing
-  with a stock launch.
+- **Load time.** Loading a map stalls before the first world frame with one core at 100%, and the length
+  varies wildly from the same command line: 8 s to over four minutes. Measured against a stock launch on
+  2026-09-16 (`vid_ref gl`, no mod, `map bank` then quit): 7.4 s, 6.8 s, 42.4 s, versus 8.0 s, 11.5 s, 9.0 s
+  through the mod. **The stall is the stock game's, not the mod's.** Per-thread sampling
+  (`Get-Process sin | % Threads`) shows the main thread Running and consuming a full core for the whole
+  stall, so it is computation rather than a deadlock, and no renderer call is in flight: it sits between the
+  last loading-plaque frame and the first world frame, after the final `sky` precache line.
 - **Missing renderer.** If `vid_ref` is `vr` but `ref_vr.dll` is missing, the engine prints `LoadLibrary("ref_vr.dll") failed` and
   falls back to `ref_gl.dll` by itself.
+
+## The stereo path confirmed at runtime (2026-09-16)
+
+`ref_vr` now sets `cl_stereo 1` and `cl_stereo_separation 0` while the headset is running, and the traces
+show the engine behaving exactly as the disassembly suggested:
+
+- A world frame becomes **two `BeginFrame` ... `RenderFrame` groups followed by one `EndFrame`**. Both
+  passes get `camera_separation` 0 - the first as -0.0 and the second as +0.0, which is the sign
+  `GLimp_BeginFrame` would have used to pick `GL_BACK_LEFT`/`GL_BACK_RIGHT`. Counting the passes within a
+  frame is therefore the reliable way to name the eye.
+- **Both passes redraw the 2D overlay** (`DrawFadeScreen`, `DrawChar` ×78, the HUD slots), so the HUD is
+  per-eye for free - though at whatever viewport the eye buffer has.
+- The engine reads `cl_stereo` once as the frame starts, so changing it at `EndFrame` takes effect on the
+  next frame, and a frame's pass count is known from the value read before it.
+- **Frames with no world in them stay single-pass:** menus, the loading plaque and the console over nothing.
+  Over a 637-frame run, 406 frames were stereo and 231 were not.
+- `RenderFrame` is called twice per stereo frame with the *same* `refdef_t`, which is why the eye view is
+  applied to it and then restored (814 `RenderFrame` calls for 637 frames).
+- Both eyes at 2444×2392 on a GTX 1080 Ti ran at about 87 frames/s in `bank`.
 
 ## Game DLL: what matters for VR
 
@@ -187,10 +212,11 @@ Tools 17.14). Note that both projects name their output `gamex86.dll`, so each n
   `cl_stereo 0`, `cl_stereo_separation 0.4`.
 - **DXVK is not applicable.** SiN renders with OpenGL, and OpenVR accepts GL textures directly.
 
-## Candidate VR architecture (nothing built yet)
+## VR architecture (1-3 built; see HANDOFF §9 for what was built)
 
 `Q2VR_REFERENCE.md` covers how Team Beef's Quake II port solved each of these pieces, and how each
-maps onto SiN's closed engine.
+maps onto SiN's closed engine. Steps 1-3 are built and running on OpenXR rather than OpenVR; 4 and 5 are
+still ahead.
 
 1. **Proxy renderer `ref_vr.dll`**, selected with `+set vid_ref vr`. It loads the stock `ref_gl.dll`,
    wraps `refimport_t` (for example to veto the `cl_stereo 0` reset) and wraps the export slots.
@@ -210,11 +236,14 @@ maps onto SiN's closed engine.
 
 ## Open questions and next checks
 
-- Does a pass-through `ref_vr.dll` run identically, and does the video menu leave `vid_ref vr` alone?
-- Does a source-built `gamex86.dll` run from a mod folder (`+set game sinvr`)? WoS needs its own
-  plan because its game dir is `2015`.
-- Observe `cl_stereo 1` at runtime: does ref_gl reset the cvar, and in what order are the Draw* calls made in each pass?
+- ~~Does a pass-through `ref_vr.dll` run identically, and does the video menu leave `vid_ref vr` alone?~~
+  Yes, except that *applying* video settings rewrites `vid_ref`.
+- ~~Does a source-built `gamex86.dll` run from a mod folder (`+set game sinvr`)?~~ Yes. WoS still needs its
+  own plan because its game dir is `2015`.
+- ~~Observe `cl_stereo 1` at runtime.~~ Done: see "The stereo path confirmed at runtime" above.
 - Map the rest of the `refdef_t` and `entity_t` layouts (needed for hand and weapon models).
+- Where does the map-load stall go? The game source is open, so start with what the server does between the
+  final `sky` precache and the first server frame.
 - How to handle cinematic cameras (`SetCameraValues`) and `.ogv` movies in VR.
 
 ## How these facts were obtained (reproducible)
