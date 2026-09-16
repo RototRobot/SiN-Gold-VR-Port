@@ -46,6 +46,14 @@ void vr_xr_end_eye(void);
    none, in which case the theatre screen should show this frame. */
 int vr_xr_end_stereo_frame(void);
 
+/*
+ * Measures the head afresh on the next stereo frame, so that where the player
+ * is standing and facing now becomes where the game puts their eyes. Done by
+ * itself when the session starts, when the headset is put on, and when the
+ * runtime moves the tracking space.
+ */
+void vr_xr_request_recenter(void);
+
 /* Destroys everything and allows a fresh start. Safe when nothing was started. */
 void vr_xr_shutdown(void);
 

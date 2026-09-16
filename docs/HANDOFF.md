@@ -90,6 +90,7 @@ The mod adds these cvars:
 | `vr_worldscale` | 39.37 | Game units per metre (archived) |
 | `vr_screen_distance` | 2.5 | Theatre screen distance, in metres (archived) |
 | `vr_screen_width` | 2.4 | Theatre screen width, in metres (archived) |
+| `vr_recenter` | 0 | Set to 1 to measure the head afresh from where the player is now; clears itself |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. Needed for unattended VR runs |
 | `vr_trace` | 1 | Log the renderer calls of each new kind of frame |
 
@@ -116,8 +117,9 @@ powershell -ExecutionPolicy Bypass -File tools\desk-test.ps1 -Vr -OutDir %TEMP%\
 `-Map`, `-WaitFrames`, `-TimeoutSeconds` and `-ExtraArgs` (`"+set r_fullbright 1"` makes a dark map legible)
 are parameters. What to expect:
 
-- A good run takes 20-40 s. **Loading a map stalls for anywhere between 8 s and over four minutes**, one core
-  at 100%, before the first world frame. The stock game does it too (§8), so expect to repeat runs.
+- A good run takes about 15 s. The script posts a keypress to the game window every second, because a
+  level starts on SiN's "PRESS ANY KEY TO CONTINUE" card and the engine runs no commands while it is up
+  (§8). Without that, runs hang until some stray keypress arrives - which looks exactly like a load stall.
 - A VR run adds about 12 s while SteamVR starts, and SteamVR stays running afterwards.
 - `-Vr` passes `vr_force_render 1`. Without it the runtime reports `shouldRender = false` for a headset lying
   on the desk and nothing at all is drawn for the headset.
@@ -206,14 +208,19 @@ The short version for AI tools is [AGENTS.md](../AGENTS.md).
 - **With `WIN32_LEAN_AND_MEAN`, include `<unknwn.h>` before `openxr_platform.h`.**
 - **In Windows PowerShell 5.1, `$PSScriptRoot` is empty inside `param()` default values.** Compute paths in the script body.
 
-**The engine's own slowness**
+**Testing**
 
-- **Loading a map stalls before the first world frame,** one core at 100%, for 8 s to over four minutes
-  from the same command line. Measured on the stock game (`vid_ref gl`, no mod) as well: three passes of
-  `map bank` took 7.4 s, 6.8 s and 42.4 s, against 8.0 s, 11.5 s and 9.0 s through the mod. **It is SiN's
-  own behaviour, not ours.** The main thread is burning CPU throughout (sampled with
-  `Get-Process sin | % Threads`), so it is a computation, not a deadlock, and the renderer is not involved:
-  the stall sits between the last loading-plaque frame and the first world frame.
+- **A level starts on a "PRESS ANY KEY TO CONTINUE" card** - Blade against a circuit-board background -
+  drawn by `sin.exe` after the last precache line (`sky`). While it is up the engine renders nothing new
+  and **executes no console commands**, so a `+exec` script stops dead there and the main thread spins at
+  100% of one core. It looks exactly like a load stall, and it cost hours: I measured it against the stock
+  game (7.4 s, 6.8 s, 42.4 s versus 8.0 s, 11.5 s, 9.0 s through the mod), concluded SiN was slow to load,
+  and wrote that down - when in truth I was timing how long until some stray keypress reached the window.
+  What settled it: the owner saw the card on screen and asked whether to press a key, and a full-screen
+  capture taken while the game was "stalled" showed it. `desk-test.ps1` now posts a HOME keypress to the
+  window every second (unbound in the stock config, and `PostMessage` needs no window focus), and a whole
+  VR run takes 13 s.
+  - The lesson: when an unattended run stops making progress, **look at the screen** before theorising.
 
 **The development machine**
 
@@ -249,6 +256,12 @@ Built and verified at the desk on 2026-09-16. The pieces, in the order a frame g
    - the head offset is rotated by the player's yaw before it is added to `vieworg`;
    - yaw is the engine's yaw plus the head's, while pitch and roll come from the head alone;
    - `fov_x` and `fov_y` are widened to enclose the eye frustum so ref_gl's culling keeps the edges.
+
+   Poses are measured from a **recentred head pose**, not from the tracking space's origin, which is
+   wherever the headset happened to be when the session started - usually lying on a desk, pointing
+   somewhere arbitrary. Without this the view is displaced by a metre or so and turned away from the
+   direction the body moves in. The recentre happens by itself when the session starts, when the headset is
+   put on (`FOCUSED`) and when the runtime moves the tracking space, and on demand with `vr_recenter 1`.
 5. **Submit.** `EndFrame` ends the pass-1 eye and submits one `XrCompositionLayerProjection` carrying the
    same poses and fields of view the eyes were rendered with. The left eye is blitted to the window first,
    cropped to its shape, so the monitor and screenshots show something. Frames with no world in them -
@@ -280,9 +293,8 @@ Still to do, in the order it matters:
   The stereo path does not care: it renders at the runtime's recommended eye size regardless of `gl_mode`.
 - The eye buffers are the recommended 2444×2392. A `vr_resolution` scale would trade sharpness for frames
   on weaker cards, and is easy to add: the swapchains are created in one place.
-- Loading a map stalls before the first frame, 8 s to over four minutes, in the stock game as well (§8).
-  Worth chasing eventually, since it is a bad first impression: the game source is available, so the place
-  to look is what the server does between the last precache (`sky`) and the first server frame.
+- The level-start card (§8) is worth handling in VR: it is a non-world frame, so it lands on the theatre
+  screen while the world behind it is not being drawn.
 - `refdef_t` beyond `rdflags` and `entity_t` are unmapped. They are needed to put the weapon in the hand (see
   [Q2VR_REFERENCE](Q2VR_REFERENCE.md), "weapon model in the hand").
 

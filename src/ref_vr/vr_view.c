@@ -36,6 +36,29 @@ static double largest(double a, double b)
 	return a > b ? a : b;
 }
 
+/* The head pose everything is measured from, in Quake axes and degrees. */
+static float g_origin[3];
+static float g_origin_yaw;
+
+/* The direction the quaternion q looks, and the yaw of it, in Quake terms. */
+static void quake_forward(const float q[4], float forward[3])
+{
+	static const float xr_forward[3] = { 0.0f, 0.0f, -1.0f };
+	float v[3];
+
+	quat_rotate(q, xr_forward, v);
+	xr_to_quake(v, forward);
+}
+
+void vr_view_recenter(const float position[3], const float orientation[4])
+{
+	float forward[3];
+
+	xr_to_quake(position, g_origin);
+	quake_forward(orientation, forward);
+	g_origin_yaw = (float)(atan2(forward[1], forward[0]) * DEG_PER_RAD);
+}
+
 void vr_view_apply(refdef_t *fd, const vr_eye_t *eye, float units_per_metre, vr_view_saved_t *saved)
 {
 	static const float xr_forward[3] = { 0.0f, 0.0f, -1.0f };
@@ -43,8 +66,11 @@ void vr_view_apply(refdef_t *fd, const vr_eye_t *eye, float units_per_metre, vr_
 	static const float xr_up[3] = { 0.0f, 1.0f, 0.0f };
 	float v[3], forward[3], right[3], up[3], offset[3];
 	float body_yaw = fd->viewangles[YAW];
-	double s = sin(body_yaw * RAD_PER_DEG);
-	double c = cos(body_yaw * RAD_PER_DEG);
+	/* The recentred head faces the way the body does, so the tracking space
+	   turns by the difference between the two. */
+	double turn = (body_yaw - g_origin_yaw) * RAD_PER_DEG;
+	double s = sin(turn);
+	double c = cos(turn);
 	double sin_pitch;
 
 	memcpy(saved->vieworg, fd->vieworg, sizeof(saved->vieworg));
@@ -59,8 +85,10 @@ void vr_view_apply(refdef_t *fd, const vr_eye_t *eye, float units_per_metre, vr_
 	quat_rotate(eye->orientation, xr_up, v);
 	xr_to_quake(v, up);
 	xr_to_quake(eye->position, offset);
+	offset[0] -= g_origin[0];
+	offset[1] -= g_origin[1];
+	offset[2] -= g_origin[2];
 
-	/* The tracking space turns with the body: its forward is the engine's yaw. */
 	fd->vieworg[0] += (float)((offset[0] * c - offset[1] * s) * units_per_metre);
 	fd->vieworg[1] += (float)((offset[0] * s + offset[1] * c) * units_per_metre);
 	fd->vieworg[2] += offset[2] * units_per_metre;
@@ -69,7 +97,7 @@ void vr_view_apply(refdef_t *fd, const vr_eye_t *eye, float units_per_metre, vr_
 	   roll positive tipping the right side down. */
 	sin_pitch = forward[2] > 1.0f ? 1.0 : (forward[2] < -1.0f ? -1.0 : forward[2]);
 	fd->viewangles[PITCH] = (float)(-asin(sin_pitch) * DEG_PER_RAD);
-	fd->viewangles[YAW] = body_yaw + (float)(atan2(forward[1], forward[0]) * DEG_PER_RAD);
+	fd->viewangles[YAW] = body_yaw - g_origin_yaw + (float)(atan2(forward[1], forward[0]) * DEG_PER_RAD);
 	fd->viewangles[ROLL] = (float)(atan2(-right[2], up[2]) * DEG_PER_RAD);
 
 	fd->fov_x = (float)(2.0 * atan(largest(-eye->tan_left, eye->tan_right)) * DEG_PER_RAD);

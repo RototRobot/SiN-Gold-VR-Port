@@ -85,6 +85,7 @@ static struct
 	int window_width, window_height;
 	int warned_incomplete;
 	int warned_idle;   /* said once that the headset does not want frames */
+	int recenter_wanted;
 	unsigned stereo_frames;
 } xr;
 
@@ -501,6 +502,12 @@ static void xr_poll_events(void)
 			xr.state = changed->state;
 			vr_printf("VR: session %s", state_name(xr.state));
 
+			if (xr.state == XR_SESSION_STATE_FOCUSED)
+			{
+				/* Whoever just put the headset on is the new centre. */
+				xr.recenter_wanted = 1;
+			}
+
 			if (xr.state == XR_SESSION_STATE_READY)
 			{
 				XrSessionBeginInfo begin = { XR_TYPE_SESSION_BEGIN_INFO };
@@ -518,6 +525,10 @@ static void xr_poll_events(void)
 				xr.running = 0;
 				xr.lost = 1;
 			}
+		}
+		else if (event.type == XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING)
+		{
+			xr.recenter_wanted = 1;
 		}
 		else if (event.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING)
 		{
@@ -545,6 +556,7 @@ static int xr_ready(void)
 			return 0;
 		}
 		xr.started = 1;
+		xr.recenter_wanted = 1;
 	}
 
 	xr_poll_events();
@@ -675,6 +687,11 @@ void vr_xr_frame(float screen_distance, float screen_width, int force_render)
 /* Stereo                                                                     */
 /* ------------------------------------------------------------------------- */
 
+void vr_xr_request_recenter(void)
+{
+	xr.recenter_wanted = 1;
+}
+
 int vr_xr_stereo_possible(void)
 {
 	return xr.started && xr.running && !xr.failed && !xr.stereo_failed;
@@ -765,6 +782,20 @@ static int xr_begin_stereo(int force_render)
 		eye->tan_right = tanf(view->fov.angleRight);
 		eye->tan_down = tanf(view->fov.angleDown);
 		eye->tan_up = tanf(view->fov.angleUp);
+	}
+
+	/* Between the eyes, which is where the head is. */
+	if (xr.recenter_wanted && xr.should_render)
+	{
+		float head[3];
+
+		for (i = 0; i < 3; ++i)
+		{
+			head[i] = 0.5f * (xr.eye_views[0].position[i] + xr.eye_views[1].position[i]);
+		}
+		vr_view_recenter(head, xr.eye_views[0].orientation);
+		xr.recenter_wanted = 0;
+		vr_printf("VR: measuring from where the headset is now");
 	}
 
 	return 1;

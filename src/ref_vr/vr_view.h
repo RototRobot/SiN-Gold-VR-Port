@@ -23,10 +23,20 @@ typedef struct
 } vr_view_saved_t;
 
 /*
+ * Head poses are measured from the pose given here: the player's own head,
+ * standing where the game puts their eyes and facing where the body faces.
+ * Without it the tracking space's origin - wherever the headset happened to be
+ * when the session started, often on a desk - would offset and turn the view.
+ * Takes a head pose in the same terms as vr_eye_t.
+ */
+void vr_view_recenter(const float position[3], const float orientation[4]);
+
+/*
  * Puts the eye on top of the engine's view. The engine keeps the position and
- * turns the body with the mouse (its yaw). The headset's pose is added on top:
- * its offset, turned with the body, at units_per_metre; its yaw added to the
- * body's; and its pitch and roll in place of the engine's.
+ * turns the body with the mouse (its yaw). The headset's pose, measured from
+ * the recentred one, is added on top: its offset, turned with the body, at
+ * units_per_metre; its yaw added to the body's; and its pitch and roll in place
+ * of the engine's.
  *
  * fov_x and fov_y are widened to enclose the eye's asymmetric frustum, because
  * ref_gl culls against a symmetric one built from them. The projection itself

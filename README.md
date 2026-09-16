@@ -86,6 +86,7 @@ These console variables control the mod:
 | `vr_worldscale` | 39.37 | Game units per metre. Larger makes the world feel bigger. |
 | `vr_screen_distance` | 2.5 | Virtual screen distance, in metres. |
 | `vr_screen_width` | 2.4 | Virtual screen width, in metres. |
+| `vr_recenter` | 0 | Set it to 1 to measure the head afresh from where you are standing and facing now. Clears itself. |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. For testing with the headset off. |
 | `vr_trace` | 1 | Record the renderer calls of each new kind of frame in `sinvr.log`. |
 
@@ -103,8 +104,8 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   view. They are legible but uncomfortable; VR HUD placement is the next piece of work.
 - View pitch and yaw come from the headset, but the player still moves and turns with the keyboard
   and mouse, and the body does not move with the headset yet.
-- Loading a map sometimes takes the stock game a very long time (a minute or more of one core at
-  100%) before the first frame appears. It happens without the mod too.
+- Head poses are measured from where you were when you put the headset on. `vr_recenter 1` in the
+  console does it again if you end up off-centre.
 
 ## Roadmap
 

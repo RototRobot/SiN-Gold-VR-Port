@@ -6,7 +6,9 @@
 .DESCRIPTION
     Uses the installed mod (tools\deploy.ps1). Writes a small cfg into the mod folder,
     starts sin.exe with it, and waits for the game to quit, stopping it after
-    -TimeoutSeconds if it does not. Then it moves the screenshots and the cfg out of
+    -TimeoutSeconds if it does not. While it runs, a key is posted to the game window
+    every second, so the level-start "press any key" card does not hold it up. Then it
+    moves the screenshots and the cfg out of
     the game folder, copies sinvr.log and qconsole.log, and converts the screenshots
     to PNG. With -Vr the headset path runs too (SteamVR starts if it is not running,
     and vr_force_render makes it draw for a headset that is not being worn).
@@ -50,13 +52,34 @@ Set-Content -Path (Join-Path $modDir $cfgName) -Value $lines -Encoding ASCII
 $vrArgs = if ($Vr) { "+set vr_enable 1 +set vr_force_render 1" } else { "+set vr_enable 0" }
 $arguments = "+set game sinvr +set vid_ref vr $vrArgs +set logfile 2 $ExtraArgs +exec $cfgName"
 
+# A level starts on SiN's "PRESS ANY KEY TO CONTINUE" card, and the engine does not
+# run the command buffer while it is up, so an unattended run has to press a key
+# itself - and posting the message works whether or not the window has focus. HOME
+# is unbound in the stock config, so it does nothing else, in the card or in play.
+Add-Type -Namespace SinVr -Name NativeInput -MemberDefinition @'
+[DllImport("user32.dll")]
+public static extern IntPtr PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+'@
+function Send-AnyKey($target) {
+    $target.Refresh()
+    $window = $target.MainWindowHandle
+    if ($window -eq [IntPtr]::Zero) { return }
+    $null = [SinVr.NativeInput]::PostMessage($window, 0x100, [IntPtr]0x24, [IntPtr]0x01470001)  # down
+    $null = [SinVr.NativeInput]::PostMessage($window, 0x101, [IntPtr]0x24, [IntPtr]0xC1470001)  # up
+}
+
 $start = Get-Date
 $process = Start-Process -FilePath (Join-Path $GameDir "sin.exe") -WorkingDirectory $GameDir -ArgumentList $arguments -PassThru
 $null = $process.Handle
-if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
-    Write-Host "timed out after $TimeoutSeconds s - stopping the game"
-    Stop-Process -Id $process.Id -Force
-    Start-Sleep -Seconds 1
+while (-not $process.HasExited) {
+    if (((Get-Date) - $start).TotalSeconds -gt $TimeoutSeconds) {
+        Write-Host "timed out after $TimeoutSeconds s - stopping the game"
+        Stop-Process -Id $process.Id -Force
+        Start-Sleep -Seconds 1
+        break
+    }
+    Send-AnyKey $process
+    Start-Sleep -Milliseconds 1000
 }
 Write-Host ("exit code {0} after {1:N0} s" -f $process.ExitCode, ((Get-Date) - $start).TotalSeconds)
 

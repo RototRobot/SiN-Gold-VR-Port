@@ -148,13 +148,22 @@ These come from `sinvr.log` in an unattended run: start the game, `map bank`, ta
 - **Call counts over the run:** `DrawChar` 14.8k, `slot+0x68` 13.5k, `slot+0x64` 1.1k, `RenderFrame` 409.
 - **Where the mod folder's files go.** With `+set game sinvr`, the engine writes its config, saves and screenshots under
   `sinvr\players\blade\`. The normal `base` config is never touched.
-- **Load time.** Loading a map stalls before the first world frame with one core at 100%, and the length
-  varies wildly from the same command line: 8 s to over four minutes. Measured against a stock launch on
-  2026-09-16 (`vid_ref gl`, no mod, `map bank` then quit): 7.4 s, 6.8 s, 42.4 s, versus 8.0 s, 11.5 s, 9.0 s
-  through the mod. **The stall is the stock game's, not the mod's.** Per-thread sampling
-  (`Get-Process sin | % Threads`) shows the main thread Running and consuming a full core for the whole
-  stall, so it is computation rather than a deadlock, and no renderer call is in flight: it sits between the
-  last loading-plaque frame and the first world frame, after the final `sky` precache line.
+- **The level-start card, and the "load stall" that wasn't.** After the last precache line (`sky`),
+  `sin.exe` shows a full-screen card - Blade against a circuit board, with "PRESS ANY KEY TO CONTINUE" in
+  red - and waits for a key. While it is up:
+  - the renderer sees one frame (`DrawGetPicSize`, a pic, `EndFrame`) and then nothing;
+  - **the console command buffer does not run**, so a `+exec` script stops there and never reaches its
+    `quit`;
+  - the main thread spins at 100% of one core (sampled with `Get-Process sin | % Threads`).
+
+  Unattended runs therefore appeared to stall for 8 s to over four minutes, depending on when a stray
+  keypress happened to reach the window; a stock launch behaved the same way (7.4 s, 6.8 s, 42.4 s for
+  `map bank`, against 8.0 s, 11.5 s and 9.0 s through the mod), which made it easy to write off as SiN
+  being slow to load. It is not: a full-screen capture taken during one of those "stalls" showed the card.
+  `tools\desk-test.ps1` posts a HOME keypress (unbound in the stock config) to the game window every
+  second, and a full VR run then takes 13 s.
+  - The string in the data files is `"PRESS ANY KEY TO CONTINUE"`; `base\pak0.sin` also holds
+    `"PRESS ANY KEY TO RETURN"`, which belongs to the in-level computer terminals, not to this card.
 - **Missing renderer.** If `vid_ref` is `vr` but `ref_vr.dll` is missing, the engine prints `LoadLibrary("ref_vr.dll") failed` and
   falls back to `ref_gl.dll` by itself.
 
@@ -242,8 +251,8 @@ still ahead.
   own plan because its game dir is `2015`.
 - ~~Observe `cl_stereo 1` at runtime.~~ Done: see "The stereo path confirmed at runtime" above.
 - Map the rest of the `refdef_t` and `entity_t` layouts (needed for hand and weapon models).
-- Where does the map-load stall go? The game source is open, so start with what the server does between the
-  final `sky` precache and the first server frame.
+- Is the level-start card the engine's or the game DLL's? It is drawn by `sin.exe`, but what dismisses it,
+  and whether a cvar can skip it, is still unknown. Relevant to VR: while it is up, no world is drawn.
 - How to handle cinematic cameras (`SetCameraValues`) and `.ogv` movies in VR.
 
 ## How these facts were obtained (reproducible)

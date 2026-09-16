@@ -54,6 +54,7 @@ static cvar_t *vr_stereo;
 static cvar_t *vr_worldscale;
 static cvar_t *vr_trace;
 static cvar_t *vr_force_render;
+static cvar_t *vr_recenter;
 static cvar_t *vr_screen_distance;
 static cvar_t *vr_screen_width;
 static cvar_t *cl_stereo;
@@ -364,6 +365,7 @@ static void register_cvars(void)
 	vr_worldscale = cvar_get("vr_worldscale", "39.37", CVAR_ARCHIVE);
 	vr_trace = cvar_get("vr_trace", "1", 0);
 	vr_force_render = cvar_get("vr_force_render", "0", 0);
+	vr_recenter = cvar_get("vr_recenter", "0", 0);
 	vr_screen_distance = cvar_get("vr_screen_distance", "2.5", CVAR_ARCHIVE);
 	vr_screen_width = cvar_get("vr_screen_width", "2.4", CVAR_ARCHIVE);
 	cl_stereo = cvar_get("cl_stereo", "0", 0);
@@ -540,6 +542,13 @@ static void vr_BeginFrame(float camera_separation)
 	if (pass == 0)
 	{
 		g_stereo_frame = stereo_wanted() && g_last_frame_had_world && cl_stereo->value != 0.0f;
+	}
+
+	/* "vr_recenter 1" in the console, answered and cleared here. */
+	if (pass == 0 && vr_recenter && vr_recenter->value != 0.0f)
+	{
+		vr_xr_request_recenter();
+		set_cvar("vr_recenter", "0");
 	}
 
 	if (g_stereo_frame && pass < 2)
