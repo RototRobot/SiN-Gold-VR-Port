@@ -4,7 +4,7 @@ This is the handoff for anyone joining the project, whether a person or an AI. I
 why it is shaped the way it is, how to build and test it, what has already been learned the hard way,
 and what comes next. The detailed evidence lives in the other files in `docs/`; this one is the map.
 
-*Last updated 2026-09-16.*
+*Last updated 2026-09-16 (second pass).*
 
 ## 1. Where the project is
 
@@ -13,8 +13,9 @@ and what comes next. The detailed evidence lives in the other files in `docs/`; 
 | 1. Pass-through renderer, game DLL built from source, 32-bit OpenXR loader | ✅ Done, verified in unattended runs |
 | 2. Virtual "theatre" screen in the headset | ✅ Done. The owner confirmed it in the headset on 2026-09-15: it loads, doesn't crash, and the colours are right. It is low resolution, as expected. |
 | 3. Stereo rendering with head tracking | ✅ Built and verified at the desk on 2026-09-16: 406 projection-layer frames in one run, correct per-eye poses and fields of view, ~87 frames/s at 2444×2392 per eye. Not yet seen in the headset by a person. How it works: [§9](#9-how-stereo-works) |
-| 4. HUD and menus in VR | **Next.** The 2D overlay currently lands inside each eye image, stretched over the whole field of view |
-| 5–9 | Controllers, locomotion, weapons in the hand, Wages of Sin, and packaging (see the roadmap in the [README](../README.md)) |
+| 4. HUD, crosshair and console in VR | ✅ Built 2026-09-16. The 2D goes into a panel `vr_hud_fov` degrees wide, `vr_hud_depth` metres away, centred on each eye's own axis - which is also what stops the crosshair from doubling. [§9](#9-how-stereo-works) |
+| 5. Motion controllers | **Next.** Nothing built. The plan is in [§11](#11-next-motion-controllers) |
+| 6–9 | Locomotion, weapons in the hand, Wages of Sin, and packaging (see the roadmap in the [README](../README.md)) |
 
 ## 2. How it fits together
 
@@ -90,7 +91,10 @@ The mod adds these cvars:
 | `vr_worldscale` | 39.37 | Game units per metre (archived) |
 | `vr_screen_distance` | 2.5 | Theatre screen distance, in metres (archived) |
 | `vr_screen_width` | 2.4 | Theatre screen width, in metres (archived) |
+| `vr_hud_fov` | 60 | Width of the HUD panel, in degrees (archived) |
+| `vr_hud_depth` | 6 | How far away the HUD panel appears, in metres; 0 is infinity (archived) |
 | `vr_recenter` | 0 | Set to 1 to measure the head afresh from where the player is now; clears itself |
+| `vr_dump_eye` | 0 | Set to 1 to write the next frame's eye images beside `sin.exe` as `sinvr_eye0/1.tga` |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. Needed for unattended VR runs |
 | `vr_trace` | 1 | Log the renderer calls of each new kind of frame |
 
@@ -117,9 +121,17 @@ powershell -ExecutionPolicy Bypass -File tools\desk-test.ps1 -Vr -OutDir %TEMP%\
 `-Map`, `-WaitFrames`, `-TimeoutSeconds` and `-ExtraArgs` (`"+set r_fullbright 1"` makes a dark map legible)
 are parameters. What to expect:
 
-- A good run takes about 15 s. The script posts a keypress to the game window every second, because a
-  level starts on SiN's "PRESS ANY KEY TO CONTINUE" card and the engine runs no commands while it is up
-  (§8). Without that, runs hang until some stray keypress arrives - which looks exactly like a load stall.
+- A good run takes about 15 s. The script posts a space keypress to the game window until the log shows
+  the world being drawn, because a level starts on SiN's "PRESS ANY KEY TO CONTINUE" card and the engine
+  runs no commands while it is up (§8). Without that, runs hang until some stray keypress arrives - which
+  looks exactly like a load stall.
+- `-Commands "<console commands>"` runs once the level is up, semicolon-separated as in the console.
+  `vr_dump_eye 1` there writes both eye images for inspection; `paused 0` undoes the pause described below.
+- `-Foreground` keeps taking the window back, which is needed for anything that looks at the rendered
+  image: **SiN pauses itself whenever its window is not the active one** and paints the view over with an
+  opaque blend and a PAUSE sign, so a background run renders no world at all.
+- Beware that an **unknown console command is forwarded to the server and ends up as chat** ("Blade: foo"),
+  so a typo in `-Commands` fails silently. `cl_paused` and `sv_paused` are not SiN cvars; `paused` is.
 - A VR run adds about 12 s while SteamVR starts, and SteamVR stays running afterwards.
 - `-Vr` passes `vr_force_render 1`. Without it the runtime reports `shouldRender = false` for a headset lying
   on the desk and nothing at all is drawn for the headset.
@@ -152,6 +164,20 @@ With VR on, it also shows these, in order:
 A stereo world frame's trace line has **two** `BeginFrame ... RenderFrame` groups and one `EndFrame`, with
 `camera_separation` −0.0000 then 0.0000 (both zero: the eye offsets come from the headset, not the engine).
 
+**Eye images.** `vr_dump_eye 1` writes `sinvr_eye0.tga` and `sinvr_eye1.tga` (2444x2392, 17 MB each)
+beside `sin.exe`, straight out of the eye framebuffers. This is the only way to see at the desk what the
+headset would show: the window mirror only carries the left eye, and the engine's own `screenshot` reads
+the window's back buffer, which in stereo holds nothing but that mirror.
+
+Measuring them beats looking at them. The HUD panel's position is worth checking numerically, for
+instance - the bounding box of the non-black pixels should match the panel computed from the eye
+tangents, and the two eyes' panels should differ by the asymmetry of their frustums plus a few pixels of
+convergence:
+
+```
+python -c "from PIL import Image; im = Image.open('sinvr_eye0.tga').convert('L'); print(im.point(lambda v: 255 if v > 6 else 0).getbbox())"
+```
+
 **`xrprobe`** checks the OpenXR path without the game: loader, runtime, headset, GL requirements.
 
 ## 6. Code map
@@ -161,7 +187,7 @@ A stereo world frame's trace line has **two** `BeginFrame ... RenderFrame` group
 | `src/ref_vr/ref_vr.c` | `GetRefAPI`, loading ref_gl, the 36 recording thunks, C wrappers for Init/Shutdown/BeginFrame/RenderFrame/EndFrame, the frame tracer and cvars |
 | `src/ref_vr/refapi.h` | The renderer interface reconstructed from the binaries, with compile-time checks of sizes and offsets |
 | `src/ref_vr/vr_xr.c` | OpenXR: instance, session on ref_gl's GL context, event loop, the theatre-screen quad layer, and the per-eye swapchains and projection layer |
-| `src/ref_vr/vr_gl.c` | Redirects ref_gl's `glFrustum`, `glViewport` and `glScissor` while an eye is bound, by hooking its `GetProcAddress` import |
+| `src/ref_vr/vr_gl.c` | Redirects ref_gl's `glFrustum`, `glOrtho`, `glViewport` and `glScissor` while an eye is bound, by hooking its `GetProcAddress` import. Holds the HUD panel geometry |
 | `src/ref_vr/vr_view.c` | Turns an OpenXR eye pose into the engine's `refdef_t` (axes, scale, angles, field of view) and back |
 | `src/ref_vr/xr_layers.c` | Implicit-layer hygiene for 32-bit processes (shared with xrprobe) |
 | `src/ref_vr/vrlog.c` | `sinvr.log` |
@@ -267,19 +293,31 @@ Built and verified at the desk on 2026-09-16. The pieces, in the order a frame g
    cropped to its shape, so the monitor and screenshots show something. Frames with no world in them -
    menus, loading screens, the console over nothing - are not stereo frames and keep going to the theatre
    screen, which is why a run reports both counts.
-6. **Comfort.** View bob and roll move the camera without the head moving, so `bob_up`, `bob_pitch`,
+6. **The 2D goes into a panel.** ref_gl draws the HUD, crosshair, console and menus in window
+   coordinates with an ortho projection. Stretching that over the whole eye put the HUD at the edge of
+   vision and, because the eye frustums are asymmetric, put the crosshair at a *different angle* in each
+   eye - seen as two crosshairs. So `glOrtho` is hooked as well: it marks the 2D phase, and while that
+   phase is on, viewports and scissors are mapped into a panel `vr_hud_fov` degrees wide, in the window's
+   shape, centred on **that eye's own axis** and shifted by the parallax of `vr_hud_depth` metres, which is
+   what makes both eyes agree. ref_gl sets the viewport before the projection that says what it is for, so
+   the last rect it asked for is applied again whenever the phase changes.
+   - `DrawFadeScreen` - SiN's full-screen blend, `void (float r, float g, float b, float a)` - is wrapped
+     so that it keeps the whole eye: damage flashes and the console's dimming should cover the view, not
+     the panel.
+7. **Comfort.** View bob and roll move the camera without the head moving, so `bob_up`, `bob_pitch`,
    `bob_roll`, `run_pitch`, `run_roll` and `sv_rollangle` are zeroed once when stereo comes on.
 
-What one desk run proved: 406 stereo frames submitted, ~87 frames/s with both eyes at 2444×2392 on a
+What the desk runs proved: 406 stereo frames submitted, ~87 frames/s with both eyes at 2444×2392 on a
 1080 Ti, eye tangents mirrored between the eyes (left `L-1.300 R0.886`, right `L-0.886 R1.300`), the two eye
 positions 66 mm apart, and that separation surviving the conversion into game units (2.6 units at 39.37
-units per metre).
+units per metre). For the panel, the eye dumps put the 2D exactly where the arithmetic says: eye 0's panel
+at x 814-2105 of 2444 and eye 1's at 339-1630, each centred on its own axis, each shifted about 6 px
+towards the other eye for the 6 m convergence, with the world still drawn across the whole buffer behind
+it. The owner confirmed the stereo world in the headset on 2026-09-16, with the view decoupled from the
+arms; the doubled crosshair and edge-flung HUD they reported are what the panel addresses.
 
 Still to do, in the order it matters:
 
-- **The HUD and the console** are drawn into each eye's image, so the glFrustum/viewport scaling stretches
-  them across the whole field of view. They want their own head-locked quad layer, or a 2D pass into a
-  smaller part of the eye image.
 - **The body does not follow the head.** Pitch and yaw are the head's, but movement, turning and the
   player's collision position still come from the keyboard and mouse.
 - **The view weapon** follows the engine's angles, not the head, and will move to the hand in milestone 7.
@@ -308,3 +346,34 @@ Still to do, in the order it matters:
 
 - Wages of Sin: its game DLL builds, but how to deploy it next to the `2015` data is still undecided.
 - The licence for the mod's own code (`src/`, `tools/`, `cmake/`) has not been chosen.
+
+## 11. Next: motion controllers
+
+The owner's verdict after the first stereo test (2026-09-16): the world reads correctly in stereo and the
+view is properly decoupled from the arms; the HUD sat too far out and the crosshair doubled (both now
+fixed by the panel); and the gun arm looks too big. That last one is best answered here rather than by
+tweaking projections, by putting the weapon in a tracked hand at a chosen scale.
+
+The client is closed, so input has to come in from the side. Four pieces, in the order they pay off:
+
+1. **Poses and buttons in `ref_vr`.** An OpenXR action set with aim/grip poses for both hands and the
+   usual buttons, bound for `/interaction_profiles/hp/mixed_reality_controller` with the Khronos simple
+   controller as a fallback. Locate the hands at the same `predictedDisplayTime` as the eyes, in the same
+   recentred space, so the hands and the head agree.
+2. **Buttons as console commands.** `refimport_t` carries Quake II's `Cmd_ExecuteText`, which is almost
+   certainly **slot 5** - the order is `Sys_Error`, `Cmd_AddCommand`, `Cmd_RemoveCommand`, `Cmd_Argc`,
+   `Cmd_Argv`, `Cmd_ExecuteText`, `Con_Printf`, and `Con_Printf` is slot 6 as we already use it. Verify by
+   calling it with a harmless `echo`. Then a trigger becomes `+attack`, and so on. The import table is
+   logged at startup, so the slot can be checked against `sinvr.log`.
+3. **Sticks as a joystick.** `sin.exe` imports `joyGetPosEx` from `winmm`, and `vr_gl.c` already has the
+   IAT patching needed to answer it ourselves - the same trick used on ref_gl's `GetProcAddress`, applied
+   to `sin.exe` this time. A virtual joystick gives smooth movement and turning through the engine's own
+   input path, with `in_joystick 1` and the `joy_advanced` cvars set to taste. This avoids hooking the
+   client's command builder.
+4. **Hands into the game DLL.** Aiming from the controller, and a weapon held in the hand, need the poses
+   inside `gamex86.dll`. Both DLLs are ours, so a small shared-memory block (a named section, or a file
+   mapping) written by `ref_vr` and read by the game is the least invasive channel. Game-side, the places
+   to look are `Player::GunPosition`/`GetGunOrientation` for aiming and the view-model attachment for the
+   weapon; `refdef_t` and `entity_t` still need mapping past `rdflags`.
+
+Hand tracking (`XR_EXT_hand_tracking`) comes after controllers: the same pose channel, a different source.

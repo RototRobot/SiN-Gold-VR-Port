@@ -186,6 +186,25 @@ show the engine behaving exactly as the disassembly suggested:
   applied to it and then restored (814 `RenderFrame` calls for 637 frames).
 - Both eyes at 2444×2392 on a GTX 1080 Ti ran at about 87 frames/s in `bank`.
 
+## Renderer and client behaviour found while building the HUD panel (2026-09-16)
+
+- **`DrawFadeScreen` (slot `+0x40`, ref_gl+0x05240) is `void (float r, float g, float b, float a)`.** Both
+  call sites in sin.exe push 16 bytes and clean up with `add esp,10h`, so it is cdecl with four floats, and
+  the function reads them at `[ebp+8]`..`[ebp+14h]`. With an alpha of 1 or more it skips enabling blending
+  and paints opaque; otherwise it blends `GL_SRC_ALPHA`/`GL_ONE_MINUS_SRC_ALPHA`. This settles the old
+  guess: it is SiN's screen blend, not a menu fade.
+- **`glOrtho` is resolved by name** through ref_gl's QGL layer, like `glFrustum`, `glViewport` and
+  `glScissor`, so the 2D phase can be intercepted the same way. ref_gl sets the viewport *before* the
+  projection call that says what the viewport is for, in both phases.
+- **SiN pauses itself when its window is not the active one,** and while paused it paints the whole view
+  over (an opaque `DrawFadeScreen`) and draws a PAUSE sign. An unattended run in the background therefore
+  renders no world at all. The cvar is `paused`; `cl_paused` and `sv_paused` do not exist.
+- **An unknown console command is forwarded to the server and comes back as chat** - `cl_paused 0` shows up
+  in the console as `Blade: cl_paused 0`. Silent failure for a typo in a test script.
+- **The level-start card leaves the console down** over the view often enough to matter when reading a
+  rendered frame; escape then opens the menu rather than closing anything, because by that point the
+  key destination is the game again.
+
 ## Game DLL: what matters for VR
 
 - **Aiming.** `Weapon::GetMuzzlePosition` (weapon.cpp:324) calls `owner->GunPosition()` and

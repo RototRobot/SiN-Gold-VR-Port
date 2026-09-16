@@ -48,7 +48,7 @@ enum
 	RE_DRAW_CHAR = 12,         /* +0x34 */
 	RE_DRAW_TILE_CLEAR = 13,   /* +0x38 */
 	RE_DRAW_FILL = 14,         /* +0x3C */
-	RE_DRAW_FADE_SCREEN = 15,  /* +0x40 */
+	RE_DRAW_FADE_SCREEN = 15,  /* +0x40 void (*)(float r, float g, float b, float a) */
 	RE_BEGIN_FRAME = 21,       /* +0x58 void (*)(float camera_separation) */
 	RE_END_FRAME = 22,         /* +0x5C void (*)(void) */
 	RE_APP_ACTIVATE = 23       /* +0x60 void (*)(int active) */

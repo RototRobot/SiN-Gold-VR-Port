@@ -20,6 +20,7 @@
 #define GL_FRAMEBUFFER_COMPLETE 0x8CD5
 #define GL_RENDERBUFFER 0x8D41
 #define GL_DEPTH24_STENCIL8 0x88F0
+#define GL_BGR_EXT 0x80E0
 
 typedef struct
 {
@@ -46,20 +47,38 @@ int vr_gl_load(void);
 
 /*
  * Call before ref_gl's Init. ref_gl looks every GL function up by name through
- * GetProcAddress (its QGL layer); this answers glFrustum, glViewport and
- * glScissor with versions that follow vr_gl_eye_begin/end. Returns 0 if the
+ * GetProcAddress (its QGL layer); this answers glFrustum, glOrtho, glViewport
+ * and glScissor with versions that follow vr_gl_eye_begin/end. Returns 0 if the
  * import could not be patched.
  */
 int vr_gl_hook_refgl(HMODULE refgl);
 
 /*
+ * The HUD panel: ref_gl draws its 2D - HUD, crosshair, console - in window
+ * coordinates, and stretching that over the whole eye would push it to the edge
+ * of vision and, because the eye frustums are asymmetric, put the crosshair at a
+ * different angle in each eye, which is seen as two crosshairs. Instead the 2D
+ * goes into a panel of fov degrees across, centred on the eye's own axis and
+ * shifted so that it sits depth metres away. A depth of 0 puts it at infinity.
+ */
+void vr_gl_set_hud(float fov, float depth);
+
+/*
+ * Around a 2D call that is meant to cover the view rather than sit in the HUD
+ * panel, such as the full-screen blend.
+ */
+void vr_gl_full_screen_2d(int on);
+
+/*
  * While an eye is rendered, ref_gl's viewports and scissors, which are in window
- * coordinates, are scaled to the eye's target, and every projection it sets up
- * is replaced by the eye's asymmetric frustum. Tangents are of the angles from
- * the view axis to each edge: left and down negative.
+ * coordinates, are mapped onto the eye's target - the whole of it for the world,
+ * the HUD panel for 2D - and every projection it sets up is replaced by the eye's
+ * asymmetric frustum. Tangents are of the angles from the view axis to each edge:
+ * left and down negative. offset_x is how far this eye is to the right of the
+ * head, in metres, which is what gives the panel its depth.
  */
 void vr_gl_eye_begin(int target_width, int target_height, int window_width, int window_height,
-	float tan_left, float tan_right, float tan_down, float tan_up);
+	float tan_left, float tan_right, float tan_down, float tan_up, float offset_x);
 void vr_gl_eye_end(void);
 
 #endif /* VR_GL_H */

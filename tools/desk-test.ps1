@@ -6,8 +6,9 @@
 .DESCRIPTION
     Uses the installed mod (tools\deploy.ps1). Writes a small cfg into the mod folder,
     starts sin.exe with it, and waits for the game to quit, stopping it after
-    -TimeoutSeconds if it does not. While it runs, a key is posted to the game window
-    every second, so the level-start "press any key" card does not hold it up. Then it
+    -TimeoutSeconds if it does not. While the level starts, keys are posted to the
+    game window to get past the "press any key" card and close the console it leaves
+    down; both stop as soon as the world is being drawn. Then it
     moves the screenshots and the cfg out of
     the game folder, copies sinvr.log and qconsole.log, and converts the screenshots
     to PNG. With -Vr the headset path runs too (SteamVR starts if it is not running,
@@ -18,6 +19,10 @@
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File tools\desk-test.ps1 -Vr -OutDir $env:TEMP\sinvr-vr
+
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File tools\desk-test.ps1 -Vr -Foreground `
+        -Commands "vr_dump_eye 1" -OutDir $env:TEMP\sinvr-eyes
 #>
 [CmdletBinding()]
 param(
@@ -28,7 +33,9 @@ param(
     [string]$Map = "bank",
     [int]$WaitFrames = 400,
     [int]$TimeoutSeconds = 180,
-    [string]$ExtraArgs = ""
+    [string]$ExtraArgs = "",
+    [string]$Commands = "",
+    [switch]$Foreground
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,9 +48,11 @@ New-Item -ItemType Directory -Force $OutDir | Out-Null
 
 # One wait is one engine frame, so the two shots land at different moments.
 $cfgName = "sinvr_desk_test.cfg"
+# -Commands runs once the level is up and the first screenshot is taken. The
+# engine splits it on semicolons, as it would a line typed into the console.
 $lines = @("// written by tools\desk-test.ps1", "map $Map") +
     (@("wait") * $WaitFrames) + @("screenshot") +
-    (@("wait") * $WaitFrames) + @("screenshot") +
+    @($Commands) + (@("wait") * $WaitFrames) + @("screenshot") +
     (@("wait") * 20) + @("quit")
 Set-Content -Path (Join-Path $modDir $cfgName) -Value $lines -Encoding ASCII
 
@@ -59,18 +68,51 @@ $arguments = "+set game sinvr +set vid_ref vr $vrArgs +set logfile 2 $ExtraArgs 
 Add-Type -Namespace SinVr -Name NativeInput -MemberDefinition @'
 [DllImport("user32.dll")]
 public static extern IntPtr PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+[DllImport("user32.dll")]
+public static extern bool SetForegroundWindow(IntPtr hWnd);
+[DllImport("user32.dll")]
+public static extern bool BringWindowToTop(IntPtr hWnd);
+[DllImport("user32.dll")]
+public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+[DllImport("user32.dll")]
+public static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
 '@
-function Send-AnyKey($target) {
+# SiN pauses itself when its window is not the active one, and paints the view
+# over, so anything that reads the rendered image needs the window in front.
+# Windows only lets the foreground process hand focus over, and pressing a key
+# first is the accepted way of asking: it makes this process the last one with
+# input, which lifts the lock for SetForegroundWindow.
+function Show-Game($target) {
+    if (-not $Foreground) { return }
     $target.Refresh()
     $window = $target.MainWindowHandle
     if ($window -eq [IntPtr]::Zero) { return }
-    $null = [SinVr.NativeInput]::PostMessage($window, 0x100, [IntPtr]0x24, [IntPtr]0x01470001)  # down
-    $null = [SinVr.NativeInput]::PostMessage($window, 0x101, [IntPtr]0x24, [IntPtr]0xC1470001)  # up
+    [SinVr.NativeInput]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)         # alt down
+    [SinVr.NativeInput]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)         # alt up
+    $null = [SinVr.NativeInput]::ShowWindow($window, 5)                   # SW_SHOW
+    $null = [SinVr.NativeInput]::BringWindowToTop($window)
+    $null = [SinVr.NativeInput]::SetForegroundWindow($window)
+}
+
+# The engine reads the scan code out of lParam rather than the virtual key, so
+# both have to be right.
+function Send-Key($target, [int]$key, [int]$scan) {
+    $target.Refresh()
+    $window = $target.MainWindowHandle
+    if ($window -eq [IntPtr]::Zero) { return }
+    $down = [IntPtr](($scan -shl 16) -bor 1)
+    $up = [IntPtr](($scan -shl 16) -bor 0xC0000001)
+    $null = [SinVr.NativeInput]::PostMessage($window, 0x100, [IntPtr]$key, $down)
+    $null = [SinVr.NativeInput]::PostMessage($window, 0x101, [IntPtr]$key, $up)
 }
 
 $start = Get-Date
 $process = Start-Process -FilePath (Join-Path $GameDir "sin.exe") -WorkingDirectory $GameDir -ArgumentList $arguments -PassThru
 $null = $process.Handle
+# Space gets past the level-start card, and stops as soon as the renderer log
+# shows the world being drawn, so nothing is pressed once play starts.
+$rendererLog = Join-Path $GameDir "sinvr.log"
+$sawWorld = $false
 while (-not $process.HasExited) {
     if (((Get-Date) - $start).TotalSeconds -gt $TimeoutSeconds) {
         Write-Host "timed out after $TimeoutSeconds s - stopping the game"
@@ -78,8 +120,15 @@ while (-not $process.HasExited) {
         Start-Sleep -Seconds 1
         break
     }
-    Send-AnyKey $process
-    Start-Sleep -Milliseconds 1000
+
+    if (-not $sawWorld) {
+        Send-Key $process 0x20 0x39                        # space
+        $tail = Get-Content $rendererLog -Tail 60 -ErrorAction SilentlyContinue
+        $sawWorld = [bool]($tail -match "RenderFrame")
+    }
+
+    Show-Game $process
+    Start-Sleep -Milliseconds 500
 }
 Write-Host ("exit code {0} after {1:N0} s" -f $process.ExitCode, ((Get-Date) - $start).TotalSeconds)
 

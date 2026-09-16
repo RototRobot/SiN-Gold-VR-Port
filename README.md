@@ -20,7 +20,8 @@ are closed source. The game logic was released as source by Night Dive Studios i
 - **`ref_vr.dll`** is a renderer the engine loads when started with `+set vid_ref vr`. It loads the
   stock `ref_gl.dll`, passes the engine's calls through to it, and adds the VR side over OpenXR. The
   world is rendered twice per frame through the engine's own stereo loop, once into each eye's
-  headset buffer, with the view taken from the headset.
+  headset buffer, with the view taken from the headset. The HUD, crosshair and console go into a
+  panel in front of you rather than across the whole field of view.
 - **`sinvr\gamex86.dll`** is the game logic, built from Night Dive's source. It is where VR gameplay
   changes (aiming, comfort) will go. The engine loads it for `+set game sinvr`.
 
@@ -86,8 +87,11 @@ These console variables control the mod:
 | `vr_worldscale` | 39.37 | Game units per metre, for head movement. Lower values make the world feel bigger. |
 | `vr_screen_distance` | 2.5 | Virtual screen distance, in metres. |
 | `vr_screen_width` | 2.4 | Virtual screen width, in metres. |
+| `vr_hud_fov` | 60 | How wide the HUD, crosshair and console panel is, in degrees. Smaller brings it closer to the middle. |
+| `vr_hud_depth` | 6 | How far away that panel appears, in metres. 0 puts it at infinity. |
 | `vr_recenter` | 0 | Set it to 1 to measure the head afresh from where you are standing and facing now. Clears itself. |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. For testing with the headset off. |
+| `vr_dump_eye` | 0 | Set it to 1 to write the next frame's two eye images beside `sin.exe`, for checking a build at the desk. |
 | `vr_trace` | 1 | Record the renderer calls of each new kind of frame in `sinvr.log`. |
 
 While stereo is on, the mod sets `cl_stereo 1`, `cl_stereo_separation 0`, and switches off view bob
@@ -100,8 +104,6 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 
 - Do not apply changes in the game's video options while running through the mod. Applying them
   resets `vid_ref` to `gl`, which swaps the VR renderer out.
-- The HUD and the console are drawn inside each eye's image, stretched across the whole field of
-  view. They are legible but uncomfortable; VR HUD placement is the next piece of work.
 - View pitch and yaw come from the headset, but the player still moves and turns with the keyboard
   and mouse, and the body does not move with the headset yet.
 - Head poses are measured from where you were when you put the headset on. `vr_recenter 1` in the
@@ -112,8 +114,8 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 1. ✅ Pass-through renderer, game DLL built from source, and a 32-bit OpenXR loader
 2. ✅ Virtual screen in the headset, from an OpenXR session on SiN's own GL context
 3. ✅ Stereo rendering and head-tracked views, driven by the engine's own two-pass stereo loop
-4. 🚧 HUD and menus in VR
-5. Motion controllers: aiming through the game DLL, and buttons
+4. ✅ HUD, crosshair and console in a panel at a comfortable distance
+5. 🚧 Motion controllers: aiming through the game DLL, and buttons
 6. Locomotion, turning and roomscale
 7. Weapons held in the hand
 8. Wages of Sin

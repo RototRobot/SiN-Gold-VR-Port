@@ -36,6 +36,7 @@ typedef int (*re_init_t)(void *hinstance, void *wndproc);
 typedef void (*re_void_t)(void);
 typedef void (*re_begin_frame_t)(float camera_separation);
 typedef void (*re_render_frame_t)(refdef_t *fd);
+typedef void (*re_draw_fade_screen_t)(float red, float green, float blue, float alpha);
 typedef void (*con_printf_t)(int print_level, const char *fmt, ...);
 typedef cvar_t *(*cvar_get_t)(const char *name, const char *value, int flags);
 typedef cvar_t *(*cvar_set_t)(const char *name, const char *value);
@@ -52,9 +53,12 @@ static unsigned g_slot_calls[REF_EXPORT_SLOTS];
 static cvar_t *vr_enable;
 static cvar_t *vr_stereo;
 static cvar_t *vr_worldscale;
+static cvar_t *vr_hud_fov;
+static cvar_t *vr_hud_depth;
 static cvar_t *vr_trace;
 static cvar_t *vr_force_render;
 static cvar_t *vr_recenter;
+static cvar_t *vr_dump_eye;
 static cvar_t *vr_screen_distance;
 static cvar_t *vr_screen_width;
 static cvar_t *cl_stereo;
@@ -363,9 +367,12 @@ static void register_cvars(void)
 	vr_enable = cvar_get("vr_enable", "0", 0);
 	vr_stereo = cvar_get("vr_stereo", "1", CVAR_ARCHIVE);
 	vr_worldscale = cvar_get("vr_worldscale", "39.37", CVAR_ARCHIVE);
+	vr_hud_fov = cvar_get("vr_hud_fov", "60", CVAR_ARCHIVE);
+	vr_hud_depth = cvar_get("vr_hud_depth", "6", CVAR_ARCHIVE);
 	vr_trace = cvar_get("vr_trace", "1", 0);
 	vr_force_render = cvar_get("vr_force_render", "0", 0);
 	vr_recenter = cvar_get("vr_recenter", "0", 0);
+	vr_dump_eye = cvar_get("vr_dump_eye", "0", 0);
 	vr_screen_distance = cvar_get("vr_screen_distance", "2.5", CVAR_ARCHIVE);
 	vr_screen_width = cvar_get("vr_screen_width", "2.4", CVAR_ARCHIVE);
 	cl_stereo = cvar_get("cl_stereo", "0", 0);
@@ -544,15 +551,21 @@ static void vr_BeginFrame(float camera_separation)
 		g_stereo_frame = stereo_wanted() && g_last_frame_had_world && cl_stereo->value != 0.0f;
 	}
 
-	/* "vr_recenter 1" in the console, answered and cleared here. */
+	/* "vr_recenter 1" and "vr_dump_eye 1" in the console, answered and cleared here. */
 	if (pass == 0 && vr_recenter && vr_recenter->value != 0.0f)
 	{
 		vr_xr_request_recenter();
 		set_cvar("vr_recenter", "0");
 	}
+	if (pass == 0 && vr_dump_eye && vr_dump_eye->value != 0.0f)
+	{
+		vr_xr_request_eye_dump();
+		set_cvar("vr_dump_eye", "0");
+	}
 
 	if (g_stereo_frame && pass < 2)
 	{
+		vr_gl_set_hud(vr_hud_fov->value, vr_hud_depth->value);
 		window_size(&width, &height);
 		if (width > 0 && height > 0)
 		{
@@ -613,6 +626,20 @@ static void vr_RenderFrame(refdef_t *fd)
 
 	/* The engine may render from the same refdef again, paused or not. */
 	vr_view_restore(fd, &saved);
+}
+
+/*
+ * SiN's full-screen blend - damage, pickups, water - takes a colour and an alpha,
+ * and it is drawn with the 2D projection, so it would otherwise be confined to
+ * the HUD panel along with the HUD.
+ */
+static void vr_DrawFadeScreen(float red, float green, float blue, float alpha)
+{
+	record_call(RE_DRAW_FADE_SCREEN);
+
+	vr_gl_full_screen_2d(1);
+	((re_draw_fade_screen_t)g_real_slot[RE_DRAW_FADE_SCREEN])(red, green, blue, alpha);
+	vr_gl_full_screen_2d(0);
 }
 
 static void vr_EndFrame(void)
@@ -734,6 +761,7 @@ refexport_t GetRefAPI(refimport_t imports)
 	g_ours.slot[RE_BEGIN_FRAME] = (void *)vr_BeginFrame;
 	g_ours.slot[RE_RENDER_FRAME] = (void *)vr_RenderFrame;
 	g_ours.slot[RE_END_FRAME] = (void *)vr_EndFrame;
+	g_ours.slot[RE_DRAW_FADE_SCREEN] = (void *)vr_DrawFadeScreen;
 
 	return g_ours;
 }

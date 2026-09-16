@@ -86,6 +86,7 @@ static struct
 	int warned_incomplete;
 	int warned_idle;   /* said once that the headset does not want frames */
 	int recenter_wanted;
+	int dump_wanted;
 	unsigned stereo_frames;
 } xr;
 
@@ -872,6 +873,24 @@ static void xr_mirror(const xr_target_t *t)
 	blit_state_end(&state);
 }
 
+/* How far this eye is to the right of the head, in metres: half the distance
+   between the eyes, which is the player's own IPD as the runtime reports it. */
+static float eye_offset_x(int pass)
+{
+	float half = 0.0f;
+	int i;
+
+	for (i = 0; i < 3; ++i)
+	{
+		float d = xr.eye_views[1].position[i] - xr.eye_views[0].position[i];
+
+		half += d * d;
+	}
+	half = 0.5f * (float)sqrt(half);
+
+	return pass == 0 ? -half : half;
+}
+
 const vr_eye_t *vr_xr_begin_eye(int pass, int window_width, int window_height, int force_render)
 {
 	xr_target_t *t;
@@ -923,8 +942,73 @@ const vr_eye_t *vr_xr_begin_eye(int pass, int window_width, int window_height, i
 
 	eye = &xr.eye_views[pass];
 	vr_gl_eye_begin(t->width, t->height, window_width, window_height,
-		eye->tan_left, eye->tan_right, eye->tan_down, eye->tan_up);
+		eye->tan_left, eye->tan_right, eye->tan_down, eye->tan_up, eye_offset_x(pass));
 	return eye;
+}
+
+/*
+ * The bound eye's image, as an uncompressed 24-bit TGA. GL reads rows from the
+ * bottom up and TGA stores them that way by default, so the rows go straight
+ * out, and GL_BGR is already the order TGA wants.
+ */
+static void dump_eye_image(const xr_target_t *t, int eye)
+{
+	char path[64];
+	unsigned char header[18];
+	unsigned char *pixels;
+	FILE *file;
+	GLint read_binding = 0, draw_binding = 0;
+	GLenum error;
+	size_t middle;
+
+	pixels = (unsigned char *)malloc((size_t)t->width * t->height * 3);
+	if (!pixels)
+	{
+		return;
+	}
+
+	glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read_binding);
+	glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_binding);
+	while (glGetError() != GL_NO_ERROR)
+	{
+		/* Whatever went wrong before this is not ours to report. */
+	}
+
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+	glReadPixels(0, 0, t->width, t->height, GL_BGR_EXT, GL_UNSIGNED_BYTE, pixels);
+	error = glGetError();
+	middle = ((size_t)t->height / 2 * t->width + t->width / 2) * 3;
+	vr_printf("VR: eye %d read from framebuffer %d (draw %d), error 0x%X, centre pixel %02X%02X%02X",
+		eye, (int)read_binding, (int)draw_binding, (unsigned)error,
+		pixels[middle + 2], pixels[middle + 1], pixels[middle]);
+
+	sprintf(path, "sinvr_eye%d.tga", eye);
+	file = fopen(path, "wb");
+	if (file)
+	{
+		memset(header, 0, sizeof(header));
+		header[2] = 2; /* uncompressed true colour */
+		header[12] = (unsigned char)(t->width & 0xFF);
+		header[13] = (unsigned char)(t->width >> 8);
+		header[14] = (unsigned char)(t->height & 0xFF);
+		header[15] = (unsigned char)(t->height >> 8);
+		header[16] = 24;
+		fwrite(header, 1, sizeof(header), file);
+		fwrite(pixels, 1, (size_t)t->width * t->height * 3, file);
+		fclose(file);
+		vr_printf("VR: wrote %s, %dx%d", path, t->width, t->height);
+	}
+	else
+	{
+		vr_printf("VR: could not write %s", path);
+	}
+
+	free(pixels);
+}
+
+void vr_xr_request_eye_dump(void)
+{
+	xr.dump_wanted = 1;
 }
 
 void vr_xr_end_eye(void)
@@ -937,6 +1021,16 @@ void vr_xr_end_eye(void)
 	}
 
 	vr_gl_eye_end();
+
+	/* While the eye's framebuffer is still bound and its image still acquired. */
+	if (xr.dump_wanted)
+	{
+		dump_eye_image(&xr.eye[eye], eye);
+		if (eye == 1)
+		{
+			xr.dump_wanted = 0;
+		}
+	}
 
 	/* The image may only be read while it is still acquired. */
 	if (eye == 0)

@@ -54,6 +54,14 @@ int vr_xr_end_stereo_frame(void);
  */
 void vr_xr_request_recenter(void);
 
+/*
+ * Writes the next stereo frame's two eye images beside sin.exe, as
+ * sinvr_eye0.tga and sinvr_eye1.tga. For checking at the desk what only the
+ * headset would otherwise show: where the HUD panel sits, and whether the two
+ * eyes agree about it.
+ */
+void vr_xr_request_eye_dump(void);
+
 /* Destroys everything and allows a fresh start. Safe when nothing was started. */
 void vr_xr_shutdown(void);
 
