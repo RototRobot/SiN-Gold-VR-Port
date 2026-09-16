@@ -38,6 +38,8 @@ typedef void (*re_void_t)(void);
 typedef void (*re_begin_frame_t)(float camera_separation);
 typedef void (*re_render_frame_t)(refdef_t *fd);
 typedef void (*re_draw_fade_screen_t)(float red, float green, float blue, float alpha);
+typedef void (*re_draw_pic_t)(int x, int y, const char *name);
+typedef void (*re_draw_stretch_pic_t)(int x, int y, int width, int height, const char *name);
 typedef void (*con_printf_t)(int print_level, const char *fmt, ...);
 typedef cvar_t *(*cvar_get_t)(const char *name, const char *value, int flags);
 typedef cvar_t *(*cvar_set_t)(const char *name, const char *value);
@@ -71,6 +73,7 @@ static cvar_t *cl_stereo;
 static int g_pass;                 /* BeginFrame calls since the last EndFrame */
 static int g_stereo_frame;         /* this frame renders the world once per eye */
 static int g_last_frame_had_world;
+static int g_last_frame_had_menu;
 static const vr_eye_t *g_eye;      /* the eye being rendered, or NULL */
 static int g_eye_index;
 static int g_eye_renders_logged;
@@ -467,6 +470,87 @@ static void update_stereo(void)
 	vr_printf("VR: stereo on; view bob and roll off");
 }
 
+/*
+ * Whether the keyboard belongs to the game or to some interface of the engine's
+ * - a menu, the console, the chat line. sin.exe keeps Quake II's cls.key_dest
+ * for this, and it is the only reliable way to tell: SiN draws its menus over a
+ * world that is still being rendered, through its own draw calls, so there is
+ * nothing in the renderer's own traffic that says so.
+ *
+ * The address came from the toggleconsole handler (docs/ENGINE_NOTES.md) and
+ * belongs to this build of sin.exe, so it is checked before it is believed: in
+ * the module, and holding one of the values SiN writes. Anything else and the
+ * reading is dropped for good, leaving the guess below.
+ */
+#define SIN_KEY_DEST_RVA 0x38AAA4
+#define SIN_KEY_DEST_MAX 7
+
+static const volatile int *g_key_dest;
+static int g_key_dest_checked;
+static int g_key_dest_last = -1;
+
+static void find_key_dest(void)
+{
+	const BYTE *base = (const BYTE *)GetModuleHandleA(NULL);
+	const IMAGE_NT_HEADERS *nt;
+
+	g_key_dest_checked = 1;
+	if (!base)
+	{
+		return;
+	}
+
+	nt = (const IMAGE_NT_HEADERS *)(base + ((const IMAGE_DOS_HEADER *)base)->e_lfanew);
+	if (nt->Signature != IMAGE_NT_SIGNATURE ||
+		SIN_KEY_DEST_RVA + sizeof(int) > nt->OptionalHeader.SizeOfImage)
+	{
+		vr_printf("VR: this sin.exe is not the build the menu detection knows - "
+			"the controllers will guess when a menu is up");
+		return;
+	}
+
+	g_key_dest = (const volatile int *)(base + SIN_KEY_DEST_RVA);
+	if (*g_key_dest < 0 || *g_key_dest > SIN_KEY_DEST_MAX)
+	{
+		g_key_dest = NULL;
+		vr_printf("VR: sin.exe's key focus is not where it was expected - "
+			"the controllers will guess when a menu is up");
+	}
+}
+
+int vr_in_menu(void)
+{
+	int where;
+
+	if (!g_key_dest_checked)
+	{
+		find_key_dest();
+	}
+
+	if (g_key_dest)
+	{
+		where = *g_key_dest;
+		if (where < 0 || where > SIN_KEY_DEST_MAX)
+		{
+			g_key_dest = NULL;
+		}
+		else
+		{
+			if (where != g_key_dest_last)
+			{
+				g_key_dest_last = where;
+				vrlog("    input: the keyboard now belongs to %s (key_dest %d)",
+					where == 0 ? "the game" : "an interface", where);
+			}
+			return where != 0;
+		}
+	}
+
+	/* Without it: a menu over no world at all, which covers the main menu and
+	   the loading screens but not a menu opened during play. */
+	return g_last_frame_had_menu || !g_last_frame_had_world;
+}
+
 static void window_size(int *width, int *height)
 {
 	RECT client;
@@ -665,6 +749,64 @@ static void vr_RenderFrame(refdef_t *fd)
 }
 
 /*
+ * Every 2D pic the engine draws goes through here by name, which is how the
+ * renderer can tell a menu from the game: SiN draws its menus from pics under
+ * "menu", and nothing else does.
+ */
+static const char *g_pics[64];
+static int g_pic_count;
+static int g_frame_had_menu_pic;
+
+static void note_pic(const char *name)
+{
+	int i;
+
+	if (!name || !name[0])
+	{
+		return;
+	}
+
+	if (_strnicmp(name, "menu", 4) == 0 || _strnicmp(name, "pics/menu", 9) == 0)
+	{
+		g_frame_had_menu_pic = 1;
+	}
+
+	if (!vr_trace || vr_trace->value == 0.0f)
+	{
+		return;
+	}
+
+	/* Each name once: the pointers come from the engine's own string pool. */
+	for (i = 0; i < g_pic_count; ++i)
+	{
+		if (g_pics[i] == name || strcmp(g_pics[i], name) == 0)
+		{
+			return;
+		}
+	}
+
+	if (g_pic_count < (int)(sizeof(g_pics) / sizeof(g_pics[0])))
+	{
+		g_pics[g_pic_count++] = name;
+		vrlog("    pic: %s", name);
+	}
+}
+
+static void vr_DrawPic(int x, int y, const char *name)
+{
+	record_call(RE_DRAW_PIC);
+	note_pic(name);
+	((re_draw_pic_t)g_real_slot[RE_DRAW_PIC])(x, y, name);
+}
+
+static void vr_DrawStretchPic(int x, int y, int width, int height, const char *name)
+{
+	record_call(RE_DRAW_STRETCH_PIC);
+	note_pic(name);
+	((re_draw_stretch_pic_t)g_real_slot[RE_DRAW_STRETCH_PIC])(x, y, width, height, name);
+}
+
+/*
  * SiN's full-screen blend - damage, pickups, water - takes a colour and an alpha,
  * and it is drawn with the 2D projection, so it would otherwise be confined to
  * the HUD panel along with the HUD.
@@ -700,6 +842,8 @@ static void vr_EndFrame(void)
 	((re_void_t)g_real_slot[RE_END_FRAME])();
 
 	g_last_frame_had_world = g_frame_has_world;
+	g_last_frame_had_menu = g_frame_had_menu_pic;
+	g_frame_had_menu_pic = 0;
 	g_pass = 0;
 	g_stereo_frame = 0;
 	update_stereo();
@@ -798,6 +942,8 @@ refexport_t GetRefAPI(refimport_t imports)
 	g_ours.slot[RE_RENDER_FRAME] = (void *)vr_RenderFrame;
 	g_ours.slot[RE_END_FRAME] = (void *)vr_EndFrame;
 	g_ours.slot[RE_DRAW_FADE_SCREEN] = (void *)vr_DrawFadeScreen;
+	g_ours.slot[RE_DRAW_PIC] = (void *)vr_DrawPic;
+	g_ours.slot[RE_DRAW_STRETCH_PIC] = (void *)vr_DrawStretchPic;
 
 	return g_ours;
 }

@@ -95,7 +95,12 @@ unaffected either way.
 | Right **B** | Next weapon |
 | Left **Y** | Previous weapon |
 | Left grip | Run |
-| Left menu | Game menu |
+| Left menu | Opens and closes the game menu |
+| Left stick, click twice | Recentre: the way you are standing and facing becomes forward |
+
+In a menu, on the loading screen or with the console up, the controllers turn into a keyboard instead:
+the sticks are the arrow keys, the trigger is Enter, and anything else is Escape. The mod knows which
+it is from the engine, so the player does not move while a menu is open.
 
 Other headsets get the same layout where their controllers have the buttons for it; Touch and Index
 controllers are covered, and anything else falls back to trigger, menu and the sticks.
@@ -103,7 +108,9 @@ controllers are covered, and anything else falls back to trigger, menu and the s
 Each one is a cvar, so it can be rebound to any console command without rebuilding: `vr_bind_fire`,
 `vr_bind_use`, `vr_bind_jump`, `vr_bind_crouch`, `vr_bind_weapon_next`, `vr_bind_weapon_prev`,
 `vr_bind_run`, `vr_bind_menu`. A `+command` is released as its `-command`, exactly as a key bind would
-be. Setting one to nothing unbinds it.
+be. A binding of `key:escape`, `key:enter`, `key:up`, `key:down`, `key:left` or `key:right` taps that key
+instead of running a command, which is how the menu button works - SiN's menu has no console command,
+only the escape key. Setting a binding to nothing unbinds it.
 
 These console variables control the mod:
 
@@ -119,6 +126,7 @@ These console variables control the mod:
 | `vr_recenter` | 0 | Set it to 1 to measure the head afresh from where you are standing and facing now. Clears itself. |
 | `vr_input` | 1 | Take input from the VR controllers. |
 | `vr_deadzone` | 0.15 | How far a stick must move before the game sees it. |
+| `vr_recentre_double` | 1 | Require two clicks of the left stick to recentre. 0 makes one do. |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. For testing with the headset off. |
 | `vr_dump_eye` | 0 | Set it to 1 to write the next frame's two eye images beside `sin.exe`, for checking a build at the desk. |
 | `vr_trace` | 1 | Record the renderer calls of each new kind of frame in `sinvr.log`. |

@@ -4,7 +4,7 @@ This is the handoff for anyone joining the project, whether a person or an AI. I
 why it is shaped the way it is, how to build and test it, what has already been learned the hard way,
 and what comes next. The detailed evidence lives in the other files in `docs/`; this one is the map.
 
-*Last updated 2026-09-16 (third pass).*
+*Last updated 2026-09-16 (fourth pass).*
 
 ## 1. Where the project is
 
@@ -14,7 +14,7 @@ and what comes next. The detailed evidence lives in the other files in `docs/`; 
 | 2. Virtual "theatre" screen in the headset | ✅ Done. The owner confirmed it in the headset on 2026-09-15: it loads, doesn't crash, and the colours are right. It is low resolution, as expected. |
 | 3. Stereo rendering with head tracking | ✅ Built and verified at the desk on 2026-09-16: 406 projection-layer frames in one run, correct per-eye poses and fields of view, ~87 frames/s at 2444×2392 per eye. Not yet seen in the headset by a person. How it works: [§9](#9-how-stereo-works) |
 | 4. HUD, crosshair and console in VR | ✅ Built 2026-09-16. The 2D goes into a panel `vr_hud_fov` degrees wide, `vr_hud_depth` metres away, centred on each eye's own axis - which is also what stops the crosshair from doubling. [§9](#9-how-stereo-works) |
-| 5. Motion controller input | ✅ Built 2026-09-16: buttons run console commands, the sticks arrive as a joystick the engine polls. Measured at the desk. [§11](#11-controller-input) |
+| 5. Motion controller input | ✅ Built 2026-09-16: buttons run console commands, the sticks arrive as a joystick the engine polls, and in menus both turn into keystrokes. Measured at the desk. [§11](#11-controller-input) |
 | 6. Tracked hands | **Next.** The poses are already located; getting them to the game DLL is the work. [§12](#12-next-tracked-hands) |
 | 7–9 | Roomscale comfort, Wages of Sin, and packaging (see the roadmap in the [README](../README.md)) |
 
@@ -97,10 +97,12 @@ The mod adds these cvars:
 | `vr_recenter` | 0 | Set to 1 to measure the head afresh from where the player is now; clears itself |
 | `vr_input` | 1 | Take input from the controllers (archived) |
 | `vr_deadzone` | 0.15 | Stick deadzone, applied to both axes together (archived) |
-| `vr_bind_*` | see §11 | The console command each button runs (archived) |
+| `vr_bind_*` | see §11 | The console command each button runs, or `key:<name>` for a keystroke (archived) |
+| `vr_recentre_double` | 1 | Two clicks of the left stick to recentre; 0 for one (archived) |
 | `vr_dump_eye` | 0 | Set to 1 to write the next frame's eye images beside `sin.exe` as `sinvr_eye0/1.tga` |
 | `vr_fake_axes` | | Desk testing: "`<forward> <side> <turn>`" pretends the sticks are held there |
 | `vr_fake_press` | | Desk testing: the name of a button to press for a few frames, e.g. `jump` |
+| `vr_fake_key` | | Desk testing: a key to tap - `up`, `down`, `left`, `right`, `enter`, `escape` |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. Needed for unattended VR runs |
 | `vr_trace` | 1 | Log the renderer calls of each new kind of frame |
 
@@ -206,6 +208,7 @@ python -c "from PIL import Image; im = Image.open('sinvr_eye0.tga').convert('L')
 | `src/ref_vr/vr_view.c` | Turns an OpenXR eye pose into the engine's `refdef_t` (axes, scale, angles, field of view) and back |
 | `src/ref_vr/vr_input.c` | OpenXR actions and bindings, and the mapping from them to console commands and stick axes |
 | `src/ref_vr/vr_joy.c` | The joystick that only exists in this process, which is how the sticks reach the engine |
+| `src/ref_vr/vr_keys.c` | Keystrokes posted to the engine's window, for the menus and the console |
 | `src/ref_vr/vr_hook.c` | Patching another module's imports, shared by the GL and joystick hooks |
 | `src/ref_vr/xr_layers.c` | Implicit-layer hygiene for 32-bit processes (shared with xrprobe) |
 | `src/ref_vr/vrlog.c` | `sinvr.log` |
@@ -402,6 +405,23 @@ touches it: the controllers arrive the way a player's own binds and joystick wou
 4. **Focus.** `xrSyncActions` returns `XR_SESSION_NOT_FOCUSED` while the runtime is showing something of
    its own, and then everything held is released and the sticks centre. The same happens if a controller's
    action goes inactive while a button is held, or the session goes away.
+5. **In menus the controllers become a keyboard** (`vr_keys.c`). SiN's menus, its loading screens and its
+   console are driven by key events, not by console commands, so a key message is posted to the engine's
+   own window - it arrives in the message loop exactly as the keyboard's would, scan code, extended bit
+   and all. The sticks become the arrow keys (with a 400 ms wait and then a 150 ms repeat), the trigger
+   Enter, anything else Escape, and the joystick is centred so the player does not walk while choosing a
+   menu item. A binding of `key:<name>` does the same from any button, which is how the menu button
+   works: **SiN has no `togglemenu` command** - the escape key is what opens and closes its menu, and
+   `menu_main` only opens it.
+6. **Which of the two the controllers are** comes from the engine: `cls.key_dest` at sin.exe+0x38AAA4,
+   found from the `toggleconsole` handler. It is 0 while the game has the keyboard and non-zero for an
+   interface - 5 for the menu on this build. The reading is guarded (inside the image, value 0-7) and
+   dropped for good if it ever looks wrong, falling back to "no world was drawn last frame", which covers
+   the main menu and the loading screens but not a menu opened during play. This was the only reliable
+   signal: SiN draws its menu *over a world that is still being rendered*, through its own draw calls
+   rather than `DrawPic`, so nothing in the renderer's own traffic gives it away.
+7. **Clicking the left stick twice recentres** (`vr_recentre_double 0` for one click), which is the same
+   thing `vr_recenter 1` does from the console.
 
 What the desk runs showed, on `sindm6` with `deathmatch 1`:
 
@@ -411,7 +431,12 @@ What the desk runs showed, on `sindm6` with `deathmatch 1`:
 - `vr_fake_axes "0 0 0.6"` turned the yaw from 135 to 80 and moved the player nowhere;
 - `vr_fake_axes "0 0.9 0"` strafed to the right of the facing direction;
 - a button bound to `echo` printed in the console, and with the default binding the log shows
-  `input: jump pressed -> "+moveup"` and a release 125 ms later.
+  `input: jump pressed -> "+moveup"` and a release 125 ms later;
+- the menu button's `key:escape` took `key_dest` from 0 to 5 and back again, the stick moved the
+  selection round SiN's wheel menu (checked in the eye dumps: MAIN MENU to CREDITS, then to TRAINING),
+  and a stick held hard over while the menu was up moved the player **not at all**;
+- one click of the left stick did nothing and a second 328 ms later logged
+  `VR: measuring from where the headset is now`.
 
 ## 12. Next: tracked hands
 

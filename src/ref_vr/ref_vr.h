@@ -14,4 +14,11 @@ void vr_cvar_set(const char *name, const char *value);
 /* Queues a console command, as a key bind would: no newline needed. */
 void vr_command(const char *text);
 
+/*
+ * True while the game is showing something with no world behind it: a menu, the
+ * loading screen, a briefing. Those listen to the keyboard rather than to
+ * console commands, so the controllers have to speak to them differently.
+ */
+int vr_in_menu(void);
+
 #endif /* REF_VR_H */

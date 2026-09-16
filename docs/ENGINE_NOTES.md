@@ -253,6 +253,28 @@ does the movement work itself. The console says `joystick detected` where it use
 - `viewpos` prints the player's position and yaw, which is the cheapest way to measure input from a
   script.
 
+**Menus, and how to tell one is up (2026-09-16):**
+
+- **`cls.key_dest` is at sin.exe+0x38AAA4.** Found from the `toggleconsole` handler at 0x427760, which
+  compares it with 1 (`key_console`) and sets it to 0 (`key_game`) beside a `Cvar_SetValue("paused", 0)`.
+  Of its 50 references, the writes are 0, 1, 2, 4 and 5 - so SiN extended Quake II's four-value enum.
+  Measured at runtime: **0 during play, 5 while the menu is up**, back to 0 when it closes.
+- **There is no `togglemenu` command.** The string is not in the binary, and sending it goes to the
+  server and comes back as chat. The stock config binds it to escape anyway, which works because the
+  engine handles the escape *key* itself. `menu_main`, `menu_loadgame`, `menu_quit` and the other
+  `menu_*` commands do exist.
+- **The menu is drawn over a world that is still being rendered,** through SiN's own renderer slots
+  (`+0x68`, `+0x6C`, `+0x70`, `+0x74`) rather than through `DrawPic`, and the HUD is drawn underneath it.
+  So a menu frame looks like a gameplay frame in the renderer's traces, apart from call counts. That is
+  why `key_dest` is worth reading.
+- **`DrawPic` is `void (int x, int y, char *name)` and `DrawStretchPic` is
+  `void (int x, int y, int w, int h, char *name)`** - both Quake II's, confirmed from the disassembly
+  (each passes its last argument to `Draw_FindPic` at ref_gl+0x04AA0). Wrapping them gives the name of
+  every 2D pic the engine draws, which `vr_trace` logs once each.
+- **Arrow keys and Enter drive the menu,** and Escape opens and closes it. Posting `WM_KEYDOWN`/`WM_KEYUP`
+  to the engine's window with the right scan code and the extended bit works: the menu's selection moved
+  round its wheel exactly as it would from the keyboard.
+
 ## Game DLL: what matters for VR
 
 - **Aiming.** `Weapon::GetMuzzlePosition` (weapon.cpp:324) calls `owner->GunPosition()` and

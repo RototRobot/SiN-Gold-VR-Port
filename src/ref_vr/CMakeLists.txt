@@ -12,6 +12,8 @@ add_library(ref_vr SHARED
 	vr_input.h
 	vr_joy.c
 	vr_joy.h
+	vr_keys.c
+	vr_keys.h
 	vr_view.c
 	vr_view.h
 	vr_xr.c

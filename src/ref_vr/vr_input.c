@@ -13,6 +13,8 @@
 #include "ref_vr.h"
 #include "vr_input.h"
 #include "vr_joy.h"
+#include "vr_keys.h"
+#include "vr_xr.h"
 #include "vrlog.h"
 
 #define ARRAY_COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
@@ -30,6 +32,7 @@ enum
 	ACT_WEAPON_PREV,
 	ACT_RUN,
 	ACT_MENU,
+	ACT_RECENTRE,
 	ACT_MOVE,
 	ACT_TURN,
 	ACT_HAND_LEFT,
@@ -63,7 +66,8 @@ static action_t actions[ACT_COUNT] = {
 	{ "weapon_next", "Next weapon",     KIND_BUTTON, "weapnext" },
 	{ "weapon_prev", "Previous weapon", KIND_BUTTON, "weapprev" },
 	{ "run",         "Run",             KIND_BUTTON, "+speed" },
-	{ "menu",        "Menu",            KIND_BUTTON, "togglemenu" },
+	{ "menu",        "Menu",            KIND_BUTTON, "key:escape" },
+	{ "recentre",    "Recentre",        KIND_BUTTON, "" },
 	{ "move",        "Move",            KIND_AXES,   NULL },
 	{ "turn",        "Turn",            KIND_AXES,   NULL },
 	{ "hand_left",   "Left hand",       KIND_POSE,   NULL },
@@ -86,6 +90,7 @@ static const binding_t bindings_hp[] = {
 	{ ACT_WEAPON_PREV, "/user/hand/left/input/y/click" },
 	{ ACT_RUN,         "/user/hand/left/input/squeeze/value" },
 	{ ACT_MENU,        "/user/hand/left/input/menu/click" },
+	{ ACT_RECENTRE,    "/user/hand/left/input/thumbstick/click" },
 	{ ACT_MOVE,        "/user/hand/left/input/thumbstick" },
 	{ ACT_TURN,        "/user/hand/right/input/thumbstick" },
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
@@ -98,9 +103,10 @@ static const binding_t bindings_wmr[] = {
 	{ ACT_FIRE,        "/user/hand/right/input/trigger/value" },
 	{ ACT_USE,         "/user/hand/left/input/trigger/value" },
 	{ ACT_JUMP,        "/user/hand/right/input/thumbstick/click" },
-	{ ACT_CROUCH,      "/user/hand/left/input/thumbstick/click" },
+	{ ACT_CROUCH,      "/user/hand/left/input/trackpad/click" },
 	{ ACT_WEAPON_NEXT, "/user/hand/right/input/trackpad/click" },
-	{ ACT_WEAPON_PREV, "/user/hand/left/input/trackpad/click" },
+	{ ACT_WEAPON_PREV, "/user/hand/right/input/squeeze/click" },
+	{ ACT_RECENTRE,    "/user/hand/left/input/thumbstick/click" },
 	{ ACT_RUN,         "/user/hand/left/input/squeeze/click" },
 	{ ACT_MENU,        "/user/hand/left/input/menu/click" },
 	{ ACT_MOVE,        "/user/hand/left/input/thumbstick" },
@@ -118,6 +124,7 @@ static const binding_t bindings_touch[] = {
 	{ ACT_WEAPON_PREV, "/user/hand/left/input/y/click" },
 	{ ACT_RUN,         "/user/hand/left/input/squeeze/value" },
 	{ ACT_MENU,        "/user/hand/left/input/menu/click" },
+	{ ACT_RECENTRE,    "/user/hand/left/input/thumbstick/click" },
 	{ ACT_MOVE,        "/user/hand/left/input/thumbstick" },
 	{ ACT_TURN,        "/user/hand/right/input/thumbstick" },
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
@@ -132,6 +139,7 @@ static const binding_t bindings_index[] = {
 	{ ACT_WEAPON_NEXT, "/user/hand/right/input/b/click" },
 	{ ACT_WEAPON_PREV, "/user/hand/left/input/b/click" },
 	{ ACT_RUN,         "/user/hand/left/input/squeeze/value" },
+	{ ACT_RECENTRE,    "/user/hand/left/input/thumbstick/click" },
 	{ ACT_MOVE,        "/user/hand/left/input/thumbstick" },
 	{ ACT_TURN,        "/user/hand/right/input/thumbstick" },
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
@@ -168,14 +176,26 @@ static cvar_t *vr_input;
 static cvar_t *vr_deadzone;
 static cvar_t *vr_fake_axes;
 static cvar_t *vr_fake_press;
+static cvar_t *vr_fake_key;
 static int fake_held = -1;
 static int fake_frames;
+static int fake_menu;
 static int started;
 static int said_active;
 static int said_unfocused;
 static int said_polled;
 static int said_unpolled;
 static unsigned frames;
+static cvar_t *vr_recentre_double;
+static unsigned last_recentre_click;
+static int was_in_menu;
+
+/* One per direction, for the key repeat while a stick is held over. */
+static struct
+{
+	int held;
+	unsigned repeat_at;
+} nav[4];
 
 /* ------------------------------------------------------------------------- */
 /* Start-up                                                                   */
@@ -196,6 +216,8 @@ void vr_input_startup(void)
 	vr_deadzone = vr_cvar("vr_deadzone", "0.15", CVAR_ARCHIVE);
 	vr_fake_axes = vr_cvar("vr_fake_axes", "", 0);
 	vr_fake_press = vr_cvar("vr_fake_press", "", 0);
+	vr_fake_key = vr_cvar("vr_fake_key", "", 0);
+	vr_recentre_double = vr_cvar("vr_recentre_double", "1", CVAR_ARCHIVE);
 
 	for (i = 0; i < ACT_COUNT; ++i)
 	{
@@ -372,11 +394,41 @@ int vr_input_create(XrInstance instance, XrSession session)
 /* ------------------------------------------------------------------------- */
 
 static void release_buttons(void);
-static void read_sticks(XrSession session);
+static void read_sticks(XrSession session, int menu);
 static void do_fake_press(void);
+static void do_fake_key(void);
+static void press_action(int index, int down, int menu);
 
-/* A press runs the command as typed; a release runs the "-" form of a "+"
-   command, which is what the engine's own key binds do. */
+/*
+ * A press runs the command as typed; a release runs the "-" form of a "+"
+ * command, which is what the engine's own key binds do. A binding of
+ * "key:<name>" taps that key instead, for the parts of the game that only
+ * listen to the keyboard - SiN's menu, which has no command to open it.
+ */
+static const char *const key_names[VR_KEY_COUNT] = { "up", "down", "left", "right", "enter", "escape" };
+
+static int tap_bound_key(const char *command)
+{
+	int i;
+
+	if (_strnicmp(command, "key:", 4) != 0)
+	{
+		return 0;
+	}
+
+	for (i = 0; i < VR_KEY_COUNT; ++i)
+	{
+		if (_stricmp(command + 4, key_names[i]) == 0)
+		{
+			vr_key_tap((vr_key_t)i);
+			return 1;
+		}
+	}
+
+	vr_printf("VR: \"%s\" names no key", command);
+	return 1;
+}
+
 static void dispatch(action_t *action, int down)
 {
 	const char *command = action->bind && action->bind->string ? action->bind->string : action->command;
@@ -384,6 +436,17 @@ static void dispatch(action_t *action, int down)
 
 	if (!command || !command[0])
 	{
+		return;
+	}
+
+	/* A key is tapped on the press; there is nothing to do on the release. */
+	if (_strnicmp(command, "key:", 4) == 0)
+	{
+		if (down)
+		{
+			vrlog("    input: %s pressed -> %s", action->name, command);
+			tap_bound_key(command);
+		}
 		return;
 	}
 
@@ -421,7 +484,7 @@ static void do_fake_press(void)
 		}
 
 		actions[fake_held].down = 0;
-		dispatch(&actions[fake_held], 0);
+		press_action(fake_held, 0, fake_menu);
 		fake_held = -1;
 	}
 
@@ -435,7 +498,8 @@ static void do_fake_press(void)
 		if (actions[i].kind == KIND_BUTTON && strcmp(actions[i].name, vr_fake_press->string) == 0)
 		{
 			actions[i].down = 1;
-			dispatch(&actions[i], 1);
+			fake_menu = vr_in_menu();
+			press_action(i, 1, fake_menu);
 			fake_held = i;
 			fake_frames = 12;
 			break;
@@ -450,7 +514,92 @@ static void do_fake_press(void)
 	vr_cvar_set("vr_fake_press", "");
 }
 
-static void read_buttons(XrSession session)
+/*
+ * Clicking the left stick recentres. Twice by default, because a single click is
+ * easy to catch by accident while moving; "vr_recentre_double 0" makes one do.
+ */
+static void recentre_clicked(void)
+{
+	unsigned now = GetTickCount();
+	int twice = !vr_recentre_double || vr_recentre_double->value != 0.0f;
+
+	if (twice && now - last_recentre_click > 400)
+	{
+		last_recentre_click = now;
+		return;
+	}
+
+	last_recentre_click = 0;
+	vr_xr_request_recenter();
+}
+
+/* In a menu, a button is a keystroke: the menus read the keyboard. */
+static vr_key_t menu_key_for(int action)
+{
+	switch (action)
+	{
+	case ACT_FIRE:
+	case ACT_USE:
+	case ACT_JUMP:
+		return VR_KEY_ENTER;
+	default:
+		return VR_KEY_ESCAPE;
+	}
+}
+
+/* Desk testing: "vr_fake_key escape" taps that key, as a menu button would. */
+static void do_fake_key(void)
+{
+	int i;
+
+	if (!vr_fake_key || !vr_fake_key->string || !vr_fake_key->string[0])
+	{
+		return;
+	}
+
+	for (i = 0; i < VR_KEY_COUNT; ++i)
+	{
+		if (_stricmp(vr_fake_key->string, key_names[i]) == 0)
+		{
+			vr_key_tap((vr_key_t)i);
+			break;
+		}
+	}
+
+	if (i == VR_KEY_COUNT)
+	{
+		vr_printf("VR: there is no key called \"%s\"", vr_fake_key->string);
+	}
+
+	vr_cvar_set("vr_fake_key", "");
+}
+
+static void press_action(int index, int down, int menu)
+{
+	if (index == ACT_RECENTRE)
+	{
+		if (down)
+		{
+			vrlog("    input: recentre clicked");
+			recentre_clicked();
+		}
+		return;
+	}
+
+	if (menu)
+	{
+		/* Nothing is held in an interface: a press is a tap of a key. */
+		if (down)
+		{
+			vr_key_tap(menu_key_for(index));
+		}
+		return;
+	}
+
+	dispatch(&actions[index], down);
+}
+
+static void read_buttons(XrSession session, int menu)
 {
 	int i;
 
@@ -479,11 +628,12 @@ static void read_buttons(XrSession session)
 		}
 
 		down = state.currentState ? 1 : 0;
-		if (down != actions[i].down)
+		if (down == actions[i].down)
 		{
-			actions[i].down = down;
-			dispatch(&actions[i], down);
+			continue;
 		}
+		actions[i].down = down;
+		press_action(i, down, menu);
 	}
 }
 
@@ -537,7 +687,41 @@ static int axes_of(XrSession session, int index, float *x, float *y)
 	return 1;
 }
 
-static void read_sticks(XrSession session)
+/* Over the edge in one direction, with a wait before it starts repeating. */
+static void nav_direction(int index, int over, vr_key_t key, unsigned now)
+{
+	if (!over)
+	{
+		nav[index].held = 0;
+		return;
+	}
+
+	if (!nav[index].held)
+	{
+		nav[index].held = 1;
+		nav[index].repeat_at = now + 400;
+		vr_key_tap(key);
+		return;
+	}
+
+	if (now >= nav[index].repeat_at)
+	{
+		nav[index].repeat_at = now + 150;
+		vr_key_tap(key);
+	}
+}
+
+static void navigate_menu(float forward, float side)
+{
+	unsigned now = GetTickCount();
+
+	nav_direction(0, forward > 0.5f, VR_KEY_UP, now);
+	nav_direction(1, forward < -0.5f, VR_KEY_DOWN, now);
+	nav_direction(2, side < -0.5f, VR_KEY_LEFT, now);
+	nav_direction(3, side > 0.5f, VR_KEY_RIGHT, now);
+}
+
+static void read_sticks(XrSession session, int menu)
 {
 	float move_x, move_y, turn_x, turn_y;
 	float forward, side, turn;
@@ -562,6 +746,14 @@ static void read_sticks(XrSession session)
 			side = fake_side;
 			turn = fake_turn;
 		}
+	}
+
+	if (menu)
+	{
+		/* The player is not moving: the sticks are working the menu. */
+		vr_joy_set(0.0f, 0.0f, 0.0f);
+		navigate_menu(forward, side);
+		return;
 	}
 
 	vr_joy_set(forward, side, turn);
@@ -609,6 +801,7 @@ void vr_input_frame(XrSession session)
 	XrActiveActionSet active = { XR_NULL_HANDLE, XR_NULL_PATH };
 	XrActionsSyncInfo sync_info = { XR_TYPE_ACTIONS_SYNC_INFO };
 	XrResult result;
+	int menu;
 
 	if (action_set == XR_NULL_HANDLE || !vr_input || vr_input->value == 0.0f)
 	{
@@ -631,7 +824,8 @@ void vr_input_frame(XrSession session)
 		}
 		release_buttons();
 		do_fake_press();
-		read_sticks(session);
+		do_fake_key();
+		read_sticks(session, vr_in_menu());
 		return;
 	}
 
@@ -647,9 +841,19 @@ void vr_input_frame(XrSession session)
 		say_profile(xr_instance, session);
 	}
 
-	read_buttons(session);
+	menu = vr_in_menu();
+	if (menu != was_in_menu)
+	{
+		/* Whatever was held belongs to the mode that has just ended. */
+		release_buttons();
+		memset(nav, 0, sizeof(nav));
+		was_in_menu = menu;
+	}
+
+	read_buttons(session, menu);
 	do_fake_press();
-	read_sticks(session);
+	do_fake_key();
+	read_sticks(session, menu);
 }
 
 /* Anything held down is let go of, as if the player had released it. A press
