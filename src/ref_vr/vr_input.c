@@ -14,6 +14,8 @@
 #include "vr_input.h"
 #include "vr_joy.h"
 #include "vr_keys.h"
+#include "vr_poses.h"
+#include "vr_view.h"
 #include "vr_xr.h"
 #include "vrlog.h"
 
@@ -177,6 +179,7 @@ static cvar_t *vr_deadzone;
 static cvar_t *vr_fake_axes;
 static cvar_t *vr_fake_press;
 static cvar_t *vr_fake_key;
+static cvar_t *vr_fake_hand;
 static int fake_held = -1;
 static int fake_frames;
 static int fake_menu;
@@ -187,6 +190,8 @@ static int said_polled;
 static int said_unpolled;
 static unsigned frames;
 static cvar_t *vr_recentre_double;
+static XrSpace hand_space[2];
+static int said_hands;
 static unsigned last_recentre_click;
 static int was_in_menu;
 
@@ -217,6 +222,7 @@ void vr_input_startup(void)
 	vr_fake_axes = vr_cvar("vr_fake_axes", "", 0);
 	vr_fake_press = vr_cvar("vr_fake_press", "", 0);
 	vr_fake_key = vr_cvar("vr_fake_key", "", 0);
+	vr_fake_hand = vr_cvar("vr_fake_hand", "", 0);
 	vr_recentre_double = vr_cvar("vr_recentre_double", "1", CVAR_ARCHIVE);
 
 	for (i = 0; i < ACT_COUNT; ++i)
@@ -375,6 +381,25 @@ int vr_input_create(XrInstance instance, XrSession session)
 	for (i = 0; i < ARRAY_COUNT(profiles); ++i)
 	{
 		suggest_profile(instance, &profiles[i]);
+	}
+
+	for (i = 0; i < 2; ++i)
+	{
+		XrActionSpaceCreateInfo space_info = { XR_TYPE_ACTION_SPACE_CREATE_INFO };
+		int index = i == SINVR_HAND_LEFT ? ACT_HAND_LEFT : ACT_HAND_RIGHT;
+
+		if (actions[index].action == XR_NULL_HANDLE)
+		{
+			continue;
+		}
+
+		space_info.action = actions[index].action;
+		space_info.poseInActionSpace.orientation.w = 1.0f;
+		if (XR_FAILED(xrCreateActionSpace(session, &space_info, &hand_space[i])))
+		{
+			vr_printf("VR: could not follow the %s hand", i == SINVR_HAND_LEFT ? "left" : "right");
+			hand_space[i] = XR_NULL_HANDLE;
+		}
 	}
 
 	attach_info.countActionSets = 1;
@@ -872,6 +897,65 @@ static void release_buttons(void)
 	}
 }
 
+void vr_input_hands(XrSession session, XrSpace space, XrTime time, float units_per_metre)
+{
+	int i;
+
+	/* Desk testing, with no controllers: "vr_fake_hand <x> <y> <z> <pitch> <yaw>
+	   <roll>" puts the right hand there, in the game's own units and senses. */
+	if (vr_fake_hand && vr_fake_hand->string && vr_fake_hand->string[0])
+	{
+		float origin[3] = { 0.0f, 0.0f, 0.0f };
+		float angles[3] = { 0.0f, 0.0f, 0.0f };
+
+		if (sscanf(vr_fake_hand->string, "%f %f %f %f %f %f", &origin[0], &origin[1], &origin[2],
+				&angles[0], &angles[1], &angles[2]) >= 3)
+		{
+			vr_poses_hand(SINVR_HAND_RIGHT, origin, angles);
+			return;
+		}
+	}
+
+	for (i = 0; i < 2; ++i)
+	{
+		XrSpaceLocation location = { XR_TYPE_SPACE_LOCATION };
+		float origin[3], angles[3];
+		float position[3], orientation[4];
+
+		if (hand_space[i] == XR_NULL_HANDLE ||
+			XR_FAILED(xrLocateSpace(hand_space[i], space, time, &location)))
+		{
+			continue;
+		}
+
+		/* Both bits are needed: a hand with no position is no use for aiming. */
+		if (!(location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) ||
+			!(location.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT))
+		{
+			continue;
+		}
+
+		position[0] = location.pose.position.x;
+		position[1] = location.pose.position.y;
+		position[2] = location.pose.position.z;
+		orientation[0] = location.pose.orientation.x;
+		orientation[1] = location.pose.orientation.y;
+		orientation[2] = location.pose.orientation.z;
+		orientation[3] = location.pose.orientation.w;
+
+		vr_view_local(position, orientation, units_per_metre, origin, angles);
+		vr_poses_hand(i, origin, angles);
+
+		if (!said_hands && i == SINVR_HAND_RIGHT)
+		{
+			said_hands = 1;
+			vr_printf("VR: hands tracked; right hand at (%.1f %.1f %.1f) units, "
+				"pointing (%.1f %.1f %.1f)", origin[0], origin[1], origin[2],
+				angles[0], angles[1], angles[2]);
+		}
+	}
+}
+
 void vr_input_release(void)
 {
 	fake_held = -1;
@@ -885,6 +969,16 @@ void vr_input_destroy(void)
 	int i;
 
 	vr_input_release();
+
+	for (i = 0; i < 2; ++i)
+	{
+		if (hand_space[i] != XR_NULL_HANDLE)
+		{
+			xrDestroySpace(hand_space[i]);
+			hand_space[i] = XR_NULL_HANDLE;
+		}
+	}
+	said_hands = 0;
 
 	for (i = 0; i < ACT_COUNT; ++i)
 	{

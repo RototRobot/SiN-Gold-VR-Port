@@ -1,0 +1,59 @@
+#include <windows.h>
+#include <string.h>
+
+#include "vr_poses.h"
+
+/*
+ * One block, written in place. The game reads it on the same thread, between
+ * engine frames, so a half-written frame cannot be seen; the frame counter is
+ * there so the game can tell a stale block from a live one.
+ */
+static sinvr_poses_t poses = { SINVR_POSES_VERSION };
+
+void vr_poses_begin(float units_per_metre)
+{
+	poses.units_per_metre = units_per_metre;
+	poses.head_valid = 0;
+	poses.hand_valid[SINVR_HAND_LEFT] = 0;
+	poses.hand_valid[SINVR_HAND_RIGHT] = 0;
+}
+
+void vr_poses_head(const float origin[3], const float angles[3])
+{
+	memcpy(poses.head_origin, origin, sizeof(poses.head_origin));
+	memcpy(poses.head_angles, angles, sizeof(poses.head_angles));
+	poses.head_valid = 1;
+}
+
+void vr_poses_hand(int hand, const float origin[3], const float angles[3])
+{
+	if (hand != SINVR_HAND_LEFT && hand != SINVR_HAND_RIGHT)
+	{
+		return;
+	}
+
+	memcpy(poses.hand_origin[hand], origin, sizeof(poses.hand_origin[hand]));
+	memcpy(poses.hand_angles[hand], angles, sizeof(poses.hand_angles[hand]));
+	poses.hand_valid[hand] = 1;
+}
+
+void vr_poses_end(void)
+{
+	poses.time_ms = GetTickCount();
+	poses.frame++;
+}
+
+void vr_poses_clear(void)
+{
+	unsigned frame = poses.frame;
+
+	memset(&poses, 0, sizeof(poses));
+	poses.version = SINVR_POSES_VERSION;
+	poses.frame = frame;
+}
+
+/* ref_vr.dll's side of the contract. */
+__declspec(dllexport) const sinvr_poses_t *SinVrPoses(int version)
+{
+	return version == SINVR_POSES_VERSION ? &poses : NULL;
+}

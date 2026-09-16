@@ -59,6 +59,38 @@ void vr_view_recenter(const float position[3], const float orientation[4])
 	g_origin_yaw = (float)(atan2(forward[1], forward[0]) * DEG_PER_RAD);
 }
 
+void vr_view_local(const float position[3], const float orientation[4], float units_per_metre,
+	float origin[3], float angles[3])
+{
+	static const float xr_right[3] = { 1.0f, 0.0f, 0.0f };
+	static const float xr_up[3] = { 0.0f, 1.0f, 0.0f };
+	float v[3], forward[3], right[3], up[3], offset[3];
+	double turn = -g_origin_yaw * RAD_PER_DEG;
+	double s = sin(turn);
+	double c = cos(turn);
+	double sin_pitch;
+
+	quake_forward(orientation, forward);
+	quat_rotate(orientation, xr_right, v);
+	xr_to_quake(v, right);
+	quat_rotate(orientation, xr_up, v);
+	xr_to_quake(v, up);
+
+	xr_to_quake(position, offset);
+	offset[0] -= g_origin[0];
+	offset[1] -= g_origin[1];
+	offset[2] -= g_origin[2];
+
+	origin[0] = (float)((offset[0] * c - offset[1] * s) * units_per_metre);
+	origin[1] = (float)((offset[0] * s + offset[1] * c) * units_per_metre);
+	origin[2] = offset[2] * units_per_metre;
+
+	sin_pitch = forward[2] > 1.0f ? 1.0 : (forward[2] < -1.0f ? -1.0 : forward[2]);
+	angles[PITCH] = (float)(-asin(sin_pitch) * DEG_PER_RAD);
+	angles[YAW] = (float)(atan2(forward[1], forward[0]) * DEG_PER_RAD) - g_origin_yaw;
+	angles[ROLL] = (float)(atan2(-right[2], up[2]) * DEG_PER_RAD);
+}
+
 void vr_view_apply(refdef_t *fd, const vr_eye_t *eye, float units_per_metre, vr_view_saved_t *saved)
 {
 	static const float xr_forward[3] = { 0.0f, 0.0f, -1.0f };

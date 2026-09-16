@@ -518,6 +518,11 @@ static void find_key_dest(void)
 	}
 }
 
+float vr_worldscale_units(void)
+{
+	return vr_worldscale && vr_worldscale->value > 1.0f ? vr_worldscale->value : 39.37f;
+}
+
 int vr_in_menu(void)
 {
 	int where;
@@ -730,7 +735,7 @@ static void vr_RenderFrame(refdef_t *fd)
 		return;
 	}
 
-	vr_view_apply(fd, g_eye, vr_worldscale->value > 1.0f ? vr_worldscale->value : 39.37f, &saved);
+	vr_view_apply(fd, g_eye, vr_worldscale_units(), &saved);
 
 	if (g_eye_renders_logged < 4)
 	{

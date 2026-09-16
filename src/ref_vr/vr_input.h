@@ -35,6 +35,12 @@ int vr_input_create(XrInstance instance, XrSession session);
 /* Once per frame: reads the controllers and passes their state to the game. */
 void vr_input_frame(XrSession session);
 
+/*
+ * Locates both hands for this frame's display time and passes them to the game
+ * module (vr_poses.c). Called from the frame loop, where the display time is.
+ */
+void vr_input_hands(XrSession session, XrSpace space, XrTime time, float units_per_metre);
+
 /* Lets go of anything held, and centres the sticks. */
 void vr_input_release(void);
 

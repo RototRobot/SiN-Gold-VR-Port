@@ -4,7 +4,7 @@ This is the handoff for anyone joining the project, whether a person or an AI. I
 why it is shaped the way it is, how to build and test it, what has already been learned the hard way,
 and what comes next. The detailed evidence lives in the other files in `docs/`; this one is the map.
 
-*Last updated 2026-09-16 (fourth pass).*
+*Last updated 2026-09-16 (fifth pass).*
 
 ## 1. Where the project is
 
@@ -15,7 +15,7 @@ and what comes next. The detailed evidence lives in the other files in `docs/`; 
 | 3. Stereo rendering with head tracking | ✅ Built and verified at the desk on 2026-09-16: 406 projection-layer frames in one run, correct per-eye poses and fields of view, ~87 frames/s at 2444×2392 per eye. Not yet seen in the headset by a person. How it works: [§9](#9-how-stereo-works) |
 | 4. HUD, crosshair and console in VR | ✅ Built 2026-09-16. The 2D goes into a panel `vr_hud_fov` degrees wide, `vr_hud_depth` metres away, centred on each eye's own axis - which is also what stops the crosshair from doubling. [§9](#9-how-stereo-works) |
 | 5. Motion controller input | ✅ Built 2026-09-16: buttons run console commands, the sticks arrive as a joystick the engine polls, and in menus both turn into keystrokes. Measured at the desk. [§11](#11-controller-input) |
-| 6. Tracked hands | **Next.** The poses are already located; getting them to the game DLL is the work. [§12](#12-next-tracked-hands) |
+| 6. Tracked hands | 🚧 The head and both hands reach the game module, and `Player::GunPosition`/`GetGunOrientation` aim from the right hand. Verified as far as the desk allows: the game prints that it is tracking. The weapon model and the crosshair still follow the view. [§12](#12-tracked-hands) |
 | 7–9 | Roomscale comfort, Wages of Sin, and packaging (see the roadmap in the [README](../README.md)) |
 
 ## 2. How it fits together
@@ -99,10 +99,12 @@ The mod adds these cvars:
 | `vr_deadzone` | 0.15 | Stick deadzone, applied to both axes together (archived) |
 | `vr_bind_*` | see §11 | The console command each button runs, or `key:<name>` for a keystroke (archived) |
 | `vr_recentre_double` | 1 | Two clicks of the left stick to recentre; 0 for one (archived) |
+| `vr_aim` | 1 | Game module: shots come from the tracked right hand |
 | `vr_dump_eye` | 0 | Set to 1 to write the next frame's eye images beside `sin.exe` as `sinvr_eye0/1.tga` |
 | `vr_fake_axes` | | Desk testing: "`<forward> <side> <turn>`" pretends the sticks are held there |
 | `vr_fake_press` | | Desk testing: the name of a button to press for a few frames, e.g. `jump` |
 | `vr_fake_key` | | Desk testing: a key to tap - `up`, `down`, `left`, `right`, `enter`, `escape` |
+| `vr_fake_hand` | | Desk testing: "`<x> <y> <z> <pitch> <yaw> <roll>`" puts the right hand there |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. Needed for unattended VR runs |
 | `vr_trace` | 1 | Log the renderer calls of each new kind of frame |
 
@@ -209,6 +211,9 @@ python -c "from PIL import Image; im = Image.open('sinvr_eye0.tga').convert('L')
 | `src/ref_vr/vr_input.c` | OpenXR actions and bindings, and the mapping from them to console commands and stick axes |
 | `src/ref_vr/vr_joy.c` | The joystick that only exists in this process, which is how the sticks reach the engine |
 | `src/ref_vr/vr_keys.c` | Keystrokes posted to the engine's window, for the menus and the console |
+| `src/ref_vr/vr_poses.c` | The head and hand poses the game module reads, and the export that hands them over |
+| `src/shared/sinvr_poses.h` | The contract between the two DLLs: the block, its frame of reference |
+| `src/game_vr/vr_link.cpp` | The game module's side of that link. Ours, built into the game DLL |
 | `src/ref_vr/vr_hook.c` | Patching another module's imports, shared by the GL and joystick hooks |
 | `src/ref_vr/xr_layers.c` | Implicit-layer hygiene for 32-bit processes (shared with xrprobe) |
 | `src/ref_vr/vrlog.c` | `sinvr.log` |
@@ -438,26 +443,51 @@ What the desk runs showed, on `sindm6` with `deathmatch 1`:
 - one click of the left stick did nothing and a second 328 ms later logged
   `VR: measuring from where the headset is now`.
 
-## 12. Next: tracked hands
+## 12. Tracked hands
 
-The owner's verdict after trying the HUD panel (2026-09-16): the HUD and crosshair read correctly now,
-but the crosshair follows the headset rather than where the gun points - which is the next thing, since
-aiming has to come from the hand.
+The owner's verdict after the input work (2026-09-16): playable, but the crosshair follows the headset
+rather than the gun, and the gun arm looks too big. Aiming from the hand is the answer to the first, and
+holding the weapon in the hand to the second.
 
-The hand poses are already located in the same recentred space as the eyes (`ACT_HAND_LEFT`,
-`ACT_HAND_RIGHT` exist and are bound to `/input/aim/pose`); what is missing is a way to get them into the
-game, and a weapon that follows them.
+Built so far:
 
-1. **A channel between the two DLLs.** Both are ours, so a named shared-memory block written by `ref_vr`
-   and read by `gamex86.dll` is the least invasive way: head and hand poses, in game units, plus the
-   recentring, written once a frame.
-2. **Aiming from the hand.** Game-side, `Player::GunPosition` and `GetGunOrientation` (in
-   `game/src/code/game/player.cpp`) decide where shots come from and go. Overriding them with the right
-   hand's pose gives real VR aiming, and the crosshair then belongs on the weapon's own axis rather than
-   the head's - which is also when the HUD crosshair should stop being drawn in the panel.
-3. **The weapon in the hand.** The view model is drawn by the engine from `refdef_t`; the size the owner
-   noticed ("the gun arm looked too big") is best fixed by attaching the weapon to the hand at a chosen
-   scale rather than by changing projections. `refdef_t` past `rdflags` and `entity_t` still need mapping.
-4. **Then comfort:** snap turning, crouching, and the body following the head.
+1. **The poses.** `ACT_HAND_LEFT`/`ACT_HAND_RIGHT` are bound to `/input/aim/pose`, and
+   `xrCreateActionSpace` gives each a space that `xrLocateSpace` reads at the same display time the eyes
+   were located for, so the hands and the view agree about when they are. `vr_view_local()` turns each
+   pose into the recentred frame the game wants.
+2. **The channel.** Both DLLs are in sin.exe, so nothing as heavy as shared memory is needed:
+   `ref_vr.dll` exports `SinVrPoses`, the game module looks it up with `GetModuleHandleA`/
+   `GetProcAddress` (`src/game_vr/vr_link.cpp`), and reads the block described in
+   `src/shared/sinvr_poses.h`. A frame counter in the block is how the game knows the renderer is still
+   writing: a tenth of a second of the same frame counts as stopped, and the game goes back to its own
+   aiming. Without the VR renderer the export is simply absent.
+3. **The frame of reference** is the recentred one: origin at the player's eyes
+   (`Sentient::EyePosition`), +x the way the body faces, in game units. The game finishes the job with
+   its own yaw, which is the one thing the renderer does not know:
+   `world = EyePosition() + rotate_yaw(hand_origin, worldangles[YAW])`.
+4. **Aiming.** `Player::GunPosition` and `Player::GetGunOrientation` override Sentient's, and every
+   weapon goes through them: `Weapon::GetMuzzlePosition` asks the owner for both. Gated on `vr_aim`, on a
+   tracked hand, and on normal gravity, so a flatscreen run or an untracked controller behaves exactly as
+   SiN always did.
 
-Hand tracking (`XR_EXT_hand_tracking`) comes after that: the same channel, a different source.
+What the desk could show: with `vr_fake_hand "16 -6 -10 0 40 0"` the game module prints
+`SiN Gold VR: tracking the player's head and hands`, which is the whole channel working - renderer,
+export, game module, validity and staleness checks.
+
+What it could not: **a shot.** `+attack` from a console script never reaches the weapon code in an
+unattended run - probes in `Sentient::FireWeapon`, `Weapon::Fire`, `BulletWeapon::FireBullets`,
+`Weapon::GetMuzzlePosition` and `Sentient::GunPosition` all stayed silent while `G_RunFrame`'s probe
+fired every frame, so the client is not turning a console `+attack` into a usercmd button here. Real
+controller and mouse input does fire, so this is a limit of the harness, not of the game: the aiming
+maths is what the owner's next headset test exercises.
+
+Still to do:
+
+- **The weapon model belongs in the hand.** It is drawn by the engine from `refdef_t`, so this is
+  renderer work: `refdef_t` past `rdflags` and `entity_t` still need mapping. The size the owner noticed
+  is best fixed there, with a scale, rather than by changing projections.
+- **The crosshair belongs on the weapon's axis,** not in the head-locked HUD panel. Once the weapon is
+  drawn from the hand, the crosshair can be a world-space mark where the weapon points - or simply
+  dropped, since a tracked gun aims itself.
+- **Comfort and roomscale:** snap turning, crouching, and the body following the head.
+- **Hand tracking** (`XR_EXT_hand_tracking`) is the same channel with a different source.

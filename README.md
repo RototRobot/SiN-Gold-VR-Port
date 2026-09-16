@@ -127,6 +127,7 @@ These console variables control the mod:
 | `vr_input` | 1 | Take input from the VR controllers. |
 | `vr_deadzone` | 0.15 | How far a stick must move before the game sees it. |
 | `vr_recentre_double` | 1 | Require two clicks of the left stick to recentre. 0 makes one do. |
+| `vr_aim` | 1 | Shots come from the tracked right hand rather than from the player's angles. |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. For testing with the headset off. |
 | `vr_dump_eye` | 0 | Set it to 1 to write the next frame's two eye images beside `sin.exe`, for checking a build at the desk. |
 | `vr_trace` | 1 | Record the renderer calls of each new kind of frame in `sinvr.log`. |
@@ -141,8 +142,10 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 
 - Do not apply changes in the game's video options while running through the mod. Applying them
   resets `vid_ref` to `gl`, which swaps the VR renderer out.
-- View pitch and yaw come from the headset, but the player still moves and turns with the keyboard
-  and mouse, and the body does not move with the headset yet.
+- View pitch and yaw come from the headset, and shots come from the right controller, but the
+  **weapon model** still follows the view, and the crosshair is drawn in the HUD panel rather than on
+  the weapon's own axis - so it shows where you are looking, not where the gun points.
+- The body does not move with the headset yet: walking and turning are the sticks' job.
 - Head poses are measured from where you were when you put the headset on. `vr_recenter 1` in the
   console does it again if you end up off-centre.
 
@@ -153,7 +156,8 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 3. ✅ Stereo rendering and head-tracked views, driven by the engine's own two-pass stereo loop
 4. ✅ HUD, crosshair and console in a panel at a comfortable distance
 5. ✅ Motion controller input: sticks to move and turn, buttons bound to commands
-6. 🚧 Tracked hands: aiming and the weapon held in the hand, through the game DLL
+6. 🚧 Tracked hands: the poses reach the game and shots come from the right hand; the weapon model
+   still follows the view rather than the hand
 7. Roomscale comfort: snap turning, crouching, and the body following the head
 8. Wages of Sin
 9. Release packaging

@@ -275,6 +275,25 @@ does the movement work itself. The console says `joystick detected` where it use
   to the engine's window with the right scan code and the extended bit works: the menu's selection moved
   round its wheel exactly as it would from the keyboard.
 
+## The game module's aiming and firing path (2026-09-16)
+
+- **Every weapon asks its owner where to shoot from.** `Weapon::GetMuzzlePosition` calls
+  `owner->GunPosition()` and `owner->GetGunOrientation(...)`, both virtual on `Sentient`, and adds the
+  weapon's own `MuzzleOffset()`. Overriding the two in `Player` therefore moves aiming for every weapon
+  at once, hitscan and projectile alike.
+- **`Sentient::EyePosition()`** is `worldorigin + eyeposition` (0, 0, 64 by default) and is the right
+  reference point for a head-relative pose; `GunPosition` is `worldorigin + gunoffset` (0, 0, 56).
+- **`gravaxis`** flips the axes in both functions for gravity-turned areas, which a VR pose does not
+  account for, so the VR path steps aside when it is set.
+- **A console `+attack` does not fire a shot in an unattended run.** Probes in `Sentient::FireWeapon`,
+  `Weapon::Fire`, `BulletWeapon::FireBullets`, `Weapon::GetMuzzlePosition` and `Sentient::GunPosition`
+  all stayed silent while a probe in `G_RunFrame` fired every frame - so the client never turned the
+  console command into a usercmd button, even with the window in front and `key_dest` 0. Firing has to
+  be tested by hand.
+  - Worth knowing for the next time: `gi.printf` from the game module does reach the console and
+    `qconsole.log` during play, and a probe that writes its own file (`fopen` in the game's working
+    directory) is the way to check a code path without depending on the console at all.
+
 ## Game DLL: what matters for VR
 
 - **Aiming.** `Weapon::GetMuzzlePosition` (weapon.cpp:324) calls `owner->GunPosition()` and

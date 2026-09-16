@@ -45,4 +45,12 @@ void vr_view_recenter(const float position[3], const float orientation[4]);
 void vr_view_apply(refdef_t *fd, const vr_eye_t *eye, float units_per_metre, vr_view_saved_t *saved);
 void vr_view_restore(refdef_t *fd, const vr_view_saved_t *saved);
 
+/*
+ * A pose in the recentred frame, as the game module wants it: origin in game
+ * units from the recentred head, +x the way the body faces, and angles in
+ * Quake's senses. The engine's own yaw is left out, because the game adds it.
+ */
+void vr_view_local(const float position[3], const float orientation[4], float units_per_metre,
+	float origin[3], float angles[3]);
+
 #endif /* VR_VIEW_H */

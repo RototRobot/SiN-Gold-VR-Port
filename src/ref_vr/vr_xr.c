@@ -26,6 +26,7 @@
 #include "ref_vr.h"
 #include "vr_gl.h"
 #include "vr_input.h"
+#include "vr_poses.h"
 #include "vr_xr.h"
 #include "xr_layers.h"
 
@@ -289,6 +290,7 @@ static void xr_release(xr_target_t *t)
 static void xr_teardown(void)
 {
 	vr_input_destroy();
+	vr_poses_clear();
 
 	int failed = xr.failed;
 
@@ -783,6 +785,8 @@ static int xr_make_eye_targets(void)
 	return 1;
 }
 
+static void publish_poses(void);
+
 /* Waits for the runtime, begins its frame, and locates both eyes for its display time. */
 static int xr_begin_stereo(int force_render)
 {
@@ -857,7 +861,35 @@ static int xr_begin_stereo(int force_render)
 		vr_printf("VR: measuring from where the headset is now");
 	}
 
+	publish_poses();
 	return 1;
+}
+
+/*
+ * What the game module gets to see of the player: the head from between the
+ * eyes, and both hands. Written once a frame, with this frame's display time,
+ * so that the hands and the view agree about when they are.
+ */
+static void publish_poses(void)
+{
+	float head_position[3], head_origin[3], head_angles[3];
+	float scale = vr_worldscale_units();
+	int i;
+
+	vr_poses_begin(scale);
+
+	if (xr.should_render)
+	{
+		for (i = 0; i < 3; ++i)
+		{
+			head_position[i] = 0.5f * (xr.eye_views[0].position[i] + xr.eye_views[1].position[i]);
+		}
+		vr_view_local(head_position, xr.eye_views[0].orientation, scale, head_origin, head_angles);
+		vr_poses_head(head_origin, head_angles);
+		vr_input_hands(xr.session, xr.space, xr.display_time, scale);
+	}
+
+	vr_poses_end();
 }
 
 /* Nothing else clears an eye target, and a clear needs every write mask open. */

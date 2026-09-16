@@ -14,6 +14,9 @@ void vr_cvar_set(const char *name, const char *value);
 /* Queues a console command, as a key bind would: no newline needed. */
 void vr_command(const char *text);
 
+/* Game units per metre, as vr_worldscale says. */
+float vr_worldscale_units(void);
+
 /*
  * True while the game is showing something with no world behind it: a menu, the
  * loading screen, a briefing. Those listen to the keyboard rather than to
