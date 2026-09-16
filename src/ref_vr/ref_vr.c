@@ -8,10 +8,11 @@
  *   - Init, Shutdown, BeginFrame, RenderFrame and EndFrame are wrapped in C;
  *   - every other export goes through a thunk that records the call and jumps on.
  *
- * Nothing is changed on the way through yet. The recording shows the order the
- * engine drives the renderer in, which the stereo work depends on. With
- * vr_enable set, the finished frame is also shown on a virtual screen in the
- * headset (vr_xr.c).
+ * With vr_enable set the game goes to the headset (vr_xr.c). Frames that draw
+ * the world are rendered in stereo through the engine's own two-pass loop
+ * (cl_stereo): each BeginFrame pass gets an eye, RenderFrame gets that eye's
+ * view (vr_view.c), and ref_gl's projection and viewports follow the eye
+ * (vr_gl.c). Everything else is shown on the theatre screen.
  */
 #include <windows.h>
 #include <GL/gl.h>
@@ -21,6 +22,8 @@
 
 #include "refapi.h"
 #include "ref_vr.h"
+#include "vr_gl.h"
+#include "vr_view.h"
 #include "vr_xr.h"
 #include "vrlog.h"
 
@@ -35,6 +38,7 @@ typedef void (*re_begin_frame_t)(float camera_separation);
 typedef void (*re_render_frame_t)(refdef_t *fd);
 typedef void (*con_printf_t)(int print_level, const char *fmt, ...);
 typedef cvar_t *(*cvar_get_t)(const char *name, const char *value, int flags);
+typedef cvar_t *(*cvar_set_t)(const char *name, const char *value);
 
 static HMODULE g_self;
 static HMODULE g_refgl;
@@ -46,9 +50,22 @@ static void *g_real_slot[REF_EXPORT_SLOTS];
 static unsigned g_slot_calls[REF_EXPORT_SLOTS];
 
 static cvar_t *vr_enable;
+static cvar_t *vr_stereo;
+static cvar_t *vr_worldscale;
 static cvar_t *vr_trace;
+static cvar_t *vr_force_render;
 static cvar_t *vr_screen_distance;
 static cvar_t *vr_screen_width;
+static cvar_t *cl_stereo;
+
+/* The frame in progress. */
+static int g_pass;                 /* BeginFrame calls since the last EndFrame */
+static int g_stereo_frame;         /* this frame renders the world once per eye */
+static int g_last_frame_had_world;
+static const vr_eye_t *g_eye;      /* the eye being rendered, or NULL */
+static int g_eye_index;
+static int g_eye_renders_logged;
+static int g_comfort_applied;
 
 /* ------------------------------------------------------------------------- */
 /* Output                                                                     */
@@ -335,7 +352,7 @@ static void (*const g_thunks[REF_EXPORT_SLOTS])(void) = {
 };
 
 /* ------------------------------------------------------------------------- */
-/* Wrapped exports                                                            */
+/* Cvars                                                                      */
 /* ------------------------------------------------------------------------- */
 
 static void register_cvars(void)
@@ -343,10 +360,94 @@ static void register_cvars(void)
 	cvar_get_t cvar_get = (cvar_get_t)g_ri.slot[RI_CVAR_GET];
 
 	vr_enable = cvar_get("vr_enable", "0", 0);
+	vr_stereo = cvar_get("vr_stereo", "1", CVAR_ARCHIVE);
+	vr_worldscale = cvar_get("vr_worldscale", "39.37", CVAR_ARCHIVE);
 	vr_trace = cvar_get("vr_trace", "1", 0);
+	vr_force_render = cvar_get("vr_force_render", "0", 0);
 	vr_screen_distance = cvar_get("vr_screen_distance", "2.5", CVAR_ARCHIVE);
 	vr_screen_width = cvar_get("vr_screen_width", "2.4", CVAR_ARCHIVE);
+	cl_stereo = cvar_get("cl_stereo", "0", 0);
 }
+
+static void set_cvar(const char *name, const char *value)
+{
+	((cvar_set_t)g_ri.slot[RI_CVAR_SET])(name, value);
+}
+
+/* The world goes to the headset in stereo when that is asked for and a session is running. */
+/*
+ * Testing at the desk: the runtime says a headset lying still needs no picture,
+ * and this renders for it regardless, so an unattended run exercises the whole
+ * path and leaves an eye image in the window.
+ */
+static int force_render(void)
+{
+	return vr_force_render && vr_force_render->value != 0.0f;
+}
+
+static int stereo_wanted(void)
+{
+	return vr_enable && vr_enable->value != 0.0f && vr_stereo && vr_stereo->value != 0.0f &&
+		vr_xr_stereo_possible();
+}
+
+/*
+ * The engine reads cl_stereo as each frame starts, so it is changed here, at the
+ * end of one, for the next. The separation goes to zero so the engine adds no
+ * eye offset of its own: the eyes come from the headset.
+ */
+static void update_stereo(void)
+{
+	static const char *const view_motion[] = {
+		"bob_up", "bob_pitch", "bob_roll", "run_pitch", "run_roll", "sv_rollangle"
+	};
+	int want = stereo_wanted();
+	int have = cl_stereo && cl_stereo->value != 0.0f;
+	size_t i;
+
+	if (!cl_stereo || want == have)
+	{
+		return;
+	}
+
+	set_cvar("cl_stereo", want ? "1" : "0");
+
+	if (!want)
+	{
+		vr_printf("VR: stereo off");
+		return;
+	}
+
+	set_cvar("cl_stereo_separation", "0");
+
+	/* View bob and roll move the camera without the head moving. */
+	if (!g_comfort_applied)
+	{
+		for (i = 0; i < sizeof(view_motion) / sizeof(view_motion[0]); ++i)
+		{
+			set_cvar(view_motion[i], "0");
+		}
+		g_comfort_applied = 1;
+	}
+
+	vr_printf("VR: stereo on; view bob and roll off");
+}
+
+static void window_size(int *width, int *height)
+{
+	RECT client;
+
+	*width = *height = 0;
+	if (GetClientRect(WindowFromDC(wglGetCurrentDC()), &client))
+	{
+		*width = client.right;
+		*height = client.bottom;
+	}
+}
+
+/* ------------------------------------------------------------------------- */
+/* Wrapped exports                                                            */
+/* ------------------------------------------------------------------------- */
 
 static int vr_Init(void *hinstance, void *wndproc)
 {
@@ -354,6 +455,14 @@ static int vr_Init(void *hinstance, void *wndproc)
 
 	record_call(RE_INIT);
 	register_cvars();
+
+	/* ref_gl asks for a quad-buffer pixel format when cl_stereo is set, and
+	   switches cl_stereo off when it cannot have one. Keep it off until Init
+	   is done; update_stereo() turns it on once the headset is running. */
+	if (vr_enable->value != 0.0f && cl_stereo->value != 0.0f)
+	{
+		set_cvar("cl_stereo", "0");
+	}
 
 	result = ((re_init_t)g_real_slot[RE_INIT])(hinstance, wndproc);
 
@@ -378,6 +487,7 @@ static void vr_Shutdown(void)
 	record_call(RE_SHUTDOWN);
 
 	/* Before ref_gl destroys the GL context the OpenXR session belongs to. */
+	g_eye = NULL;
 	vr_xr_shutdown();
 
 	((re_void_t)g_real_slot[RE_SHUTDOWN])();
@@ -404,6 +514,9 @@ static void vr_Shutdown(void)
 
 static void vr_BeginFrame(float camera_separation)
 {
+	int pass = g_pass++;
+	int width, height;
+
 	record_call(RE_BEGIN_FRAME);
 
 	if (g_separation_count < 4)
@@ -411,11 +524,39 @@ static void vr_BeginFrame(float camera_separation)
 		g_separations[g_separation_count++] = camera_separation;
 	}
 
+	/* ref_gl's BeginFrame points glDrawBuffer at the window's back buffer, which
+	   only works with the window's framebuffer bound: the previous eye is
+	   finished first, and the next one bound after. */
+	if (g_eye)
+	{
+		vr_xr_end_eye();
+		g_eye = NULL;
+	}
+
 	((re_begin_frame_t)g_real_slot[RE_BEGIN_FRAME])(camera_separation);
+
+	/* Decided on the first pass. cl_stereo was read as the frame started, so
+	   a second pass is coming exactly when it is set now. */
+	if (pass == 0)
+	{
+		g_stereo_frame = stereo_wanted() && g_last_frame_had_world && cl_stereo->value != 0.0f;
+	}
+
+	if (g_stereo_frame && pass < 2)
+	{
+		window_size(&width, &height);
+		if (width > 0 && height > 0)
+		{
+			g_eye = vr_xr_begin_eye(pass, width, height, force_render());
+			g_eye_index = pass;
+		}
+	}
 }
 
 static void vr_RenderFrame(refdef_t *fd)
 {
+	vr_view_saved_t saved;
+
 	record_call(RE_RENDER_FRAME);
 
 	if (fd)
@@ -441,25 +582,55 @@ static void vr_RenderFrame(refdef_t *fd)
 		}
 	}
 
+	if (!g_eye || !fd || (fd->rdflags & RDF_NOWORLDMODEL))
+	{
+		((re_render_frame_t)g_real_slot[RE_RENDER_FRAME])(fd);
+		return;
+	}
+
+	vr_view_apply(fd, g_eye, vr_worldscale->value > 1.0f ? vr_worldscale->value : 39.37f, &saved);
+
+	if (g_eye_renders_logged < 4)
+	{
+		vrlog("    eye %d: tangents L%.3f R%.3f D%.3f U%.3f, at (%.3f %.3f %.3f) m -> org (%.1f %.1f %.1f) ang (%.1f %.1f %.1f) fov %.1f/%.1f",
+			g_eye_index, g_eye->tan_left, g_eye->tan_right, g_eye->tan_down, g_eye->tan_up,
+			g_eye->position[0], g_eye->position[1], g_eye->position[2],
+			fd->vieworg[0], fd->vieworg[1], fd->vieworg[2],
+			fd->viewangles[0], fd->viewangles[1], fd->viewangles[2], fd->fov_x, fd->fov_y);
+		g_eye_renders_logged++;
+	}
+
 	((re_render_frame_t)g_real_slot[RE_RENDER_FRAME])(fd);
+
+	/* The engine may render from the same refdef again, paused or not. */
+	vr_view_restore(fd, &saved);
 }
 
 static void vr_EndFrame(void)
 {
 	record_call(RE_END_FRAME);
 
-	/* The finished frame is still in the back buffer here, before the swap. */
 	if (vr_enable && vr_enable->value != 0.0f)
 	{
-		vr_xr_frame(vr_screen_distance->value, vr_screen_width->value);
+		/* A stereo frame ends here; any other frame goes on the theatre screen.
+		   Either way the window's back buffer holds its picture before the swap. */
+		if (!vr_xr_end_stereo_frame())
+		{
+			vr_xr_frame(vr_screen_distance->value, vr_screen_width->value, force_render());
+		}
 	}
 	else
 	{
 		vr_xr_shutdown(); /* nothing to do unless VR was switched off while running */
 	}
+	g_eye = NULL;
 
 	((re_void_t)g_real_slot[RE_END_FRAME])();
 
+	g_last_frame_had_world = g_frame_has_world;
+	g_pass = 0;
+	g_stereo_frame = 0;
+	update_stereo();
 	end_frame_trace();
 }
 
@@ -529,6 +700,9 @@ refexport_t GetRefAPI(refimport_t imports)
 		g_refgl = NULL;
 		return g_ours;
 	}
+
+	/* Before ref_gl's Init resolves its GL functions. */
+	vr_gl_hook_refgl(g_refgl);
 
 	real = real_get_ref_api(imports);
 	if (real.api_version != REF_API_VERSION)

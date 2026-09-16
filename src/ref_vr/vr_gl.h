@@ -1,0 +1,65 @@
+/*
+ * OpenGL for ref_vr: the framebuffer entry points the Windows GL 1.1 headers
+ * lack, and interception of ref_gl's own GL calls while an eye is rendered.
+ */
+#ifndef VR_GL_H
+#define VR_GL_H
+
+#include <windows.h>
+#include <GL/gl.h>
+
+#define GL_SRGB8_ALPHA8 0x8C43
+#define GL_FRAMEBUFFER_SRGB 0x8DB9
+#define GL_FRAMEBUFFER 0x8D40
+#define GL_READ_FRAMEBUFFER 0x8CA8
+#define GL_DRAW_FRAMEBUFFER 0x8CA9
+#define GL_DRAW_FRAMEBUFFER_BINDING 0x8CA6
+#define GL_READ_FRAMEBUFFER_BINDING 0x8CAA
+#define GL_COLOR_ATTACHMENT0 0x8CE0
+#define GL_DEPTH_STENCIL_ATTACHMENT 0x821A
+#define GL_FRAMEBUFFER_COMPLETE 0x8CD5
+#define GL_RENDERBUFFER 0x8D41
+#define GL_DEPTH24_STENCIL8 0x88F0
+
+typedef struct
+{
+	void(APIENTRY *GenFramebuffers)(GLsizei n, GLuint *framebuffers);
+	void(APIENTRY *DeleteFramebuffers)(GLsizei n, const GLuint *framebuffers);
+	void(APIENTRY *BindFramebuffer)(GLenum target, GLuint framebuffer);
+	void(APIENTRY *FramebufferTexture2D)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture,
+		GLint level);
+	void(APIENTRY *FramebufferRenderbuffer)(GLenum target, GLenum attachment, GLenum renderbuffertarget,
+		GLuint renderbuffer);
+	GLenum(APIENTRY *CheckFramebufferStatus)(GLenum target);
+	void(APIENTRY *BlitFramebuffer)(GLint src_x0, GLint src_y0, GLint src_x1, GLint src_y1, GLint dst_x0,
+		GLint dst_y0, GLint dst_x1, GLint dst_y1, GLbitfield mask, GLenum filter);
+	void(APIENTRY *GenRenderbuffers)(GLsizei n, GLuint *renderbuffers);
+	void(APIENTRY *DeleteRenderbuffers)(GLsizei n, const GLuint *renderbuffers);
+	void(APIENTRY *BindRenderbuffer)(GLenum target, GLuint renderbuffer);
+	void(APIENTRY *RenderbufferStorage)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
+} vr_gl_t;
+
+extern vr_gl_t vrgl;
+
+/* Fills vrgl from the current context. Returns 0 if anything is missing. */
+int vr_gl_load(void);
+
+/*
+ * Call before ref_gl's Init. ref_gl looks every GL function up by name through
+ * GetProcAddress (its QGL layer); this answers glFrustum, glViewport and
+ * glScissor with versions that follow vr_gl_eye_begin/end. Returns 0 if the
+ * import could not be patched.
+ */
+int vr_gl_hook_refgl(HMODULE refgl);
+
+/*
+ * While an eye is rendered, ref_gl's viewports and scissors, which are in window
+ * coordinates, are scaled to the eye's target, and every projection it sets up
+ * is replaced by the eye's asymmetric frustum. Tangents are of the angles from
+ * the view axis to each edge: left and down negative.
+ */
+void vr_gl_eye_begin(int target_width, int target_height, int window_width, int window_height,
+	float tan_left, float tan_right, float tan_down, float tan_up);
+void vr_gl_eye_end(void);
+
+#endif /* VR_GL_H */

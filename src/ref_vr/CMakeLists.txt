@@ -4,6 +4,10 @@ add_library(ref_vr SHARED
 	ref_vr.h
 	ref_vr.def
 	refapi.h
+	vr_gl.c
+	vr_gl.h
+	vr_view.c
+	vr_view.h
 	vr_xr.c
 	vr_xr.h
 	vrlog.c

@@ -1,15 +1,19 @@
 /*
- * OpenXR for ref_vr. Brings a session up on ref_gl's own GL context and, for
- * now, shows each finished frame as a virtual screen: a quad layer floating in
- * front of the player. This is the platform half on its own. Stereo rendering
- * with head tracking comes next and reuses all of it.
+ * OpenXR for ref_vr. Brings a session up on ref_gl's own GL context and shows
+ * each engine frame one of two ways (see vr_xr.h):
  *
- * Runs on the engine's main thread from EndFrame, with ref_gl's context
- * current. docs/OPENXR_NOTES.md has the runtime facts this relies on.
+ *   - stereo: the engine's two BeginFrame passes render the eyes into per-eye
+ *     swapchains, from eye poses located at the first pass, and the frame is
+ *     submitted as a projection layer carrying those same poses;
+ *   - theatre: the finished window image goes on a quad layer, a virtual screen.
+ *
+ * Runs on the engine's main thread with ref_gl's context current.
+ * docs/OPENXR_NOTES.md has the runtime facts this relies on.
  */
 #include <windows.h>
 #include <unknwn.h> /* openxr_platform.h's Win32 interop structs use IUnknown */
 #include <GL/gl.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,38 +24,32 @@
 #include <openxr/openxr_platform.h>
 
 #include "ref_vr.h"
+#include "vr_gl.h"
 #include "vr_xr.h"
 #include "xr_layers.h"
 
-/* GL 3.0 names the Windows GL 1.1 header lacks. The functions come from the driver. */
-#define GL_SRGB8_ALPHA8 0x8C43
-#define GL_FRAMEBUFFER_SRGB 0x8DB9
-#define GL_READ_FRAMEBUFFER 0x8CA8
-#define GL_DRAW_FRAMEBUFFER 0x8CA9
-#define GL_DRAW_FRAMEBUFFER_BINDING 0x8CA6
-#define GL_READ_FRAMEBUFFER_BINDING 0x8CAA
-#define GL_COLOR_ATTACHMENT0 0x8CE0
-#define GL_FRAMEBUFFER_COMPLETE 0x8CD5
-
-typedef void(APIENTRY *gen_framebuffers_t)(GLsizei n, GLuint *framebuffers);
-typedef void(APIENTRY *delete_framebuffers_t)(GLsizei n, const GLuint *framebuffers);
-typedef void(APIENTRY *bind_framebuffer_t)(GLenum target, GLuint framebuffer);
-typedef void(APIENTRY *framebuffer_texture_2d_t)(GLenum target, GLenum attachment, GLenum textarget,
-	GLuint texture, GLint level);
-typedef GLenum(APIENTRY *check_framebuffer_status_t)(GLenum target);
-typedef void(APIENTRY *blit_framebuffer_t)(GLint src_x0, GLint src_y0, GLint src_x1, GLint src_y1,
-	GLint dst_x0, GLint dst_y0, GLint dst_x1, GLint dst_y1, GLbitfield mask, GLenum filter);
 typedef BOOL(WINAPI *swap_interval_t)(int interval);
 
-static struct
+/* A swapchain and the framebuffer that draws into its images. */
+typedef struct
 {
-	gen_framebuffers_t GenFramebuffers;
-	delete_framebuffers_t DeleteFramebuffers;
-	bind_framebuffer_t BindFramebuffer;
-	framebuffer_texture_2d_t FramebufferTexture2D;
-	check_framebuffer_status_t CheckFramebufferStatus;
-	blit_framebuffer_t BlitFramebuffer;
-} gl;
+	XrSwapchain swapchain;
+	int width, height;
+	uint32_t image_count;
+	XrSwapchainImageOpenGLKHR *images;
+	GLuint framebuffer;
+	GLuint depth; /* a swapchain gives colour only, so depth is ours */
+	int checked;  /* framebuffer completeness is reported once */
+	int acquired;
+	uint32_t index;
+} xr_target_t;
+
+/* GL state a blit must not be affected by, and must leave as it found it. */
+typedef struct
+{
+	GLint read_framebuffer, draw_framebuffer;
+	GLboolean scissor, srgb;
+} blit_state_t;
 
 static struct
 {
@@ -65,18 +63,29 @@ static struct
 	XrSessionState state;
 	int running;
 	XrSpace space;
+	int64_t format;
 
 	HDC dc;
 	HGLRC context;
 
-	XrSwapchain swapchain;
-	int width, height;
-	uint32_t image_count;
-	XrSwapchainImageOpenGLKHR *images;
-	GLuint framebuffer;
-	int framebuffer_checked;
-
+	/* Theatre screen. */
+	xr_target_t screen;
 	unsigned frames_shown;
+
+	/* Stereo. */
+	int stereo_failed;
+	xr_target_t eye[2];
+	int in_frame;      /* pass 0 began an OpenXR frame that vr_xr_end_stereo_frame() ends */
+	int should_render;
+	XrTime display_time;
+	XrView views[2];
+	vr_eye_t eye_views[2];
+	int bound_eye;     /* 1 + the eye whose target is bound, or 0 */
+	int eyes_rendered; /* a bit per eye */
+	int window_width, window_height;
+	int warned_incomplete;
+	int warned_idle;   /* said once that the headset does not want frames */
+	unsigned stereo_frames;
 } xr;
 
 static int xr_check(XrResult result, const char *call)
@@ -111,44 +120,185 @@ static void report_layer(const char *library, const char *reason)
 	vr_printf("VR: switched off an OpenXR layer a 32-bit game cannot load (%s): %s", reason, library);
 }
 
-static int load_gl(void)
-{
-	gl.GenFramebuffers = (gen_framebuffers_t)wglGetProcAddress("glGenFramebuffers");
-	gl.DeleteFramebuffers = (delete_framebuffers_t)wglGetProcAddress("glDeleteFramebuffers");
-	gl.BindFramebuffer = (bind_framebuffer_t)wglGetProcAddress("glBindFramebuffer");
-	gl.FramebufferTexture2D = (framebuffer_texture_2d_t)wglGetProcAddress("glFramebufferTexture2D");
-	gl.CheckFramebufferStatus = (check_framebuffer_status_t)wglGetProcAddress("glCheckFramebufferStatus");
-	gl.BlitFramebuffer = (blit_framebuffer_t)wglGetProcAddress("glBlitFramebuffer");
+/* ------------------------------------------------------------------------- */
+/* Render targets                                                             */
+/* ------------------------------------------------------------------------- */
 
-	return gl.GenFramebuffers && gl.DeleteFramebuffers && gl.BindFramebuffer &&
-		gl.FramebufferTexture2D && gl.CheckFramebufferStatus && gl.BlitFramebuffer;
+static void blit_state_begin(blit_state_t *state)
+{
+	glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &state->read_framebuffer);
+	glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &state->draw_framebuffer);
+	state->scissor = glIsEnabled(GL_SCISSOR_TEST);
+	state->srgb = glIsEnabled(GL_FRAMEBUFFER_SRGB);
+
+	/* A blit is clipped by the scissor test, and must copy colour unconverted. */
+	if (state->scissor)
+	{
+		glDisable(GL_SCISSOR_TEST);
+	}
+	if (state->srgb)
+	{
+		glDisable(GL_FRAMEBUFFER_SRGB);
+	}
 }
 
-static void xr_destroy_swapchain(void)
+static void blit_state_end(const blit_state_t *state)
 {
-	if (xr.swapchain != XR_NULL_HANDLE)
+	vrgl.BindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)state->read_framebuffer);
+	vrgl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)state->draw_framebuffer);
+	if (state->scissor)
 	{
-		xrDestroySwapchain(xr.swapchain);
-		xr.swapchain = XR_NULL_HANDLE;
+		glEnable(GL_SCISSOR_TEST);
+	}
+	if (state->srgb)
+	{
+		glEnable(GL_FRAMEBUFFER_SRGB);
+	}
+}
+
+static void xr_destroy_target(xr_target_t *t)
+{
+	if (t->swapchain != XR_NULL_HANDLE)
+	{
+		xrDestroySwapchain(t->swapchain);
+	}
+	free(t->images);
+	if (t->framebuffer && vrgl.DeleteFramebuffers)
+	{
+		vrgl.DeleteFramebuffers(1, &t->framebuffer);
+	}
+	if (t->depth && vrgl.DeleteRenderbuffers)
+	{
+		vrgl.DeleteRenderbuffers(1, &t->depth);
+	}
+	memset(t, 0, sizeof(*t));
+}
+
+static int xr_create_target(xr_target_t *t, int width, int height, int with_depth)
+{
+	XrSwapchainCreateInfo info = { XR_TYPE_SWAPCHAIN_CREATE_INFO };
+	uint32_t i;
+
+	info.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT;
+	info.format = xr.format;
+	info.sampleCount = 1;
+	info.width = (uint32_t)width;
+	info.height = (uint32_t)height;
+	info.faceCount = 1;
+	info.arraySize = 1;
+	info.mipCount = 1;
+
+	if (!xr_check(xrCreateSwapchain(xr.session, &info, &t->swapchain), "xrCreateSwapchain") ||
+		!xr_check(xrEnumerateSwapchainImages(t->swapchain, 0, &t->image_count, NULL), "xrEnumerateSwapchainImages"))
+	{
+		return 0;
 	}
 
-	free(xr.images);
-	xr.images = NULL;
-	xr.image_count = 0;
-	xr.width = xr.height = 0;
+	t->images = calloc(t->image_count, sizeof(*t->images));
+	if (!t->images)
+	{
+		return 0;
+	}
+	for (i = 0; i < t->image_count; ++i)
+	{
+		t->images[i].type = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR;
+	}
+	if (!xr_check(xrEnumerateSwapchainImages(t->swapchain, t->image_count, &t->image_count,
+			(XrSwapchainImageBaseHeader *)t->images), "xrEnumerateSwapchainImages"))
+	{
+		return 0;
+	}
+
+	vrgl.GenFramebuffers(1, &t->framebuffer);
+
+	if (with_depth)
+	{
+		vrgl.GenRenderbuffers(1, &t->depth);
+		vrgl.BindRenderbuffer(GL_RENDERBUFFER, t->depth);
+		vrgl.RenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+		vrgl.BindRenderbuffer(GL_RENDERBUFFER, 0);
+	}
+
+	t->width = width;
+	t->height = height;
+	return 1;
 }
+
+/* Binds the target's framebuffer on its next swapchain image. */
+static int xr_acquire(xr_target_t *t)
+{
+	XrSwapchainImageAcquireInfo acquire_info = { XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
+	XrSwapchainImageWaitInfo wait_info = { XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO };
+
+	if (!xr_check(xrAcquireSwapchainImage(t->swapchain, &acquire_info, &t->index), "xrAcquireSwapchainImage"))
+	{
+		return 0;
+	}
+	t->acquired = 1;
+
+	wait_info.timeout = XR_INFINITE_DURATION;
+	if (!xr_check(xrWaitSwapchainImage(t->swapchain, &wait_info), "xrWaitSwapchainImage"))
+	{
+		return 0;
+	}
+
+	vrgl.BindFramebuffer(GL_FRAMEBUFFER, t->framebuffer);
+	vrgl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t->images[t->index].image, 0);
+	if (t->depth)
+	{
+		vrgl.FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, t->depth);
+	}
+
+	if (!t->checked)
+	{
+		GLenum status = vrgl.CheckFramebufferStatus(GL_FRAMEBUFFER);
+
+		if (status != GL_FRAMEBUFFER_COMPLETE)
+		{
+			vr_printf("VR: %dx%d framebuffer incomplete (0x%X)", t->width, t->height, (unsigned)status);
+		}
+		t->checked = 1;
+	}
+
+	return 1;
+}
+
+/* Gives the image back to the runtime, and the window's framebuffer back to ref_gl. */
+static void xr_release(xr_target_t *t)
+{
+	XrSwapchainImageReleaseInfo release_info = { XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
+
+	if (!t->acquired)
+	{
+		return;
+	}
+
+	vrgl.BindFramebuffer(GL_FRAMEBUFFER, 0);
+	xr_check(xrReleaseSwapchainImage(t->swapchain, &release_info), "xrReleaseSwapchainImage");
+	t->acquired = 0;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Session                                                                    */
+/* ------------------------------------------------------------------------- */
 
 /* Everything created so far, in reverse. Keeps the failed flag. */
 static void xr_teardown(void)
 {
 	int failed = xr.failed;
 
-	xr_destroy_swapchain();
-
-	if (xr.framebuffer && gl.DeleteFramebuffers)
+	if (xr.bound_eye)
 	{
-		gl.DeleteFramebuffers(1, &xr.framebuffer);
+		vr_gl_eye_end();
 	}
+
+	xr_release(&xr.screen);
+	xr_release(&xr.eye[0]);
+	xr_release(&xr.eye[1]);
+	xr_destroy_target(&xr.screen);
+	xr_destroy_target(&xr.eye[0]);
+	xr_destroy_target(&xr.eye[1]);
+
 	if (xr.space != XR_NULL_HANDLE)
 	{
 		xrDestroySpace(xr.space);
@@ -164,6 +314,49 @@ static void xr_teardown(void)
 
 	memset(&xr, 0, sizeof(xr));
 	xr.failed = failed;
+}
+
+static int xr_choose_format(void)
+{
+	int64_t *formats;
+	uint32_t count = 0, i;
+
+	if (!xr_check(xrEnumerateSwapchainFormats(xr.session, 0, &count, NULL), "xrEnumerateSwapchainFormats") || !count)
+	{
+		return 0;
+	}
+
+	formats = malloc(count * sizeof(*formats));
+	if (!formats)
+	{
+		return 0;
+	}
+
+	if (xr_check(xrEnumerateSwapchainFormats(xr.session, count, &count, formats), "xrEnumerateSwapchainFormats"))
+	{
+		/* sRGB first: the engine writes gamma-encoded colour, stored unconverted. */
+		for (i = 0; i < count && !xr.format; ++i)
+		{
+			if (formats[i] == GL_SRGB8_ALPHA8)
+			{
+				xr.format = formats[i];
+			}
+		}
+		for (i = 0; i < count && !xr.format; ++i)
+		{
+			if (formats[i] == GL_RGBA8)
+			{
+				xr.format = formats[i];
+			}
+		}
+	}
+	free(formats);
+
+	if (!xr.format)
+	{
+		vr_printf("VR: the runtime offers no RGBA8 swapchain format");
+	}
+	return xr.format != 0;
 }
 
 static int xr_start(void)
@@ -189,7 +382,7 @@ static int xr_start(void)
 		return 0;
 	}
 
-	if (!load_gl())
+	if (!vr_gl_load())
 	{
 		vr_printf("VR: the GL context has no framebuffer objects");
 		return 0;
@@ -269,15 +462,14 @@ static int xr_start(void)
 
 	space_info.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
 	space_info.poseInReferenceSpace.orientation.w = 1.0f;
-	if (!xr_check(xrCreateReferenceSpace(xr.session, &space_info, &xr.space), "xrCreateReferenceSpace"))
+	if (!xr_check(xrCreateReferenceSpace(xr.session, &space_info, &xr.space), "xrCreateReferenceSpace") ||
+		!xr_choose_format())
 	{
 		return 0;
 	}
 
-	gl.GenFramebuffers(1, &xr.framebuffer);
-
 	/* The headset paces the frame loop from now on (xrWaitFrame). The desktop
-	   window's vsync would be a second clock fighting it, so turn it off. */
+	   window's vsync would be a second clock fighting it, so it goes off. */
 	swap_interval = (swap_interval_t)wglGetProcAddress("wglSwapIntervalEXT");
 	if (swap_interval)
 	{
@@ -285,88 +477,6 @@ static int xr_start(void)
 	}
 
 	vr_printf("VR: session created");
-	return 1;
-}
-
-static int xr_make_swapchain(int width, int height)
-{
-	XrSwapchainCreateInfo info = { XR_TYPE_SWAPCHAIN_CREATE_INFO };
-	int64_t *formats = NULL;
-	int64_t chosen = 0;
-	uint32_t count = 0, i;
-
-	xr_destroy_swapchain();
-
-	if (!xr_check(xrEnumerateSwapchainFormats(xr.session, 0, &count, NULL), "xrEnumerateSwapchainFormats") || !count)
-	{
-		return 0;
-	}
-
-	formats = malloc(count * sizeof(*formats));
-	if (!formats || !xr_check(xrEnumerateSwapchainFormats(xr.session, count, &count, formats), "xrEnumerateSwapchainFormats"))
-	{
-		free(formats);
-		return 0;
-	}
-
-	/* sRGB first: the frame holds gamma-encoded colour, copied across unconverted. */
-	for (i = 0; i < count && !chosen; ++i)
-	{
-		if (formats[i] == GL_SRGB8_ALPHA8)
-		{
-			chosen = formats[i];
-		}
-	}
-	for (i = 0; i < count && !chosen; ++i)
-	{
-		if (formats[i] == GL_RGBA8)
-		{
-			chosen = formats[i];
-		}
-	}
-	free(formats);
-
-	if (!chosen)
-	{
-		vr_printf("VR: the runtime offers no RGBA8 swapchain format");
-		return 0;
-	}
-
-	info.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT;
-	info.format = chosen;
-	info.sampleCount = 1;
-	info.width = (uint32_t)width;
-	info.height = (uint32_t)height;
-	info.faceCount = 1;
-	info.arraySize = 1;
-	info.mipCount = 1;
-	if (!xr_check(xrCreateSwapchain(xr.session, &info, &xr.swapchain), "xrCreateSwapchain"))
-	{
-		return 0;
-	}
-
-	if (!xr_check(xrEnumerateSwapchainImages(xr.swapchain, 0, &xr.image_count, NULL), "xrEnumerateSwapchainImages"))
-	{
-		xr_destroy_swapchain();
-		return 0;
-	}
-
-	xr.images = calloc(xr.image_count, sizeof(*xr.images));
-	for (i = 0; xr.images && i < xr.image_count; ++i)
-	{
-		xr.images[i].type = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR;
-	}
-
-	if (!xr.images || !xr_check(xrEnumerateSwapchainImages(xr.swapchain, xr.image_count, &xr.image_count,
-			(XrSwapchainImageBaseHeader *)xr.images), "xrEnumerateSwapchainImages"))
-	{
-		xr_destroy_swapchain();
-		return 0;
-	}
-
-	xr.width = width;
-	xr.height = height;
-	vr_printf("VR: virtual screen %dx%d, format 0x%X, %u images", width, height, (unsigned)chosen, xr.image_count);
 	return 1;
 }
 
@@ -417,87 +527,12 @@ static void xr_poll_events(void)
 	}
 }
 
-/* Copies the finished frame, still in the back buffer, into the screen's next image. */
-static int xr_copy_backbuffer(void)
+/* Starts OpenXR on first use and handles its events. True while frames can be submitted. */
+static int xr_ready(void)
 {
-	XrSwapchainImageAcquireInfo acquire_info = { XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
-	XrSwapchainImageWaitInfo wait_info = { XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO };
-	XrSwapchainImageReleaseInfo release_info = { XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
-	GLint read_framebuffer = 0, draw_framebuffer = 0;
-	GLboolean scissor, srgb;
-	uint32_t index = 0;
-
-	if (!xr_check(xrAcquireSwapchainImage(xr.swapchain, &acquire_info, &index), "xrAcquireSwapchainImage"))
-	{
-		return 0;
-	}
-
-	wait_info.timeout = XR_INFINITE_DURATION;
-	if (!xr_check(xrWaitSwapchainImage(xr.swapchain, &wait_info), "xrWaitSwapchainImage"))
-	{
-		return 0;
-	}
-
-	glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read_framebuffer);
-	glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_framebuffer);
-	scissor = glIsEnabled(GL_SCISSOR_TEST);
-	srgb = glIsEnabled(GL_FRAMEBUFFER_SRGB);
-
-	/* A blit is clipped by the scissor test, and must not convert to sRGB. */
-	if (scissor)
-	{
-		glDisable(GL_SCISSOR_TEST);
-	}
-	if (srgb)
-	{
-		glDisable(GL_FRAMEBUFFER_SRGB);
-	}
-
-	gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, xr.framebuffer);
-	gl.FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, xr.images[index].image, 0);
-
-	if (!xr.framebuffer_checked)
-	{
-		GLenum status = gl.CheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
-
-		if (status != GL_FRAMEBUFFER_COMPLETE)
-		{
-			vr_printf("VR: virtual screen framebuffer incomplete (0x%X)", (unsigned)status);
-		}
-		xr.framebuffer_checked = 1;
-	}
-
-	gl.BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-	gl.BlitFramebuffer(0, 0, xr.width, xr.height, 0, 0, xr.width, xr.height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-
-	gl.BindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)read_framebuffer);
-	gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)draw_framebuffer);
-	if (scissor)
-	{
-		glEnable(GL_SCISSOR_TEST);
-	}
-	if (srgb)
-	{
-		glEnable(GL_FRAMEBUFFER_SRGB);
-	}
-
-	return xr_check(xrReleaseSwapchainImage(xr.swapchain, &release_info), "xrReleaseSwapchainImage");
-}
-
-void vr_xr_frame(float screen_distance, float screen_width)
-{
-	XrFrameWaitInfo wait_info = { XR_TYPE_FRAME_WAIT_INFO };
-	XrFrameBeginInfo begin_info = { XR_TYPE_FRAME_BEGIN_INFO };
-	XrFrameEndInfo end_info = { XR_TYPE_FRAME_END_INFO };
-	XrFrameState frame_state = { XR_TYPE_FRAME_STATE };
-	XrCompositionLayerQuad quad = { XR_TYPE_COMPOSITION_LAYER_QUAD };
-	const XrCompositionLayerBaseHeader *layers[1];
-	uint32_t layer_count = 0;
-	RECT client;
-
 	if (xr.failed)
 	{
-		return;
+		return 0;
 	}
 
 	if (!xr.started)
@@ -507,7 +542,7 @@ void vr_xr_frame(float screen_distance, float screen_width)
 			xr_teardown();
 			xr.failed = 1;
 			vr_printf("VR: not available - carrying on flatscreen");
-			return;
+			return 0;
 		}
 		xr.started = 1;
 	}
@@ -519,10 +554,63 @@ void vr_xr_frame(float screen_distance, float screen_width)
 		xr_teardown();
 		xr.failed = 1;
 		vr_printf("VR: the runtime ended the session - carrying on flatscreen");
-		return;
+		return 0;
 	}
 
-	if (!xr.running)
+	return xr.running;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Theatre screen                                                             */
+/* ------------------------------------------------------------------------- */
+
+static int xr_make_screen(int width, int height)
+{
+	xr_destroy_target(&xr.screen);
+
+	if (!xr_create_target(&xr.screen, width, height, 0))
+	{
+		xr_destroy_target(&xr.screen);
+		return 0;
+	}
+
+	vr_printf("VR: theatre screen %dx%d, format 0x%X, %u images", width, height, (unsigned)xr.format,
+		xr.screen.image_count);
+	return 1;
+}
+
+/* Copies the finished frame, still in the window's back buffer, onto the screen. */
+static int xr_copy_window(int width, int height)
+{
+	blit_state_t state;
+	int copied;
+
+	blit_state_begin(&state);
+
+	copied = xr_acquire(&xr.screen);
+	if (copied)
+	{
+		vrgl.BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+		vrgl.BlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	}
+	xr_release(&xr.screen);
+
+	blit_state_end(&state);
+	return copied;
+}
+
+void vr_xr_frame(float screen_distance, float screen_width, int force_render)
+{
+	XrFrameWaitInfo wait_info = { XR_TYPE_FRAME_WAIT_INFO };
+	XrFrameBeginInfo begin_info = { XR_TYPE_FRAME_BEGIN_INFO };
+	XrFrameEndInfo end_info = { XR_TYPE_FRAME_END_INFO };
+	XrFrameState frame_state = { XR_TYPE_FRAME_STATE };
+	XrCompositionLayerQuad quad = { XR_TYPE_COMPOSITION_LAYER_QUAD };
+	const XrCompositionLayerBaseHeader *layers[1];
+	uint32_t layer_count = 0;
+	RECT client;
+
+	if (!xr_ready())
 	{
 		return;
 	}
@@ -533,10 +621,19 @@ void vr_xr_frame(float screen_distance, float screen_width)
 		return;
 	}
 
-	if (frame_state.shouldRender && GetClientRect(WindowFromDC(xr.dc), &client) &&
+	/* The runtime says no while the headset is idle - on the desk, or not worn. */
+	if (!frame_state.shouldRender && !xr.warned_idle)
+	{
+		vr_printf("VR: the headset does not need frames yet (session %s)%s", state_name(xr.state),
+			force_render ? " - rendering anyway for vr_force_render" : " - put it on to start");
+		xr.warned_idle = 1;
+	}
+
+	if ((frame_state.shouldRender || force_render) && GetClientRect(WindowFromDC(xr.dc), &client) &&
 		client.right > 0 && client.bottom > 0 &&
-		((client.right == xr.width && client.bottom == xr.height) || xr_make_swapchain(client.right, client.bottom)) &&
-		xr_copy_backbuffer())
+		((client.right == xr.screen.width && client.bottom == xr.screen.height) ||
+			xr_make_screen(client.right, client.bottom)) &&
+		xr_copy_window(client.right, client.bottom))
 	{
 		if (screen_distance < 0.5f)
 		{
@@ -549,13 +646,13 @@ void vr_xr_frame(float screen_distance, float screen_width)
 
 		quad.space = xr.space;
 		quad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
-		quad.subImage.swapchain = xr.swapchain;
-		quad.subImage.imageRect.extent.width = xr.width;
-		quad.subImage.imageRect.extent.height = xr.height;
+		quad.subImage.swapchain = xr.screen.swapchain;
+		quad.subImage.imageRect.extent.width = xr.screen.width;
+		quad.subImage.imageRect.extent.height = xr.screen.height;
 		quad.pose.orientation.w = 1.0f;
 		quad.pose.position.z = -screen_distance;
 		quad.size.width = screen_width;
-		quad.size.height = screen_width * (float)xr.height / (float)xr.width;
+		quad.size.height = screen_width * (float)xr.screen.height / (float)xr.screen.width;
 		layers[layer_count++] = (const XrCompositionLayerBaseHeader *)&quad;
 	}
 
@@ -569,9 +666,316 @@ void vr_xr_frame(float screen_distance, float screen_width)
 		xr.frames_shown++;
 		if (xr.frames_shown == 1 || xr.frames_shown % 5400 == 0)
 		{
-			vr_printf("VR: %u frames shown on the virtual screen", xr.frames_shown);
+			vr_printf("VR: %u frames shown on the theatre screen", xr.frames_shown);
 		}
 	}
+}
+
+/* ------------------------------------------------------------------------- */
+/* Stereo                                                                     */
+/* ------------------------------------------------------------------------- */
+
+int vr_xr_stereo_possible(void)
+{
+	return xr.started && xr.running && !xr.failed && !xr.stereo_failed;
+}
+
+static int xr_make_eye_targets(void)
+{
+	XrViewConfigurationView config[2];
+	uint32_t count = 0;
+	int i;
+
+	memset(config, 0, sizeof(config));
+	config[0].type = config[1].type = XR_TYPE_VIEW_CONFIGURATION_VIEW;
+	if (!xr_check(xrEnumerateViewConfigurationViews(xr.instance, xr.system, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
+			2, &count, config), "xrEnumerateViewConfigurationViews") || count != 2)
+	{
+		return 0;
+	}
+
+	for (i = 0; i < 2; ++i)
+	{
+		if (!xr_create_target(&xr.eye[i], (int)config[i].recommendedImageRectWidth,
+				(int)config[i].recommendedImageRectHeight, 1))
+		{
+			return 0;
+		}
+	}
+
+	vr_printf("VR: stereo eye buffers %dx%d, format 0x%X", xr.eye[0].width, xr.eye[0].height, (unsigned)xr.format);
+	return 1;
+}
+
+/* Waits for the runtime, begins its frame, and locates both eyes for its display time. */
+static int xr_begin_stereo(int force_render)
+{
+	XrFrameWaitInfo wait_info = { XR_TYPE_FRAME_WAIT_INFO };
+	XrFrameBeginInfo begin_info = { XR_TYPE_FRAME_BEGIN_INFO };
+	XrFrameState frame_state = { XR_TYPE_FRAME_STATE };
+	XrViewLocateInfo locate_info = { XR_TYPE_VIEW_LOCATE_INFO };
+	XrViewState view_state = { XR_TYPE_VIEW_STATE };
+	uint32_t count = 0;
+	int i;
+
+	if (!xr_check(xrWaitFrame(xr.session, &wait_info, &frame_state), "xrWaitFrame") ||
+		!xr_check(xrBeginFrame(xr.session, &begin_info), "xrBeginFrame"))
+	{
+		return 0;
+	}
+
+	xr.in_frame = 1;
+	xr.eyes_rendered = 0;
+	xr.display_time = frame_state.predictedDisplayTime;
+	xr.should_render = frame_state.shouldRender || force_render;
+
+	/* The runtime says no while the headset is idle - on the desk, or not worn. */
+	if (!frame_state.shouldRender && !xr.warned_idle)
+	{
+		vr_printf("VR: the headset does not need frames yet (session %s)%s", state_name(xr.state),
+			force_render ? " - rendering anyway for vr_force_render" : " - put it on to start");
+		xr.warned_idle = 1;
+	}
+
+	memset(xr.views, 0, sizeof(xr.views));
+	xr.views[0].type = xr.views[1].type = XR_TYPE_VIEW;
+	locate_info.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+	locate_info.displayTime = xr.display_time;
+	locate_info.space = xr.space;
+
+	if (!xr_check(xrLocateViews(xr.session, &locate_info, &view_state, 2, &count, xr.views), "xrLocateViews") ||
+		count != 2 || !(view_state.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT))
+	{
+		xr.should_render = 0; /* nothing to render from: this frame submits no layers */
+	}
+
+	for (i = 0; i < 2; ++i)
+	{
+		const XrView *view = &xr.views[i];
+		vr_eye_t *eye = &xr.eye_views[i];
+
+		eye->position[0] = view->pose.position.x;
+		eye->position[1] = view->pose.position.y;
+		eye->position[2] = view->pose.position.z;
+		eye->orientation[0] = view->pose.orientation.x;
+		eye->orientation[1] = view->pose.orientation.y;
+		eye->orientation[2] = view->pose.orientation.z;
+		eye->orientation[3] = view->pose.orientation.w;
+		eye->tan_left = tanf(view->fov.angleLeft);
+		eye->tan_right = tanf(view->fov.angleRight);
+		eye->tan_down = tanf(view->fov.angleDown);
+		eye->tan_up = tanf(view->fov.angleUp);
+	}
+
+	return 1;
+}
+
+/* Nothing else clears an eye target, and a clear needs every write mask open. */
+static void xr_clear_bound_target(const xr_target_t *t)
+{
+	GLboolean depth_mask, color_mask[4], scissor;
+	GLfloat clear_color[4];
+	GLdouble clear_depth;
+	GLint clear_stencil;
+
+	glGetBooleanv(GL_DEPTH_WRITEMASK, &depth_mask);
+	glGetBooleanv(GL_COLOR_WRITEMASK, color_mask);
+	glGetFloatv(GL_COLOR_CLEAR_VALUE, clear_color);
+	glGetDoublev(GL_DEPTH_CLEAR_VALUE, &clear_depth);
+	glGetIntegerv(GL_STENCIL_CLEAR_VALUE, &clear_stencil);
+	scissor = glIsEnabled(GL_SCISSOR_TEST);
+
+	glDepthMask(GL_TRUE);
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	if (scissor)
+	{
+		glDisable(GL_SCISSOR_TEST);
+	}
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearDepth(1.0);
+	glClearStencil(0);
+
+	/* ref_gl's BeginFrame set a full-window viewport; this is its eye-sized equal. */
+	glViewport(0, 0, t->width, t->height);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+	glDepthMask(depth_mask);
+	glColorMask(color_mask[0], color_mask[1], color_mask[2], color_mask[3]);
+	if (scissor)
+	{
+		glEnable(GL_SCISSOR_TEST);
+	}
+	glClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
+	glClearDepth(clear_depth);
+	glClearStencil(clear_stencil);
+}
+
+/* The left eye, cropped to the window's shape, into the window's back buffer. */
+static void xr_mirror(const xr_target_t *t)
+{
+	blit_state_t state;
+	double aspect;
+	int width, height, x, y;
+
+	if (xr.window_width <= 0 || xr.window_height <= 0)
+	{
+		return;
+	}
+
+	aspect = (double)xr.window_width / xr.window_height;
+	width = t->width;
+	height = (int)(width / aspect);
+	if (height > t->height)
+	{
+		height = t->height;
+		width = (int)(height * aspect);
+	}
+	x = (t->width - width) / 2;
+	y = (t->height - height) / 2;
+
+	blit_state_begin(&state);
+	vrgl.BindFramebuffer(GL_READ_FRAMEBUFFER, t->framebuffer);
+	vrgl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	vrgl.BlitFramebuffer(x, y, x + width, y + height, 0, 0, xr.window_width, xr.window_height,
+		GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	blit_state_end(&state);
+}
+
+const vr_eye_t *vr_xr_begin_eye(int pass, int window_width, int window_height, int force_render)
+{
+	xr_target_t *t;
+	const vr_eye_t *eye;
+
+	if (pass == 0)
+	{
+		if (!vr_xr_stereo_possible() || !xr_ready())
+		{
+			return NULL;
+		}
+
+		if (xr.eye[0].swapchain == XR_NULL_HANDLE && !xr_make_eye_targets())
+		{
+			xr_destroy_target(&xr.eye[0]);
+			xr_destroy_target(&xr.eye[1]);
+			xr.stereo_failed = 1;
+			vr_printf("VR: stereo is not available - staying on the theatre screen");
+			return NULL;
+		}
+
+		if (!xr_begin_stereo(force_render))
+		{
+			return NULL;
+		}
+
+		xr.window_width = window_width;
+		xr.window_height = window_height;
+	}
+	else if (pass != 1 || !xr.in_frame)
+	{
+		return NULL;
+	}
+
+	if (!xr.should_render || xr.bound_eye)
+	{
+		return NULL;
+	}
+
+	t = &xr.eye[pass];
+	if (!xr_acquire(t))
+	{
+		xr_release(t);
+		return NULL;
+	}
+
+	xr_clear_bound_target(t);
+	xr.bound_eye = pass + 1;
+
+	eye = &xr.eye_views[pass];
+	vr_gl_eye_begin(t->width, t->height, window_width, window_height,
+		eye->tan_left, eye->tan_right, eye->tan_down, eye->tan_up);
+	return eye;
+}
+
+void vr_xr_end_eye(void)
+{
+	int eye = xr.bound_eye - 1;
+
+	if (eye < 0)
+	{
+		return;
+	}
+
+	vr_gl_eye_end();
+
+	/* The image may only be read while it is still acquired. */
+	if (eye == 0)
+	{
+		xr_mirror(&xr.eye[0]);
+	}
+
+	xr_release(&xr.eye[eye]);
+	xr.eyes_rendered |= 1 << eye;
+	xr.bound_eye = 0;
+}
+
+int vr_xr_end_stereo_frame(void)
+{
+	XrFrameEndInfo end_info = { XR_TYPE_FRAME_END_INFO };
+	XrCompositionLayerProjection layer = { XR_TYPE_COMPOSITION_LAYER_PROJECTION };
+	XrCompositionLayerProjectionView views[2];
+	const XrCompositionLayerBaseHeader *layers[1];
+	uint32_t layer_count = 0;
+	int i;
+
+	if (!xr.in_frame)
+	{
+		return 0;
+	}
+
+	vr_xr_end_eye();
+
+	if (xr.should_render && xr.eyes_rendered == 3)
+	{
+		memset(views, 0, sizeof(views));
+		for (i = 0; i < 2; ++i)
+		{
+			/* Exactly the pose and field of view the eye was rendered with. */
+			views[i].type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW;
+			views[i].pose = xr.views[i].pose;
+			views[i].fov = xr.views[i].fov;
+			views[i].subImage.swapchain = xr.eye[i].swapchain;
+			views[i].subImage.imageRect.extent.width = xr.eye[i].width;
+			views[i].subImage.imageRect.extent.height = xr.eye[i].height;
+		}
+
+		layer.space = xr.space;
+		layer.viewCount = 2;
+		layer.views = views;
+		layers[layer_count++] = (const XrCompositionLayerBaseHeader *)&layer;
+	}
+	else if (xr.should_render && !xr.warned_incomplete)
+	{
+		vr_printf("VR: a stereo frame rendered %s - nothing was submitted for it",
+			xr.eyes_rendered == 1 ? "only the left eye" : xr.eyes_rendered == 2 ? "only the right eye" : "no eyes");
+		xr.warned_incomplete = 1;
+	}
+
+	end_info.displayTime = xr.display_time;
+	end_info.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+	end_info.layerCount = layer_count;
+	end_info.layers = layers;
+
+	if (xr_check(xrEndFrame(xr.session, &end_info), "xrEndFrame") && layer_count)
+	{
+		xr.stereo_frames++;
+		if (xr.stereo_frames == 1 || xr.stereo_frames % 5400 == 0)
+		{
+			vr_printf("VR: %u frames rendered in stereo", xr.stereo_frames);
+		}
+	}
+
+	xr.in_frame = 0;
+	return 1;
 }
 
 void vr_xr_shutdown(void)
@@ -583,7 +987,7 @@ void vr_xr_shutdown(void)
 
 	if (xr.started)
 	{
-		vr_printf("VR: shutting down after %u frames", xr.frames_shown);
+		vr_printf("VR: shutting down after %u stereo and %u theatre frames", xr.stereo_frames, xr.frames_shown);
 	}
 
 	xr_teardown();
