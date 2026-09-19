@@ -92,6 +92,7 @@ static const binding_t bindings_hp[] = {
 	{ ACT_WEAPON_PREV, "/user/hand/left/input/y/click" },
 	{ ACT_RUN,         "/user/hand/left/input/squeeze/value" },
 	{ ACT_MENU,        "/user/hand/left/input/menu/click" },
+	{ ACT_MENU,        "/user/hand/right/input/menu/click" },
 	{ ACT_RECENTRE,    "/user/hand/left/input/thumbstick/click" },
 	{ ACT_MOVE,        "/user/hand/left/input/thumbstick" },
 	{ ACT_TURN,        "/user/hand/right/input/thumbstick" },
@@ -111,6 +112,7 @@ static const binding_t bindings_wmr[] = {
 	{ ACT_RECENTRE,    "/user/hand/left/input/thumbstick/click" },
 	{ ACT_RUN,         "/user/hand/left/input/squeeze/click" },
 	{ ACT_MENU,        "/user/hand/left/input/menu/click" },
+	{ ACT_MENU,        "/user/hand/right/input/menu/click" },
 	{ ACT_MOVE,        "/user/hand/left/input/thumbstick" },
 	{ ACT_TURN,        "/user/hand/right/input/thumbstick" },
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
@@ -172,6 +174,8 @@ static const profile_t profiles[] = {
 	{ "/interaction_profiles/khr/simple_controller", bindings_simple, ARRAY_COUNT(bindings_simple) }
 };
 
+static const char *const key_names[VR_KEY_COUNT] = { "up", "down", "left", "right", "enter", "escape", "space" };
+
 static XrInstance xr_instance;
 static XrActionSet action_set;
 static cvar_t *vr_input;
@@ -180,6 +184,8 @@ static cvar_t *vr_fake_axes;
 static cvar_t *vr_fake_press;
 static cvar_t *vr_fake_key;
 static cvar_t *vr_fake_hand;
+static cvar_t *vr_fake_idle_press;
+static DWORD last_fake_idle;
 static int fake_held = -1;
 static int fake_frames;
 static int fake_menu;
@@ -223,6 +229,7 @@ void vr_input_startup(void)
 	vr_fake_press = vr_cvar("vr_fake_press", "", 0);
 	vr_fake_key = vr_cvar("vr_fake_key", "", 0);
 	vr_fake_hand = vr_cvar("vr_fake_hand", "", 0);
+	vr_fake_idle_press = vr_cvar("vr_fake_idle_press", "", 0);
 	vr_recentre_double = vr_cvar("vr_recentre_double", "1", CVAR_ARCHIVE);
 
 	for (i = 0; i < ACT_COUNT; ++i)
@@ -294,7 +301,7 @@ static XrPath string_to_path(XrInstance instance, const char *string)
 static void suggest_profile(XrInstance instance, const profile_t *profile)
 {
 	XrInteractionProfileSuggestedBinding suggested = { XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING };
-	XrActionSuggestedBinding list[ARRAY_COUNT(bindings_hp)];
+	XrActionSuggestedBinding list[32];
 	uint32_t count = 0;
 	XrResult result;
 	int i;
@@ -430,7 +437,6 @@ static void press_action(int index, int down, int menu);
  * "key:<name>" taps that key instead, for the parts of the game that only
  * listen to the keyboard - SiN's menu, which has no command to open it.
  */
-static const char *const key_names[VR_KEY_COUNT] = { "up", "down", "left", "right", "enter", "escape" };
 
 static int tap_bound_key(const char *command)
 {
@@ -616,6 +622,8 @@ static void press_action(int index, int down, int menu)
 		/* Nothing is held in an interface: a press is a tap of a key. */
 		if (down)
 		{
+			vrlog("    input: %s pressed -> key %s (in an interface)", actions[index].name,
+				key_names[menu_key_for(index)]);
 			vr_key_tap(menu_key_for(index));
 		}
 		return;
@@ -879,6 +887,75 @@ void vr_input_frame(XrSession session)
 	do_fake_press();
 	do_fake_key();
 	read_sticks(session, menu);
+}
+
+void vr_input_idle(XrSession session)
+{
+	XrActiveActionSet active = { XR_NULL_HANDLE, XR_NULL_PATH };
+	XrActionsSyncInfo sync_info = { XR_TYPE_ACTIONS_SYNC_INFO };
+	int i;
+
+	if (action_set == XR_NULL_HANDLE || !vr_input || vr_input->value == 0.0f)
+	{
+		return;
+	}
+
+	vr_joy_set(0.0f, 0.0f, 0.0f);
+
+	/* Desk testing: "vr_fake_idle_press 1" presses a button once a second for
+	   as long as the engine is not drawing - an impatient player at the card. */
+	if (vr_fake_idle_press && vr_fake_idle_press->value != 0.0f && GetTickCount() - last_fake_idle >= 1000)
+	{
+		last_fake_idle = GetTickCount();
+		vrlog("    input: a pretend button while the engine is not drawing -> key space");
+		vr_key_tap(VR_KEY_SPACE);
+	}
+
+	active.actionSet = action_set;
+	sync_info.countActiveActionSets = 1;
+	sync_info.activeActionSets = &active;
+	if (xrSyncActions(session, &sync_info) != XR_SUCCESS)
+	{
+		return;
+	}
+
+	for (i = 0; i < ACT_COUNT; ++i)
+	{
+		XrActionStateGetInfo get_info = { XR_TYPE_ACTION_STATE_GET_INFO };
+		XrActionStateBoolean state = { XR_TYPE_ACTION_STATE_BOOLEAN };
+		int down;
+
+		if (actions[i].kind != KIND_BUTTON || actions[i].action == XR_NULL_HANDLE)
+		{
+			continue;
+		}
+
+		get_info.action = actions[i].action;
+		if (XR_FAILED(xrGetActionStateBoolean(session, &get_info, &state)))
+		{
+			continue;
+		}
+
+		down = state.isActive && state.currentState;
+
+		/* Held since the game was running: let the game have its release. */
+		if (actions[i].down && !down)
+		{
+			actions[i].down = 0;
+			if (i != ACT_RECENTRE)
+			{
+				dispatch(&actions[i], 0);
+			}
+			continue;
+		}
+
+		if (down && !actions[i].down)
+		{
+			actions[i].down = 1;
+			vrlog("    input: %s pressed while the engine is not drawing -> key space", actions[i].name);
+			vr_key_tap(VR_KEY_SPACE);
+		}
+	}
 }
 
 /* Anything held down is let go of, as if the player had released it. A press

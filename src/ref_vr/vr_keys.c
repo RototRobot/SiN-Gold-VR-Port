@@ -21,7 +21,8 @@ static const key_t keys[VR_KEY_COUNT] = {
 	{ VK_LEFT, 0x4B, 1 },
 	{ VK_RIGHT, 0x4D, 1 },
 	{ VK_RETURN, 0x1C, 0 },
-	{ VK_ESCAPE, 0x01, 0 }
+	{ VK_ESCAPE, 0x01, 0 },
+	{ VK_SPACE, 0x39, 0 }
 };
 
 /* The window ref_gl is drawing into, which is the one the engine listens to. */

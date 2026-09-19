@@ -17,9 +17,10 @@ test workflow, and the traps already hit.
    scarce resource. Two things to know before you read a failed run as a bug:
    - a headset nobody is wearing gets `shouldRender = false`, so VR runs need `vr_force_render 1` (`-Vr`
      passes it);
-   - a level starts on a "PRESS ANY KEY TO CONTINUE" card, and the engine runs no console commands while
-     it is up, so an unattended `+exec` run hangs there. `desk-test.ps1` posts a keypress every second.
-     When a run stops making progress, capture the screen before theorising about it;
+   - a level starts on a "PRESS ANY KEY TO CONTINUE" card, and the engine runs no console commands - and
+     calls no renderer function - while it is up, so an unattended `+exec` run hangs there.
+     `desk-test.ps1` posts a keypress until the world appears; `-NoCardKey` leaves it to the mod's own idle
+     pump. When a run stops making progress, capture the screen before theorising about it;
    - a `wait` holds up everything behind it in the command buffer, so a `wait`-heavy test cfg swallows
      console commands the mod itself queues - use `desk-test.ps1 -KeepRunning` for those;
    - SiN pauses and paints over the view when its window is not active (`-Foreground`), and archived

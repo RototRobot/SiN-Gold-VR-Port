@@ -105,6 +105,7 @@ The mod adds these cvars:
 | `vr_fake_press` | | Desk testing: the name of a button to press for a few frames, e.g. `jump` |
 | `vr_fake_key` | | Desk testing: a key to tap - `up`, `down`, `left`, `right`, `enter`, `escape` |
 | `vr_fake_hand` | | Desk testing: "`<x> <y> <z> <pitch> <yaw> <roll>`" puts the right hand there |
+| `vr_fake_idle_press` | 0 | Desk testing: presses a button once a second while the engine is not drawing |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. Needed for unattended VR runs |
 | `vr_trace` | 1 | Log the renderer calls of each new kind of frame |
 
@@ -427,6 +428,23 @@ touches it: the controllers arrive the way a player's own binds and joystick wou
    rather than `DrawPic`, so nothing in the renderer's own traffic gives it away.
 7. **Clicking the left stick twice recentres** (`vr_recentre_double 0` for one click), which is the same
    thing `vr_recenter 1` does from the console.
+8. **Both menu buttons are Escape**, because which hand a player reaches for varies; the Windows button is
+   the runtime's and never reaches the application.
+9. **The idle pump.** While SiN's "PRESS ANY KEY TO CONTINUE" card is up the engine stops calling the
+   renderer altogether - but it keeps pumping window messages, which is how the keyboard reaches the card.
+   Everything above runs inside renderer calls, so on the card the controllers went deaf and the headset
+   was left on SteamVR's loading grid. A `WM_TIMER` on the engine's window (`idle_timer` in `ref_vr.c`)
+   now notices when nothing has been drawn for 100 ms after a theatre frame, and `vr_xr_idle` keeps the
+   OpenXR frame loop going - re-showing the last released image of the theatre swapchain, so nothing is
+   drawn - while `vr_input_idle` turns any button into a space bar. Buttons held when the engine went
+   quiet are released first, so no `+command` is left held. It never starts OpenXR, never runs inside a
+   renderer call, and steps aside after a stereo frame, which the runtime reprojects better.
+   - Verified with `desk-test.ps1 -NoCardKey`, which leaves the card to the mod, and
+     `+set vr_fake_idle_press 1`, a pretend button pressed once a second while the engine is quiet: the
+     card went at 10.97 s and the world was in stereo at 11.0 s, with 50 idle frames in between.
+10. **Input needs the headset awake.** OpenXR only gives an application its actions while the session is
+    `FOCUSED`, and SteamVR drops that when the headset's proximity sensor says nobody is wearing it. That
+    is the runtime's rule, not something to work around: for desk testing, stop the headset sleeping.
 
 What the desk runs showed, on `sindm6` with `deathmatch 1`:
 

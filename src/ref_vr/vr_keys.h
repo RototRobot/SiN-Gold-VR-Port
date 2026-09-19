@@ -18,6 +18,7 @@ typedef enum
 	VR_KEY_RIGHT,
 	VR_KEY_ENTER,
 	VR_KEY_ESCAPE,
+	VR_KEY_SPACE,
 	VR_KEY_COUNT
 } vr_key_t;
 

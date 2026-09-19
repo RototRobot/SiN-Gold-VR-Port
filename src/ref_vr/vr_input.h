@@ -41,6 +41,13 @@ void vr_input_frame(XrSession session);
  */
 void vr_input_hands(XrSession session, XrSpace space, XrTime time, float units_per_metre);
 
+/*
+ * While the engine is not drawing, the one thing that listens is SiN's "press
+ * any key" card, so any button taps the space bar there. Buttons held when the
+ * engine stopped are let go of first, so no "+command" is left held.
+ */
+void vr_input_idle(XrSession session);
+
 /* Lets go of anything held, and centres the sticks. */
 void vr_input_release(void);
 

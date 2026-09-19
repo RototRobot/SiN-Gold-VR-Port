@@ -79,6 +79,16 @@ static int g_eye_index;
 static int g_eye_renders_logged;
 static int g_comfort_applied;
 
+/* The idle pump (vr_xr_idle): a timer on the engine's window that looks after
+   the headset whenever the engine has gone quiet. */
+#define IDLE_TIMER_ID 0x53494E56 /* "SINV" */
+#define IDLE_AFTER_MS 100
+static HWND g_idle_window;
+static DWORD g_last_draw_tick;
+static int g_in_renderer;
+
+static void start_idle_timer(void);
+
 /* ------------------------------------------------------------------------- */
 /* Output                                                                     */
 /* ------------------------------------------------------------------------- */
@@ -604,9 +614,60 @@ static int vr_Init(void *hinstance, void *wndproc)
 		vr_printf("SiN Gold VR renderer %s over ref_gl.dll: %s | %s | GL %s", SINVR_VERSION,
 			(const char *)glGetString(GL_VENDOR), (const char *)glGetString(GL_RENDERER),
 			(const char *)glGetString(GL_VERSION));
+
+		if (vr_enable->value != 0.0f)
+		{
+			g_last_draw_tick = GetTickCount();
+			start_idle_timer();
+		}
 	}
 
 	return result;
+}
+
+/*
+ * WM_TIMER is delivered from the engine's own message loop, on the engine's
+ * thread, with ref_gl's context current - between frames, never inside one.
+ * SiN keeps pumping messages while its "press any key" card is up, which is
+ * exactly when it stops drawing, so this is where the headset is kept alive.
+ */
+static int force_render(void);
+
+static VOID CALLBACK idle_timer(HWND window, UINT message, UINT_PTR id, DWORD now)
+{
+	(void)window;
+	(void)message;
+	(void)id;
+	(void)now;
+
+	if (g_in_renderer || !vr_enable || vr_enable->value == 0.0f ||
+		GetTickCount() - g_last_draw_tick < IDLE_AFTER_MS)
+	{
+		return;
+	}
+
+	vr_xr_idle(force_render());
+}
+
+static void start_idle_timer(void)
+{
+	HDC dc = wglGetCurrentDC();
+
+	g_idle_window = dc ? WindowFromDC(dc) : NULL;
+	if (g_idle_window && !SetTimer(g_idle_window, IDLE_TIMER_ID, 11, idle_timer))
+	{
+		g_idle_window = NULL;
+	}
+}
+
+static void stop_idle_timer(void)
+{
+	/* Before this DLL can be unloaded: a timer left behind would call into it. */
+	if (g_idle_window)
+	{
+		KillTimer(g_idle_window, IDLE_TIMER_ID);
+		g_idle_window = NULL;
+	}
 }
 
 static void vr_Shutdown(void)
@@ -614,6 +675,7 @@ static void vr_Shutdown(void)
 	int i;
 
 	record_call(RE_SHUTDOWN);
+	stop_idle_timer();
 
 	/* Before ref_gl destroys the GL context the OpenXR session belongs to. */
 	g_eye = NULL;
@@ -647,6 +709,8 @@ static void vr_BeginFrame(float camera_separation)
 	int width, height;
 
 	record_call(RE_BEGIN_FRAME);
+	g_in_renderer = 1;
+	g_last_draw_tick = GetTickCount();
 
 	if (g_separation_count < 4)
 	{
@@ -853,6 +917,8 @@ static void vr_EndFrame(void)
 	g_stereo_frame = 0;
 	update_stereo();
 	end_frame_trace();
+	g_last_draw_tick = GetTickCount();
+	g_in_renderer = 0;
 }
 
 /* ------------------------------------------------------------------------- */

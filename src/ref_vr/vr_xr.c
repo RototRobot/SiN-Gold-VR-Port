@@ -73,6 +73,9 @@ static struct
 	/* Theatre screen. */
 	xr_target_t screen;
 	unsigned frames_shown;
+	float screen_distance, screen_width; /* as last shown, for the idle frames */
+	int last_was_theatre;                /* the last frame shown was the screen */
+	unsigned idle_frames;
 
 	/* Stereo. */
 	int stereo_failed;
@@ -717,6 +720,9 @@ void vr_xr_frame(float screen_distance, float screen_width, int force_render)
 		quad.size.width = screen_width;
 		quad.size.height = screen_width * (float)xr.screen.height / (float)xr.screen.width;
 		layers[layer_count++] = (const XrCompositionLayerBaseHeader *)&quad;
+
+		xr.screen_distance = screen_distance;
+		xr.screen_width = screen_width;
 	}
 
 	end_info.displayTime = frame_state.predictedDisplayTime;
@@ -727,9 +733,64 @@ void vr_xr_frame(float screen_distance, float screen_width, int force_render)
 	if (xr_check(xrEndFrame(xr.session, &end_info), "xrEndFrame") && layer_count)
 	{
 		xr.frames_shown++;
+		xr.last_was_theatre = 1;
 		if (xr.frames_shown == 1 || xr.frames_shown % 5400 == 0)
 		{
 			vr_printf("VR: %u frames shown on the theatre screen", xr.frames_shown);
+		}
+	}
+}
+
+void vr_xr_idle(int force_render)
+{
+	XrFrameWaitInfo wait_info = { XR_TYPE_FRAME_WAIT_INFO };
+	XrFrameBeginInfo begin_info = { XR_TYPE_FRAME_BEGIN_INFO };
+	XrFrameEndInfo end_info = { XR_TYPE_FRAME_END_INFO };
+	XrFrameState frame_state = { XR_TYPE_FRAME_STATE };
+	XrCompositionLayerQuad quad = { XR_TYPE_COMPOSITION_LAYER_QUAD };
+	const XrCompositionLayerBaseHeader *layers[1];
+	uint32_t layer_count = 0;
+
+	/* Never starts OpenXR, and never interrupts a frame the engine began. */
+	if (!xr.started || xr.in_frame || !xr.last_was_theatre || !xr_ready())
+	{
+		return;
+	}
+
+	/* The engine is not reading buttons now, but the card is waiting for one. */
+	vr_input_idle(xr.session);
+
+	if (!xr_check(xrWaitFrame(xr.session, &wait_info, &frame_state), "xrWaitFrame") ||
+		!xr_check(xrBeginFrame(xr.session, &begin_info), "xrBeginFrame"))
+	{
+		return;
+	}
+
+	/* The swapchain's last released image is shown again: nothing is drawn. */
+	if ((frame_state.shouldRender || force_render) && xr.frames_shown > 0)
+	{
+		quad.space = xr.space;
+		quad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+		quad.subImage.swapchain = xr.screen.swapchain;
+		quad.subImage.imageRect.extent.width = xr.screen.width;
+		quad.subImage.imageRect.extent.height = xr.screen.height;
+		quad.pose.orientation.w = 1.0f;
+		quad.pose.position.z = -xr.screen_distance;
+		quad.size.width = xr.screen_width;
+		quad.size.height = xr.screen_width * (float)xr.screen.height / (float)xr.screen.width;
+		layers[layer_count++] = (const XrCompositionLayerBaseHeader *)&quad;
+	}
+
+	end_info.displayTime = frame_state.predictedDisplayTime;
+	end_info.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+	end_info.layerCount = layer_count;
+	end_info.layers = layers;
+	if (xr_check(xrEndFrame(xr.session, &end_info), "xrEndFrame"))
+	{
+		xr.idle_frames++;
+		if (xr.idle_frames == 1)
+		{
+			vr_printf("VR: the engine has stopped drawing - keeping the headset and controllers going");
 		}
 	}
 }
@@ -1180,6 +1241,11 @@ int vr_xr_end_stereo_frame(void)
 	end_info.layerCount = layer_count;
 	end_info.layers = layers;
 
+	if (layer_count)
+	{
+		xr.last_was_theatre = 0;
+	}
+
 	if (xr_check(xrEndFrame(xr.session, &end_info), "xrEndFrame") && layer_count)
 	{
 		xr.stereo_frames++;
@@ -1202,7 +1268,8 @@ void vr_xr_shutdown(void)
 
 	if (xr.started)
 	{
-		vr_printf("VR: shutting down after %u stereo and %u theatre frames", xr.stereo_frames, xr.frames_shown);
+		vr_printf("VR: shutting down after %u stereo, %u theatre and %u idle frames", xr.stereo_frames,
+			xr.frames_shown, xr.idle_frames);
 	}
 
 	xr_teardown();

@@ -95,7 +95,8 @@ unaffected either way.
 | Right **B** | Next weapon |
 | Left **Y** | Previous weapon |
 | Left grip | Run |
-| Left menu | Opens and closes the game menu |
+| Either menu button | Opens and closes the game menu (Escape) |
+| Any button, on "PRESS ANY KEY TO CONTINUE" | Continues |
 | Left stick, click twice | Recentre: the way you are standing and facing becomes forward |
 
 In a menu, on the loading screen or with the console up, the controllers turn into a keyboard instead:
@@ -146,6 +147,11 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   **weapon model** still follows the view, and the crosshair is drawn in the HUD panel rather than on
   the weapon's own axis - so it shows where you are looking, not where the gun points.
 - The body does not move with the headset yet: walking and turning are the sticks' job.
+- **The controllers only work while the headset is awake.** OpenXR gives an application controller input
+  only while it has the input focus, and SteamVR takes the focus away when the headset goes to sleep -
+  put it down on a desk and the game stops hearing the controllers. For testing with the headset off your
+  head, stop it sleeping: turn off SteamVR's option to pause VR when the headset is idle, or cover the
+  proximity sensor between the lenses.
 - Head poses are measured from where you were when you put the headset on. `vr_recenter 1` in the
   console does it again if you end up off-centre.
 

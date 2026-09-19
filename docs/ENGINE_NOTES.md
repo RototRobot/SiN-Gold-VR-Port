@@ -148,6 +148,10 @@ These come from `sinvr.log` in an unattended run: start the game, `map bank`, ta
 - **Call counts over the run:** `DrawChar` 14.8k, `slot+0x68` 13.5k, `slot+0x64` 1.1k, `RenderFrame` 409.
 - **Where the mod folder's files go.** With `+set game sinvr`, the engine writes its config, saves and screenshots under
   `sinvr\players\blade\`. The normal `base` config is never touched.
+- **During the level-start card the engine calls the renderer not at all, but keeps pumping window
+  messages** - that is how the keyboard reaches the card. A `WM_TIMER` with a `TIMERPROC` on the engine's
+  window therefore still runs, on the engine's thread, between its own work: the mod's idle pump lives
+  there (HANDOFF §11). Measured: the card came up about 5 s into `map bank` and the timer ran throughout.
 - **The level-start card, and the "load stall" that wasn't.** After the last precache line (`sky`),
   `sin.exe` shows a full-screen card - Blade against a circuit board, with "PRESS ANY KEY TO CONTINUE" in
   red - and waits for a key. While it is up:

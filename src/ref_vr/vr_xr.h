@@ -68,6 +68,16 @@ void vr_xr_request_recenter(void);
  */
 void vr_xr_request_eye_dump(void);
 
+/*
+ * For when the engine has stopped drawing without stopping its loop - SiN's
+ * "press any key" card does exactly that. Keeps the OpenXR frame loop going, so
+ * that the headset goes on showing the last theatre picture instead of the
+ * runtime's own loading grid, and so that the controllers can answer the card.
+ * Does nothing if the last thing shown was a stereo frame, which the runtime
+ * reprojects better than anything this could offer.
+ */
+void vr_xr_idle(int force_render);
+
 /* Destroys everything and allows a fresh start. Safe when nothing was started. */
 void vr_xr_shutdown(void);
 

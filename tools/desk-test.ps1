@@ -36,7 +36,8 @@ param(
     [string]$ExtraArgs = "",
     [string]$Commands = "",
     [switch]$Foreground,
-    [switch]$KeepRunning
+    [switch]$KeepRunning,
+    [switch]$NoCardKey
 )
 
 $ErrorActionPreference = "Stop"
@@ -128,7 +129,8 @@ while (-not $process.HasExited) {
     }
 
     if (-not $sawWorld) {
-        Send-Key $process 0x20 0x39                        # space
+        # -NoCardKey leaves the card to the mod itself, to test that it can.
+        if (-not $NoCardKey) { Send-Key $process 0x20 0x39 }   # space
         $tail = Get-Content $rendererLog -Tail 60 -ErrorAction SilentlyContinue
         $sawWorld = [bool]($tail -match "RenderFrame")
     }
