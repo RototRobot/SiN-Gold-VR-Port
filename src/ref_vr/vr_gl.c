@@ -46,6 +46,40 @@ static struct
 	float fov, depth;
 } hud = { 60.0f, 6.0f };
 
+/*
+ * A model to be drawn at another size: the view weapon in the hand. ref_gl
+ * places each model with glTranslatef to its origin and then turns it with
+ * glRotatef, so a uniform scale straight after the translate to that origin
+ * scales exactly that model, and anything drawn with it, and nothing else.
+ */
+typedef void(APIENTRY *gl_translate_t)(GLfloat x, GLfloat y, GLfloat z);
+static gl_translate_t real_glTranslatef;
+
+static struct
+{
+	int armed;
+	float origin[3];
+	float scale;
+} resize;
+
+void vr_gl_resize_model_at(const float origin[3], float scale)
+{
+	resize.armed = scale > 0.0f && scale != 1.0f;
+	memcpy(resize.origin, origin, sizeof(resize.origin));
+	resize.scale = scale;
+}
+
+static void APIENTRY hook_glTranslatef(GLfloat x, GLfloat y, GLfloat z)
+{
+	real_glTranslatef(x, y, z);
+
+	if (eye.active && resize.armed && fabsf(x - resize.origin[0]) < 0.01f &&
+		fabsf(y - resize.origin[1]) < 0.01f && fabsf(z - resize.origin[2]) < 0.01f)
+	{
+		glScalef(resize.scale, resize.scale, resize.scale);
+	}
+}
+
 void vr_gl_set_hud(float fov, float depth)
 {
 	hud.fov = fov > 20.0f ? (fov < 170.0f ? fov : 170.0f) : 20.0f;
@@ -246,6 +280,11 @@ static FARPROC WINAPI hook_GetProcAddress(HMODULE module, LPCSTR name)
 	{
 		real_glFrustum = (gl_frustum_t)proc;
 		return (FARPROC)hook_glFrustum;
+	}
+	if (strcmp(name, "glTranslatef") == 0)
+	{
+		real_glTranslatef = (gl_translate_t)proc;
+		return (FARPROC)hook_glTranslatef;
 	}
 	if (strcmp(name, "glOrtho") == 0)
 	{

@@ -81,9 +81,42 @@ typedef struct cvar_s
 } cvar_t;
 
 /*
- * The leading part of refdef_t, identical to Quake 2's; checked against
- * ref_gl's own r_newrefdef. The rest of the struct is not mapped yet, so it
- * must only ever be used through a pointer the engine supplies.
+ * One model in the frame: Quake 2's entity_t, grown by SiN to 200 bytes.
+ * ref_gl walks the list in steps of 0xC8, tests the flags at +0x48 and takes
+ * the model from +0; the rest was read off the view weapon's entity at runtime
+ * (docs/ENGINE_NOTES.md). Fields named unknown_* have not been identified.
+ */
+#define RF_MINLIGHT 0x1
+#define RF_VIEWERMODEL 0x2
+#define RF_WEAPONMODEL 0x4
+#define RF_FRAMELERP 0x40
+
+typedef struct
+{
+	void *model;                    /* +0x00 */
+	float angles[3];                /* +0x04 pitch, yaw, roll */
+	float origin[3];                /* +0x10 */
+	int frame;                      /* +0x1C */
+	float oldorigin[3];             /* +0x20 */
+	int oldframe;                   /* +0x2C */
+	float backlerp;                 /* +0x30 */
+	int skinnum;                    /* +0x34 */
+	int lightstyle;                 /* +0x38 */
+	float alpha;                    /* +0x3C */
+	void *skin;                     /* +0x40 */
+	int unknown_44;                 /* +0x44 SiN's own; zero on the view weapon */
+	int flags;                      /* +0x48 RF_* */
+	float axis[3][3];               /* +0x4C forward, left, up */
+	unsigned char unknown_70[0x3C]; /* +0x70 */
+	float scale;                    /* +0xAC 1 on the view weapon */
+	unsigned char unknown_b0[0x18]; /* +0xB0 */
+} entity_t;
+
+/*
+ * refdef_t: Quake 2's, with 16 bytes SiN added at the end. ref_gl copies
+ * exactly 0x78 bytes of it into its own r_newrefdef, and reads the entity count
+ * and list at +0x50 and +0x54. The fields between rdflags and the entities, and
+ * after them, follow Quake 2's order, but only the entity pair is confirmed.
  */
 #define RDF_UNDERWATER 1
 #define RDF_NOWORLDMODEL 2
@@ -97,6 +130,15 @@ typedef struct
 	float blend[4];
 	float time;
 	int rdflags;
+	unsigned char *areabits;        /* +0x48 */
+	void *lightstyles;              /* +0x4C */
+	int num_entities;               /* +0x50 confirmed */
+	entity_t *entities;             /* +0x54 confirmed */
+	int num_dlights;                /* +0x58 */
+	void *dlights;                  /* +0x5C */
+	int num_particles;              /* +0x60 */
+	void *particles;                /* +0x64 */
+	unsigned char unknown_68[0x10]; /* +0x68 SiN's own */
 } refdef_t;
 
 /* Compile-time checks against the layouts measured in the binaries. */
@@ -104,6 +146,12 @@ typedef char refimport_size_check[sizeof(refimport_t) == 0x94 ? 1 : -1];
 typedef char refexport_size_check[sizeof(refexport_t) == 0x94 ? 1 : -1];
 typedef char refdef_vieworg_check[offsetof(refdef_t, vieworg) == 0x18 ? 1 : -1];
 typedef char refdef_rdflags_check[offsetof(refdef_t, rdflags) == 0x44 ? 1 : -1];
+typedef char refdef_entities_check[offsetof(refdef_t, entities) == 0x54 ? 1 : -1];
+typedef char refdef_size_check[sizeof(refdef_t) == 0x78 ? 1 : -1];
+typedef char entity_size_check[sizeof(entity_t) == 0xC8 ? 1 : -1];
+typedef char entity_flags_check[offsetof(entity_t, flags) == 0x48 ? 1 : -1];
+typedef char entity_axis_check[offsetof(entity_t, axis) == 0x4C ? 1 : -1];
+typedef char entity_scale_check[offsetof(entity_t, scale) == 0xAC ? 1 : -1];
 typedef char cvar_value_check[offsetof(cvar_t, value) == 0x14 ? 1 : -1];
 
 #endif /* REFAPI_H */

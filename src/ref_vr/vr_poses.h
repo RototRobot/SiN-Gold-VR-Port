@@ -17,4 +17,7 @@ void vr_poses_end(void);
 /* Nothing is tracked any more: the game should go back to its own aiming. */
 void vr_poses_clear(void);
 
+/* The block as last written, for the renderer's own use (the view weapon). */
+const sinvr_poses_t *vr_poses_current(void);
+
 #endif /* VR_POSES_H */

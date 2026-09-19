@@ -106,6 +106,10 @@ The mod adds these cvars:
 | `vr_fake_key` | | Desk testing: a key to tap - `up`, `down`, `left`, `right`, `enter`, `escape` |
 | `vr_fake_hand` | | Desk testing: "`<x> <y> <z> <pitch> <yaw> <roll>`" puts the right hand there |
 | `vr_fake_idle_press` | 0 | Desk testing: presses a button once a second while the engine is not drawing |
+| `vr_weapon_hand` | 1 | Draw the view weapon in the right hand (archived) |
+| `vr_weapon_scale` | 0.75 | The view weapon's size in the hand (archived) |
+| `vr_weapon_offset` | -18 -10 14 | The model's origin from the hand: forward, right, up, game units (archived) |
+| `vr_crosshair` | 0 | 1 keeps SiN's crosshair while the weapon is in the hand (archived) |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. Needed for unattended VR runs |
 | `vr_trace` | 1 | Log the renderer calls of each new kind of frame |
 
@@ -213,6 +217,7 @@ python -c "from PIL import Image; im = Image.open('sinvr_eye0.tga').convert('L')
 | `src/ref_vr/vr_joy.c` | The joystick that only exists in this process, which is how the sticks reach the engine |
 | `src/ref_vr/vr_keys.c` | Keystrokes posted to the engine's window, for the menus and the console |
 | `src/ref_vr/vr_poses.c` | The head and hand poses the game module reads, and the export that hands them over |
+| `src/ref_vr/vr_weapon.c` | Moves the view weapon's entity to the right hand, before each eye is drawn |
 | `src/shared/sinvr_poses.h` | The contract between the two DLLs: the block, its frame of reference |
 | `src/game_vr/vr_link.cpp` | The game module's side of that link. Ours, built into the game DLL |
 | `src/ref_vr/vr_hook.c` | Patching another module's imports, shared by the GL and joystick hooks |
@@ -499,13 +504,31 @@ fired every frame, so the client is not turning a console `+attack` into a userc
 controller and mouse input does fire, so this is a limit of the harness, not of the game: the aiming
 maths is what the owner's next headset test exercises.
 
+5. **The weapon in the hand** (`vr_weapon.c`). The view weapon is an ordinary entity in the frame's list,
+   flagged `RF_WEAPONMODEL` and placed at the eye. Before each eye is drawn - while `fd` still holds the
+   engine's own view, since the hand is measured from it - it is moved to the right hand: `origin` and
+   `oldorigin` (so `RF_FRAMELERP` has nothing to interpolate), `angles`, which is what ref_gl actually
+   turns the model with, and the orientation matrix kept in step. The client rebuilds the list every
+   frame, so nothing is put back, and the two stereo passes simply do the same thing twice.
+   - **Size.** Nothing in the entity scales it: the 1.0 at +0xAC is not a scale, and scaling the matrix
+     rows does nothing because the model is turned with `glRotatef` from the angles. ref_gl places every
+     model with `glTranslatef` to its origin, though, so `vr_gl.c` answers ref_gl's `glTranslatef` lookup
+     too and adds a `glScalef` straight after a translate to the weapon's origin. Uniform scale commutes
+     with the rotations that follow, so exactly that model changes size - and the muzzle flash with it.
+   - **The grip.** The view models are built around the camera, so their origin is far from their grip:
+     in the stock view the assault rifle's grip sits about 35 degrees right of and 41 below the view axis
+     (measured in an eye dump). `vr_weapon_offset` moves the model's origin in the hand's frame, and is
+     scaled with it, so once it is right the grip stays in the hand at any size. The default
+     (-18 -10 14) is a first guess; the headset is where it gets settled.
+   - **The crosshair** is SiN's `ch<n>_on`/`ch<n>_off` pic in the middle of the view - where the head
+     looks. While the weapon is in the hand it is left out (`vr_crosshair 1` keeps it).
+   - Checked in eye dumps with `vr_fake_hand`: the weapon moves to the pretend hand and turns with it,
+     half scale draws it half the size, and the crosshair is gone.
+
 Still to do:
 
-- **The weapon model belongs in the hand.** It is drawn by the engine from `refdef_t`, so this is
-  renderer work: `refdef_t` past `rdflags` and `entity_t` still need mapping. The size the owner noticed
-  is best fixed there, with a scale, rather than by changing projections.
-- **The crosshair belongs on the weapon's axis,** not in the head-locked HUD panel. Once the weapon is
-  drawn from the hand, the crosshair can be a world-space mark where the weapon points - or simply
-  dropped, since a tracked gun aims itself.
+- **Settle the grip and size in the headset**, and probably per weapon: they are all built differently.
+- **A reticle where the gun points**, projected into each eye, to replace the crosshair that was hidden.
+- **The left hand** has no model yet; SiN's view models only have the one hand.
 - **Comfort and roomscale:** snap turning, crouching, and the body following the head.
 - **Hand tracking** (`XR_EXT_hand_tracking`) is the same channel with a different source.

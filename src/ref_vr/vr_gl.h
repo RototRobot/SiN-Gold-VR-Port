@@ -70,6 +70,12 @@ void vr_gl_set_hud(float fov, float depth);
 void vr_gl_full_screen_2d(int on);
 
 /*
+ * Draws the model placed at origin - to within a hundredth of a unit - at
+ * scale times its size, for as long as eyes are being drawn. 1 turns it off.
+ */
+void vr_gl_resize_model_at(const float origin[3], float scale);
+
+/*
  * While an eye is rendered, ref_gl's viewports and scissors, which are in window
  * coordinates, are mapped onto the eye's target - the whole of it for the world,
  * the HUD panel for 2D - and every projection it sets up is replaced by the eye's

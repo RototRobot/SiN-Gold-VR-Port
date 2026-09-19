@@ -52,6 +52,11 @@ void vr_poses_clear(void)
 	poses.frame = frame;
 }
 
+const sinvr_poses_t *vr_poses_current(void)
+{
+	return &poses;
+}
+
 /* ref_vr.dll's side of the contract. */
 __declspec(dllexport) const sinvr_poses_t *SinVrPoses(int version)
 {

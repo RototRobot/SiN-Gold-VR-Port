@@ -279,6 +279,25 @@ does the movement work itself. The console says `joystick detected` where it use
   to the engine's window with the right scan code and the extended bit works: the menu's selection moved
   round its wheel exactly as it would from the keyboard.
 
+## The frame's entity list, and the view weapon (2026-09-19)
+
+- **`refdef_t` is 0x78 bytes**: ref_gl's R_RenderView copies exactly 30 dwords of it into its own
+  `r_newrefdef` (ref_gl+0x95C40, found from the `rdflags & RDF_NOWORLDMODEL` test at +0x44). The entity
+  count and list are at +0x50 and +0x54, as in Quake II; R_DrawEntitiesOnList walks the list in steps
+  of 0xC8.
+- **`entity_t` is 0xC8 bytes.** Read off the view weapon at runtime: `model` +0x00, `angles` +0x04,
+  `origin` +0x10, `frame` +0x1C, `oldorigin` +0x20, `oldframe` +0x2C, `backlerp` +0x30 (changes each
+  frame), `alpha` +0x3C (1.0), `flags` +0x48, and a 3x3 orientation matrix at +0x4C with rows forward,
+  left, up. The rest is unidentified; +0x44 is zero and +0xAC holds 1.0 but is not a scale.
+- **The view weapon's flags are 0x47**: `RF_MINLIGHT | RF_VIEWERMODEL | RF_WEAPONMODEL | RF_FRAMELERP`.
+  SiN has no depth hack for it - bit 4 is `RF_ENVMAPPED` here - so it is an ordinary world-space model,
+  and moving it is just a matter of setting its fields.
+- **Models are placed with `glTranslatef` and turned with `glRotatef`** from `angles` (29 calls to the
+  rotate, none to `glMultMatrixf`), which is why changing the matrix does nothing to the drawing. The
+  only `glScalef` calls in ref_gl are the left-handed weapon flip (`-1, 1, 1`) and an identity, so there
+  is no per-entity scale anywhere in the renderer.
+- **The crosshair is a 2D pic**, `ch1_off` for the default one, drawn through `DrawPic`.
+
 ## The game module's aiming and firing path (2026-09-16)
 
 - **Every weapon asks its owner where to shoot from.** `Weapon::GetMuzzlePosition` calls

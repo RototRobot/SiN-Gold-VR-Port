@@ -24,6 +24,7 @@
 #include "ref_vr.h"
 #include "vr_gl.h"
 #include "vr_input.h"
+#include "vr_weapon.h"
 #include "vr_view.h"
 #include "vr_xr.h"
 #include "vrlog.h"
@@ -61,6 +62,7 @@ static cvar_t *vr_stereo;
 static cvar_t *vr_worldscale;
 static cvar_t *vr_hud_fov;
 static cvar_t *vr_hud_depth;
+static cvar_t *vr_crosshair;
 static cvar_t *vr_trace;
 static cvar_t *vr_force_render;
 static cvar_t *vr_recenter;
@@ -386,6 +388,7 @@ static void register_cvars(void)
 	vr_worldscale = cvar_get("vr_worldscale", "39.37", CVAR_ARCHIVE);
 	vr_hud_fov = cvar_get("vr_hud_fov", "60", CVAR_ARCHIVE);
 	vr_hud_depth = cvar_get("vr_hud_depth", "6", CVAR_ARCHIVE);
+	vr_crosshair = cvar_get("vr_crosshair", "0", CVAR_ARCHIVE);
 	vr_trace = cvar_get("vr_trace", "1", 0);
 	vr_force_render = cvar_get("vr_force_render", "0", 0);
 	vr_recenter = cvar_get("vr_recenter", "0", 0);
@@ -601,6 +604,7 @@ static int vr_Init(void *hinstance, void *wndproc)
 	if (vr_enable->value != 0.0f)
 	{
 		vr_input_startup();
+		vr_weapon_startup();
 	}
 
 	result = ((re_init_t)g_real_slot[RE_INIT])(hinstance, wndproc);
@@ -799,6 +803,9 @@ static void vr_RenderFrame(refdef_t *fd)
 		return;
 	}
 
+	/* Before the view moves to the eye: the hand is measured from the engine's own. */
+	vr_weapon_to_hand(fd);
+
 	vr_view_apply(fd, g_eye, vr_worldscale_units(), &saved);
 
 	if (g_eye_renders_logged < 4)
@@ -861,18 +868,46 @@ static void note_pic(const char *name)
 	}
 }
 
+/*
+ * SiN's crosshair is a pic, ch<n>_on or ch<n>_off, drawn in the middle of the
+ * view - where the head looks. Once the gun is in the hand and aims itself,
+ * that only misleads, so it is left out unless vr_crosshair asks for it.
+ */
+static int crosshair_hidden(const char *name)
+{
+	const char *p;
+
+	if (!vr_weapon_in_hand() || (vr_crosshair && vr_crosshair->value != 0.0f) || !name ||
+		_strnicmp(name, "ch", 2) != 0)
+	{
+		return 0;
+	}
+
+	for (p = name + 2; *p >= '0' && *p <= '9'; ++p)
+	{
+	}
+
+	return p > name + 2 && _strnicmp(p, "_o", 2) == 0;
+}
+
 static void vr_DrawPic(int x, int y, const char *name)
 {
 	record_call(RE_DRAW_PIC);
 	note_pic(name);
-	((re_draw_pic_t)g_real_slot[RE_DRAW_PIC])(x, y, name);
+	if (!crosshair_hidden(name))
+	{
+		((re_draw_pic_t)g_real_slot[RE_DRAW_PIC])(x, y, name);
+	}
 }
 
 static void vr_DrawStretchPic(int x, int y, int width, int height, const char *name)
 {
 	record_call(RE_DRAW_STRETCH_PIC);
 	note_pic(name);
-	((re_draw_stretch_pic_t)g_real_slot[RE_DRAW_STRETCH_PIC])(x, y, width, height, name);
+	if (!crosshair_hidden(name))
+	{
+		((re_draw_stretch_pic_t)g_real_slot[RE_DRAW_STRETCH_PIC])(x, y, width, height, name);
+	}
 }
 
 /*
