@@ -285,18 +285,82 @@ does the movement work itself. The console says `joystick detected` where it use
   `r_newrefdef` (ref_gl+0x95C40, found from the `rdflags & RDF_NOWORLDMODEL` test at +0x44). The entity
   count and list are at +0x50 and +0x54, as in Quake II; R_DrawEntitiesOnList walks the list in steps
   of 0xC8.
-- **`entity_t` is 0xC8 bytes.** Read off the view weapon at runtime: `model` +0x00, `angles` +0x04,
-  `origin` +0x10, `frame` +0x1C, `oldorigin` +0x20, `oldframe` +0x2C, `backlerp` +0x30 (changes each
-  frame), `alpha` +0x3C (1.0), `flags` +0x48, and a 3x3 orientation matrix at +0x4C with rows forward,
-  left, up. The rest is unidentified; +0x44 is zero and +0xAC holds 1.0 but is not a scale.
+- **`entity_t` is 0xC8 bytes.** Read off the view weapon at runtime and out of the code that fills and
+  draws it: `model` +0x00 (ref_gl's `model_t`, which begins with its name, so the view weapon's name can
+  be read straight off it), `angles` +0x04, `origin` +0x10, `frame` +0x1C, `oldorigin` +0x20, `oldframe`
+  +0x2C, `backlerp` +0x30, `alpha` +0x3C, `flags` +0x48, a 3x3 orientation matrix at +0x4C with rows
+  forward, left, up, an id at +0x88 that attachments refer to, `groups[24]` at +0x8C, the animation at
+  +0xA8, `scale` at +0xAC, and the gravity axis at +0xC4.
+- **+0xAC is the model's scale.** SiN's model drawer (ref_gl+0x19910) copies it into a global that the
+  vertex setup (+0x18420) multiplies every vertex and every frame offset by, and the client's
+  `GetBoneTransform` takes it as its scale argument - so a bone stays where the drawn model has it.
+  (An earlier pass through here concluded it was not a scale. It is; two eye dumps at 1.0 and 0.35 with
+  nothing else changed settle it.)
+- **`groups[24]` is per-group render flags**, OR-ed into each group's own (`MDL_GROUP_NODRAW` 0x80 is
+  honoured: the draw loop skips a group whose flags have bit 7). The index is not into the `.sbm`'s
+  groups, though - it is into the groups the model's `.def` *names*, each of which lists the `.sbm`
+  groups it covers. A model whose `.def` names none, like the fists, cannot have parts switched off this
+  way; a clip plane is the way to cut one in half.
 - **The view weapon's flags are 0x47**: `RF_MINLIGHT | RF_VIEWERMODEL | RF_WEAPONMODEL | RF_FRAMELERP`.
   SiN has no depth hack for it - bit 4 is `RF_ENVMAPPED` here - so it is an ordinary world-space model,
   and moving it is just a matter of setting its fields.
-- **Models are placed with `glTranslatef` and turned with `glRotatef`** from `angles` (29 calls to the
-  rotate, none to `glMultMatrixf`), which is why changing the matrix does nothing to the drawing. The
-  only `glScalef` calls in ref_gl are the left-handed weapon flip (`-1, 1, 1`) and an identity, so there
-  is no per-entity scale anywhere in the renderer.
+- **Models are placed with `glTranslatef` and turned with `glRotatef`** from `angles`, inside a
+  `glPushMatrix`/`glPopMatrix` pair with nothing else pushed in between - which is what makes a clip
+  plane set at the translate and cleared at the pop apply to exactly one model. `R_RotateForEntity`
+  (ref_gl+0xEA00) is translate, `glRotatef(yaw, z)`, `glRotatef(-pitch, y)`, `glRotatef(-roll, x)`;
+  the model drawer negates the pitch around it, so the entity's `angles` are in the same sense as the
+  player's view angles (pitch positive looks down), and the axis rows at +0x4C are the true orientation.
 - **The crosshair is a 2D pic**, `ch1_off` for the default one, drawn through `DrawPic`.
+
+## The client's view weapon and its effects (2026-09-19)
+
+All RVAs are for the Steam build of `sin.exe` (preferred base 0x400000, ASLR on).
+
+- **The player's own weapon entity never goes into the scene as itself.** `CL_AddPacketEntities`
+  (+0x5970) spots the entity whose parent is the player and which is flagged `RF_VIEWERMODEL`, copies it
+  aside to a global at +0x153640 and skips it.
+- **`CL_AddViewWeapon` (+0x7100)** builds the view weapon from that copy each frame:
+  `origin = cl.refdef.vieworg + lerp(ps->gunoffset)` and `angles = cl.refdef.viewangles +
+  LerpAngle(ps->gunangles)` (the game fills both in `Player::CalcGunOffset`), then `AngleVectors` into
+  the entity's axis, then `V_AddEntity` at **+0x747F**. After that it negates the entity's pitch - the
+  sense the bone code wants - and runs the model's client-side commands on the same entity, which is
+  where the muzzle flash, tracers, shell cases, dynamic light and the client's own bullet impacts come
+  from. The entity whose commands are running is in a global at +0x1532F4.
+- **`V_AddEntity` (+0x25520)** copies 0xC8 bytes into the scene list at +0x30E920 (up to 256 entities,
+  count at +0x31B120) and, for an entity with a parent, notes it in an attachment table at +0x309D20.
+- **The `.def` files' client commands** are dispatched by name in `CL_CMDS_ProcessCommands` (+0x191E0):
+  `attach`, `bonespawn`, `shootbullets`, `dlight`, `spawn`, `shootbeam`, `cachemodel` and so on.
+- **`shootbullets` (+0x208F0, called at +0x1A707)** traces its bullets from **the player's eye** - the
+  centity's origin plus the view height - along the *entity's* angles, with a random spread, and calls
+  the impact effect (+0x207B0) at each hit: surface sound, sparks, a decal and surface debris. The same
+  effect function is what the `TE_GUNSHOT` temp entity runs (`CL_ParseTEnt` +0x219E0, case 0), so a
+  server-sent impact looks exactly like a client-predicted one. Player weapons pass `server_effects =
+  false` in the game module, which is why their impacts are the client's and start at the eye.
+- **The def's `origin` and `scale`** are stored in the model header at +0x90 and +0x94..0x9C and applied
+  by the renderer as `(raw + origin) * scale` - not `(raw - origin)`, which is what the numbers first
+  suggest.
+
+## SiN's model files (2026-09-19)
+
+Read with a small parser written for this (`scratchpad/sinmodel.py`), against the game's own `pak0.sin`.
+
+- **The paks are `SPAK`**: magic, directory offset, directory length; entries are 120-byte names plus
+  offset and size, 128 bytes each.
+- **A `.def` is text** (`SDEF`): `path`, `origin`, `scale`, the `.sbm` base model, skins, the named
+  animations (`.sam` files), `id <n> group <name> [bone <name> <angles>]` lines, and then `!init:` and
+  `!main:` sections of `server`/`client` commands tied to animation frames.
+- **`.sbm`**: magic `SBM `, version, vertex count, texture-coordinate count, group count, an offset and
+  the file size; then one 24-byte record per group - an id, a vertex count, a command count, and three
+  offsets *relative to the record itself* - followed by Quake-style GL command lists (strip or fan
+  length, then s, t and a vertex index per vertex).
+- **`.sam`**: magic `SAM `, version, a 64-byte name, some overall values, then the vertex count, frame
+  count and frame table offset; each frame is 44 bytes (a movement delta, a time, a scale, a translate
+  and an offset to its vertices, again relative to the record), and its vertices are one byte per axis
+  plus a normal index, as Quake's are.
+- What that gives: **where each part of a view model is**, which is how the table of grips and sizes in
+  `vr_weapon.c` was measured. Most of SiN's two-handed weapons model only the *left* hand, on the
+  fore-end; the right hand that would hold the grip is off the bottom of the screen and was never built.
+  The fists are the one view model with two arms, cleanly separated either side of y = 0.
 
 ## The game module's aiming and firing path (2026-09-16)
 

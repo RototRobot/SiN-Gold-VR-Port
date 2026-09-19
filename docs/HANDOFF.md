@@ -4,7 +4,7 @@ This is the handoff for anyone joining the project, whether a person or an AI. I
 why it is shaped the way it is, how to build and test it, what has already been learned the hard way,
 and what comes next. The detailed evidence lives in the other files in `docs/`; this one is the map.
 
-*Last updated 2026-09-16 (fifth pass).*
+*Last updated 2026-09-19 (sixth pass).*
 
 ## 1. Where the project is
 
@@ -15,7 +15,7 @@ and what comes next. The detailed evidence lives in the other files in `docs/`; 
 | 3. Stereo rendering with head tracking | ✅ Built and verified at the desk on 2026-09-16: 406 projection-layer frames in one run, correct per-eye poses and fields of view, ~87 frames/s at 2444×2392 per eye. Not yet seen in the headset by a person. How it works: [§9](#9-how-stereo-works) |
 | 4. HUD, crosshair and console in VR | ✅ Built 2026-09-16. The 2D goes into a panel `vr_hud_fov` degrees wide, `vr_hud_depth` metres away, centred on each eye's own axis - which is also what stops the crosshair from doubling. [§9](#9-how-stereo-works) |
 | 5. Motion controller input | ✅ Built 2026-09-16: buttons run console commands, the sticks arrive as a joystick the engine polls, and in menus both turn into keystrokes. Measured at the desk. [§11](#11-controller-input) |
-| 6. Tracked hands | 🚧 The head and both hands reach the game module, and `Player::GunPosition`/`GetGunOrientation` aim from the right hand. Verified as far as the desk allows: the game prints that it is tracking. The weapon model and the crosshair still follow the view. [§12](#12-tracked-hands) |
+| 6. Tracked hands | ✅ Built 2026-09-19. The weapon is drawn on the controller, at a per-weapon grip the player can set in the headset, and fires down its own barrel; sin.exe itself places it, so its muzzle flash, tracers and impacts come from there too. The fists are one arm per hand. Firing is the one part the desk cannot exercise. [§12](#12-tracked-hands) |
 | 7–9 | Roomscale comfort, Wages of Sin, and packaging (see the roadmap in the [README](../README.md)) |
 
 ## 2. How it fits together
@@ -99,16 +99,18 @@ The mod adds these cvars:
 | `vr_deadzone` | 0.15 | Stick deadzone, applied to both axes together (archived) |
 | `vr_bind_*` | see §11 | The console command each button runs, or `key:<name>` for a keystroke (archived) |
 | `vr_recentre_double` | 1 | Two clicks of the left stick to recentre; 0 for one (archived) |
-| `vr_aim` | 1 | Game module: shots come from the tracked right hand |
-| `vr_dump_eye` | 0 | Set to 1 to write the next frame's eye images beside `sin.exe` as `sinvr_eye0/1.tga` |
-| `vr_fake_axes` | | Desk testing: "`<forward> <side> <turn>`" pretends the sticks are held there |
-| `vr_fake_press` | | Desk testing: the name of a button to press for a few frames, e.g. `jump` |
-| `vr_fake_key` | | Desk testing: a key to tap - `up`, `down`, `left`, `right`, `enter`, `escape` |
-| `vr_fake_hand` | | Desk testing: "`<x> <y> <z> <pitch> <yaw> <roll>`" puts the right hand there |
+| `vr_aim` | 1 | Game module: shots come from the weapon in the hand |
+| `vr_dump_eye` | 0 | Set to 1 to write the next frame's eye images beside `sin.exe` as `sinvr_eye0/1.tga`; later dumps are numbered |
+| `vr_fake_axes` | | Desk testing: "`<forward> <side> <turn> [<turning stick up>]`" pretends the sticks are held there |
+| `vr_fake_press` | | Desk testing: a button to press, e.g. `jump`; "`adjust 200`" holds it for 200 frames, "`adjust 0`" until `release` |
+| `vr_fake_key` | | Desk testing: a key to tap - `up`, `down`, `left`, `right`, `enter`, `escape`, `space` |
+| `vr_fake_hand`, `vr_fake_hand_left` | | Desk testing: "`<x> <y> <z> <pitch> <yaw> <roll>`" puts that hand there |
 | `vr_fake_idle_press` | 0 | Desk testing: presses a button once a second while the engine is not drawing |
 | `vr_weapon_hand` | 1 | Draw the view weapon in the right hand (archived) |
-| `vr_weapon_scale` | 0.75 | The view weapon's size in the hand (archived) |
-| `vr_weapon_offset` | -18 -10 14 | The model's origin from the hand: forward, right, up, game units (archived) |
+| `vr_grip_<weapon>` | | Where that weapon sits in the hand: offset, angles and size, written by the grip button (archived) |
+| `vr_weapon_reset` | 0 | Set to 1 to forget the setting for the weapon in hand; clears itself |
+| `vr_weapon_client` | 1 | 0 stops sin.exe's own calls being redirected, so the weapon is moved in RenderFrame instead |
+| `vr_client_bullets` | 0 | 1 puts back the client's own bullet impacts, which start at the eye (archived) |
 | `vr_crosshair` | 0 | 1 keeps SiN's crosshair while the weapon is in the hand (archived) |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. Needed for unattended VR runs |
 | `vr_trace` | 1 | Log the renderer calls of each new kind of frame |
@@ -150,9 +152,20 @@ are parameters. What to expect:
 - `-KeepRunning` leaves the `quit` out of the cfg and lets the watchdog stop the game. Needed whenever
   the mod itself queues console commands - a controller button, say - because a `wait` holds up
   everything behind it in the command buffer, and the cfg is full of them (§8).
-- **Input can be tested without controllers**: `vr_fake_axes "0.9 0 0"` holds the sticks somewhere, and
-  `vr_fake_press jump` presses a button for a few frames, both through the real path. `viewpos` prints the
-  player's position and yaw, which is how the axes were checked.
+- **Input can be tested without controllers**, all through the real path:
+  `vr_fake_axes "<forward> <side> <turn> [<turning stick up>]"` holds the sticks somewhere;
+  `vr_fake_press jump` presses a button for a few frames, `vr_fake_press "adjust 200"` for 200 rendered
+  frames, and `vr_fake_press "adjust 0"` until `vr_fake_press release`; `vr_fake_hand "<x> <y> <z>
+  <pitch> <yaw> <roll>"` and `vr_fake_hand_left` put the hands somewhere in the game's own units and
+  senses. `viewpos` prints the player's position and yaw, which is how the axes were checked.
+- **A cfg must fit in the command buffer.** `exec` puts the whole file into an 8 KB buffer, and a
+  `wait`-heavy test cfg reaches that easily - whereupon *nothing* in it runs, not even the `map` on the
+  first line, and the game sits on the menu looking like a hang. Split long ones into files that `exec`
+  each other at the end; each is only read when its turn comes.
+- **Rendered frames and `wait`s do not run at the same rate.** On this machine the command buffer gets
+  through about 180 `wait`s a second while the headset path renders about 88 frames a second, and the
+  ratio moves. Anything timed against a held button (the weapon adjustment, say) wants
+  `vr_fake_press "<action> 0"` and an explicit `vr_fake_press release` rather than a count of `wait`s.
 - For input, load a **deathmatch map** (`-Map sindm6 -ExtraArgs "+set deathmatch 1"`): the single-player
   levels open on a cinematic that holds the player still, and a player who is still falling from a spawn
   point has almost no control in the air.
@@ -189,7 +202,8 @@ A stereo world frame's trace line has **two** `BeginFrame ... RenderFrame` group
 `camera_separation` −0.0000 then 0.0000 (both zero: the eye offsets come from the headset, not the engine).
 
 **Eye images.** `vr_dump_eye 1` writes `sinvr_eye0.tga` and `sinvr_eye1.tga` (2444x2392, 17 MB each)
-beside `sin.exe`, straight out of the eye framebuffers. This is the only way to see at the desk what the
+beside `sin.exe`, straight out of the eye framebuffers; later dumps in the same run are numbered
+(`sinvr_eye0_1.tga`), so one run can compare several. This is the only way to see at the desk what the
 headset would show: the window mirror only carries the left eye, and the engine's own `screenshot` reads
 the window's back buffer, which in stereo holds nothing but that mirror.
 
@@ -211,19 +225,20 @@ python -c "from PIL import Image; im = Image.open('sinvr_eye0.tga').convert('L')
 | `src/ref_vr/ref_vr.c` | `GetRefAPI`, loading ref_gl, the 36 recording thunks, C wrappers for Init/Shutdown/BeginFrame/RenderFrame/EndFrame, the frame tracer and cvars |
 | `src/ref_vr/refapi.h` | The renderer interface reconstructed from the binaries, with compile-time checks of sizes and offsets |
 | `src/ref_vr/vr_xr.c` | OpenXR: instance, session on ref_gl's GL context, event loop, the theatre-screen quad layer, and the per-eye swapchains and projection layer |
-| `src/ref_vr/vr_gl.c` | Redirects ref_gl's `glFrustum`, `glOrtho`, `glViewport` and `glScissor` while an eye is bound, by hooking its `GetProcAddress` import. Holds the HUD panel geometry |
+| `src/ref_vr/vr_gl.c` | Redirects ref_gl's `glFrustum`, `glOrtho`, `glViewport`, `glScissor`, `glTranslatef` and `glPopMatrix` while an eye is bound, by hooking its `GetProcAddress` import. Holds the HUD panel geometry and the clip plane that halves a model |
 | `src/ref_vr/vr_view.c` | Turns an OpenXR eye pose into the engine's `refdef_t` (axes, scale, angles, field of view) and back |
 | `src/ref_vr/vr_input.c` | OpenXR actions and bindings, and the mapping from them to console commands and stick axes |
 | `src/ref_vr/vr_joy.c` | The joystick that only exists in this process, which is how the sticks reach the engine |
 | `src/ref_vr/vr_keys.c` | Keystrokes posted to the engine's window, for the menus and the console |
 | `src/ref_vr/vr_poses.c` | The head and hand poses the game module reads, and the export that hands them over |
-| `src/ref_vr/vr_weapon.c` | Moves the view weapon's entity to the right hand, before each eye is drawn |
+| `src/ref_vr/vr_weapon.c` | The weapon in the hand: per-weapon grips and sizes, the adjustment in the headset, the two calls redirected inside sin.exe, and the fists split between the hands |
+| `src/ref_vr/vr_math.c` | Poses in Quake's terms: angles to axes and back, composing them and taking one relative to another |
 | `src/shared/sinvr_poses.h` | The contract between the two DLLs: the block, its frame of reference |
 | `src/game_vr/vr_link.cpp` | The game module's side of that link. Ours, built into the game DLL |
-| `src/ref_vr/vr_hook.c` | Patching another module's imports, shared by the GL and joystick hooks |
+| `src/ref_vr/vr_hook.c` | Patching another module in this process: its imports (the GL and joystick hooks), and single direct calls inside sin.exe |
 | `src/ref_vr/xr_layers.c` | Implicit-layer hygiene for 32-bit processes (shared with xrprobe) |
 | `src/ref_vr/vrlog.c` | `sinvr.log` |
-| `game/` | Night Dive's source (SiN in `src/code/game`, WoS in `src/code/game2015`, shared `elib`) plus `game/CMakeLists.txt`. `git diff 07ae69c -- game` shows everything we changed there; today that is one line in `g_main.cpp`. |
+| `game/` | Night Dive's source (SiN in `src/code/game`, WoS in `src/code/game2015`, shared `elib`) plus `game/CMakeLists.txt`. `git diff 07ae69c -- game` shows everything we changed there: VR aiming in `player.cpp`/`player.h`, the muzzle and shot direction in `weapon.cpp`, server-side bullet impacts in `bullet.cpp`, and a line in `g_main.cpp`. |
 | `cmake/openxr.cmake` | Builds the loader from the sibling SDK, or fetches `release-1.1.63` |
 | `tools/deploy.ps1`, `tools/desk-test.ps1`, `tools/xrprobe/` | Install/uninstall, an unattended run, and the OpenXR probe |
 | `docs/ENGINE_NOTES.md` | How the engine works: the slot map, RVAs, `refdef_t`, the stereo path and runtime observations |
@@ -274,6 +289,10 @@ The short version for AI tools is [AGENTS.md](../AGENTS.md).
   afternoon of "the button does nothing": `desk-test.ps1 -KeepRunning` is the answer.
 - **Archived cvars keep whatever a test left in them**, in `sinvr\players\blade\config.cfg`. A test that
   rebinds `vr_bind_jump` to an `echo` and then quits cleanly leaves it that way for the next run.
+- **The weapon cannot be fired in an unattended run.** Neither a console `+attack` nor a key bound to it
+  reaches the weapon code - the ammo count does not move and the client's own bullet trace never runs -
+  while every other console command and posted key works. Real input fires; this is a limit of the
+  harness. Anything about shooting has to be checked in the headset.
 - **A level starts on a "PRESS ANY KEY TO CONTINUE" card** - Blade against a circuit-board background -
   drawn by `sin.exe` after the last precache line (`sky`). While it is up the engine renders nothing new
   and **executes no console commands**, so a `+exec` script stops dead there and the main thread spins at
@@ -433,8 +452,12 @@ touches it: the controllers arrive the way a player's own binds and joystick wou
    rather than `DrawPic`, so nothing in the renderer's own traffic gives it away.
 7. **Clicking the left stick twice recentres** (`vr_recentre_double 0` for one click), which is the same
    thing `vr_recenter 1` does from the console.
-8. **Both menu buttons are Escape**, because which hand a player reaches for varies; the Windows button is
-   the runtime's and never reaches the application.
+8. **The menu is the right stick's click.** Both menu buttons are bound to Escape as well, but on the
+   Reverb G2 they never arrive: SteamVR keeps them for its own dashboard. The owner's log shows it
+   plainly - two presses, no action, and each one followed by
+   `the runtime has the input focus - the controllers are idle until it gives it back` half a second
+   apart. The Windows button is the runtime's too. Whatever a runtime does pass on still works, so the
+   bindings stay.
 9. **The idle pump.** While SiN's "PRESS ANY KEY TO CONTINUE" card is up the engine stops calling the
    renderer altogether - but it keeps pumping window messages, which is how the keyboard reaches the card.
    Everything above runs inside renderer calls, so on the card the controllers went deaf and the headset
@@ -489,8 +512,10 @@ Built so far:
    its own yaw, which is the one thing the renderer does not know:
    `world = EyePosition() + rotate_yaw(hand_origin, worldangles[YAW])`.
 4. **Aiming.** `Player::GunPosition` and `Player::GetGunOrientation` override Sentient's, and every
-   weapon goes through them: `Weapon::GetMuzzlePosition` asks the owner for both. Gated on `vr_aim`, on a
-   tracked hand, and on normal gravity, so a flatscreen run or an untracked controller behaves exactly as
+   weapon goes through them: `Weapon::GetMuzzlePosition` asks the owner for both. They answer with the
+   weapon as the renderer draws it (below), so a shot leaves the barrel the player can see. Gated on
+   `vr_aim`, on a weapon in the hand, on normal gravity, and on this being the first client - the player
+   at this machine - so a flatscreen run, an untracked controller or another player behaves exactly as
    SiN always did.
 
 What the desk could show: with `vr_fake_hand "16 -6 -10 0 40 0"` the game module prints
@@ -504,31 +529,70 @@ fired every frame, so the client is not turning a console `+attack` into a userc
 controller and mouse input does fire, so this is a limit of the harness, not of the game: the aiming
 maths is what the owner's next headset test exercises.
 
-5. **The weapon in the hand** (`vr_weapon.c`). The view weapon is an ordinary entity in the frame's list,
-   flagged `RF_WEAPONMODEL` and placed at the eye. Before each eye is drawn - while `fd` still holds the
-   engine's own view, since the hand is measured from it - it is moved to the right hand: `origin` and
-   `oldorigin` (so `RF_FRAMELERP` has nothing to interpolate), `angles`, which is what ref_gl actually
-   turns the model with, and the orientation matrix kept in step. The client rebuilds the list every
-   frame, so nothing is put back, and the two stereo passes simply do the same thing twice.
-   - **Size.** Nothing in the entity scales it: the 1.0 at +0xAC is not a scale, and scaling the matrix
-     rows does nothing because the model is turned with `glRotatef` from the angles. ref_gl places every
-     model with `glTranslatef` to its origin, though, so `vr_gl.c` answers ref_gl's `glTranslatef` lookup
-     too and adds a `glScalef` straight after a translate to the weapon's origin. Uniform scale commutes
-     with the rotations that follow, so exactly that model changes size - and the muzzle flash with it.
-   - **The grip.** The view models are built around the camera, so their origin is far from their grip:
-     in the stock view the assault rifle's grip sits about 35 degrees right of and 41 below the view axis
-     (measured in an eye dump). `vr_weapon_offset` moves the model's origin in the hand's frame, and is
-     scaled with it, so once it is right the grip stays in the hand at any size. The default
-     (-18 -10 14) is a first guess; the headset is where it gets settled.
+5. **The weapon in the hand** (`vr_weapon.c`). The view weapon is an ordinary entity in the frame's
+   list, flagged `RF_WEAPONMODEL`, placed at the eye and turned with the view. In VR it goes on the
+   controller instead.
+   - **The controller is a frame**: its position is the *grip* pose, where the hand actually holds it,
+     and its orientation is the *aim* pose, the ray the controller points along. Both are located at the
+     same display time as the eyes.
+   - **Each weapon has a grip and a size.** The grip is the point of the model the hand holds, in the
+     model's own units; the model is placed so that point lands at the controller's grip, pointing where
+     the controller points. The table of first guesses in `vr_weapon.c` was measured off the models
+     themselves (ENGINE_NOTES has the file formats): the guns are about three times life size, which is
+     also what the game's own `Weapon::MuzzleOffset` assumes when it scales their bones by 0.3.
+   - **The player settles it in the headset.** Holding the right grip button for 0.8 s freezes the weapon
+     where it is; the hand then moves to hold it as wanted, the right stick sizes it, and letting go
+     stores the transform the hand now has relative to it in `vr_grip_<weapon>` (archived, so it keeps).
+     `vr_weapon_reset 1` clears the weapon in hand back to its guess.
+   - **Size** is the entity's own `scale` at +0xAC: ref_gl multiplies SiN model vertices by it, and the
+     client's bone code scales bone positions by it too, so the barrel bone stays on the barrel. (An
+     earlier note here said +0xAC was not a scale. It is: eye dumps of 1.0 against 0.35 settle it.)
    - **The crosshair** is SiN's `ch<n>_on`/`ch<n>_off` pic in the middle of the view - where the head
      looks. While the weapon is in the hand it is left out (`vr_crosshair 1` keeps it).
-   - Checked in eye dumps with `vr_fake_hand`: the weapon moves to the pretend hand and turns with it,
-     half scale draws it half the size, and the crosshair is gone.
+
+6. **The client places it, so its effects follow** (`vr_weapon.c`, "Through sin.exe"). Moving the entity
+   in `RenderFrame` moves the model and nothing else: SiN's client builds the view weapon's entity, hands
+   it to the scene, and *then* runs the model's own client-side commands on it - muzzle flash attached to
+   the barrel bone, tracers and shell cases spawned from it, a dynamic light, and its own bullet impacts.
+   All of that is computed from where the client thinks the weapon is. So two calls inside `sin.exe` are
+   redirected into this DLL (`vr_hook_call`, put back at Shutdown):
+   - **`CL_AddViewWeapon`'s call to `V_AddEntity`** (+0x747F). The replacement moves the entity to the
+     hand first, and for a two-armed model adds a second copy for the left hand. Everything downstream -
+     the scene, the attachments, the model's commands - then sees the weapon where the player sees it.
+   - **The `shootbullets` client command's call** (+0x1A707), which traces bullets from the player's
+     *eye* along the weapon's angles and draws the sparks, holes and sounds where they land. It is
+     skipped for the view weapon, and the game module sends the server's own impacts instead
+     (`BulletWeapon::FireBullets`'s `server_effects`) - traced from the barrel, and drawn by the same
+     client code by way of `TE_GUNSHOT`. `vr_client_bullets 1` keeps the client's instead.
+
+   Each call is checked before it is changed - the instruction must be `E8 rel32` reaching the expected
+   function - and the addresses the replacement needs (`cl.refdef.vieworg`, `cl.refdef.viewangles`, and
+   the entity whose commands are running) are read out of the instructions that use them, so ASLR is
+   handled and another build of `sin.exe` is simply left alone. When that happens the weapon is moved in
+   `RenderFrame` instead: the model goes to the hand, its effects stay at the eye.
+
+7. **Two arms** (the fists). `view_punch.def` is one model with both arms in it, so it is drawn twice,
+   once per hand, and each copy has the other arm cut away by a clip plane down the model's middle
+   (`vr_gl_clip_model_at`). Per-entity group flags cannot do it: `entity_t.groups` is indexed by the
+   groups a model's `.def` *names*, and the fists' arms are not among them. ref_gl draws each model
+   between a `glPushMatrix`, a `glTranslatef` to its origin and the matching `glPopMatrix`, so the plane
+   goes on at that translate - in world coordinates, while the modelview still holds only the view, which
+   is how GL takes clip planes - and comes off at the pop.
+
+What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
+computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the
+grip button freezing and re-attaching the weapon (frozen with the hand at yaw 0, released with it at yaw
+30, stored as -30 and the size 1.41x) - through both paths, the client's and the renderer's fallback.
+
+What it still could not show: **a shot.** A console `+attack`, and a key bound to it, both leave the
+weapon code untouched in an unattended run (§8), so the firing chain - the muzzle from the barrel bone,
+the server's impacts - is what the owner's headset test exercises.
 
 Still to do:
 
-- **Settle the grip and size in the headset**, and probably per weapon: they are all built differently.
 - **A reticle where the gun points**, projected into each eye, to replace the crosshair that was hidden.
-- **The left hand** has no model yet; SiN's view models only have the one hand.
+- **Two-handed holds**: a rifle steadied by the left controller near its fore-end, which is also where
+  SiN's models already draw a left hand.
+- **Punching with the hands** rather than the fire button, now that each fist is on its own controller.
 - **Comfort and roomscale:** snap turning, crouching, and the body following the head.
 - **Hand tracking** (`XR_EXT_hand_tracking`) is the same channel with a different source.

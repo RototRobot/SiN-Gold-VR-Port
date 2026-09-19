@@ -6,8 +6,9 @@ movement and tracked motion controllers.
 
 > **Status: early development.** The mod runs the game through its own renderer and game module,
 > renders the world **in stereo with head tracking** through an OpenXR projection layer, keeps the HUD
-> in a readable panel, and **plays with the VR controllers**: sticks to move and turn, buttons for
-> everything else. Tracked hands and a weapon held in the hand come next (see the roadmap).
+> in a readable panel, **plays with the VR controllers**, and **puts the weapon in your hand**: it is
+> drawn where the controller is, it fires down its own barrel, and its muzzle flash, tracers and
+> bullet holes come from there too. Comfort and roomscale come next (see the roadmap).
 
 **New to the project?** Start with [docs/HANDOFF.md](docs/HANDOFF.md).
 
@@ -95,9 +96,21 @@ unaffected either way.
 | Right **B** | Next weapon |
 | Left **Y** | Previous weapon |
 | Left grip | Run |
-| Either menu button | Opens and closes the game menu (Escape) |
+| Right stick, click | Opens and closes the game menu (Escape) |
+| Right grip, held | Lets go of the weapon so you can take it another way - see below |
 | Any button, on "PRESS ANY KEY TO CONTINUE" | Continues |
 | Left stick, click twice | Recentre: the way you are standing and facing becomes forward |
+
+On the Reverb G2 the two **menu** buttons never reach the game: SteamVR keeps them for its own
+dashboard, and a press takes the input focus away instead. So the menu is on the right stick's click.
+They are still bound, for controllers whose runtime does pass them on.
+
+**Putting a weapon where you want it.** Every weapon starts from a measured guess at where your hand
+holds it and how big it should be. To change one, hold it and **squeeze the right grip**: after a
+moment the weapon stops following your hand and hangs in the air. Move your hand to hold it the way
+you want - and push the right stick up or down to make it bigger or smaller - then let go of the grip.
+It is remembered for that weapon, and kept between sessions. `vr_weapon_reset 1` in the console puts
+the weapon you are holding back to its first guess.
 
 In a menu, on the loading screen or with the console up, the controllers turn into a keyboard instead:
 the sticks are the arrow keys, the trigger is Enter, and anything else is Escape. The mod knows which
@@ -128,11 +141,12 @@ These console variables control the mod:
 | `vr_input` | 1 | Take input from the VR controllers. |
 | `vr_deadzone` | 0.15 | How far a stick must move before the game sees it. |
 | `vr_recentre_double` | 1 | Require two clicks of the left stick to recentre. 0 makes one do. |
-| `vr_aim` | 1 | Shots come from the tracked right hand rather than from the player's angles. |
+| `vr_aim` | 1 | Shots come from the weapon in the hand rather than from the player's angles. |
 | `vr_weapon_hand` | 1 | Draw the weapon in the right hand instead of in front of the camera. |
-| `vr_weapon_scale` | 0.75 | The weapon's size in the hand. SiN's weapon models are bigger than life. |
-| `vr_weapon_offset` | -18 -10 14 | Where the model sits relative to the hand: forward, right, up, in game units. Tune it until the grip is in your hand. |
+| `vr_grip_<weapon>` | empty | Where that weapon sits in the hand: offset, angles and size. The grip button writes it; empty means the measured guess. |
+| `vr_weapon_reset` | 0 | Set it to 1 to forget the setting for the weapon in hand. Clears itself. |
 | `vr_crosshair` | 0 | 1 keeps SiN's crosshair while the weapon is in the hand. It is drawn where you look, not where the gun points. |
+| `vr_client_bullets` | 0 | 1 puts back the client's own bullet impacts, which are drawn from the eye rather than from the barrel. |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. For testing with the headset off. |
 | `vr_dump_eye` | 0 | Set it to 1 to write the next frame's two eye images beside `sin.exe`, for checking a build at the desk. |
 | `vr_trace` | 1 | Record the renderer calls of each new kind of frame in `sinvr.log`. |
@@ -147,10 +161,15 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 
 - Do not apply changes in the game's video options while running through the mod. Applying them
   resets `vid_ref` to `gl`, which swaps the VR renderer out.
-- The weapon is drawn in the right hand and shots come from it, but **where the grip sits** is a first
-  guess - `vr_weapon_offset` and `vr_weapon_scale` move and size it. SiN's crosshair is hidden while
-  the weapon is in the hand, because it is drawn where you look rather than where the gun points; a
-  reticle that follows the gun is still to come.
+- Every weapon's place in the hand starts from a guess measured off the model. Settle the ones you use
+  with the grip button, as above. SiN's crosshair is hidden while the weapon is in the hand, because it
+  is drawn where you look rather than where the gun points; a reticle that follows the gun is still to come.
+- Most of SiN's two-handed weapons only ever modelled the left hand, on the fore-end, so that is the
+  hand you see on them; the fists are the one weapon with two arms, and they get one each.
+- The weapon is put into the frame by sin.exe itself, through two calls this mod redirects, which is
+  what carries its muzzle flash, tracers and shell cases along with it. Both are checked against the
+  Steam build before anything is changed, so another build of `sin.exe` is left alone - the weapon then
+  still goes to the hand, but its effects stay at the eye.
 - The body does not move with the headset yet: walking and turning are the sticks' job.
 - **The controllers only work while the headset is awake.** OpenXR gives an application controller input
   only while it has the input focus, and SteamVR takes the focus away when the headset goes to sleep -
@@ -167,8 +186,8 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 3. ✅ Stereo rendering and head-tracked views, driven by the engine's own two-pass stereo loop
 4. ✅ HUD, crosshair and console in a panel at a comfortable distance
 5. ✅ Motion controller input: sticks to move and turn, buttons bound to commands
-6. 🚧 Tracked hands: the poses reach the game, shots come from the right hand, and the weapon is drawn
-   in it. The weapon's size and grip position still want settling in the headset
+6. ✅ Tracked hands: the weapon is drawn in the hand, fires down its own barrel, and carries its
+   effects with it; each weapon's grip can be set in the headset
 7. Roomscale comfort: snap turning, crouching, and the body following the head
 8. Wages of Sin
 9. Release packaging

@@ -131,8 +131,10 @@ while (-not $process.HasExited) {
     if (-not $sawWorld) {
         # -NoCardKey leaves the card to the mod itself, to test that it can.
         if (-not $NoCardKey) { Send-Key $process 0x20 0x39 }   # space
+        # A frame trace line that contains RenderFrame, not the export table's own
+        # entry for it, which is still in the log's tail while the level loads.
         $tail = Get-Content $rendererLog -Tail 60 -ErrorAction SilentlyContinue
-        $sawWorld = [bool]($tail -match "RenderFrame")
+        $sawWorld = [bool]($tail -match "\] frame \d+:.*RenderFrame")
     }
 
     Show-Game $process
