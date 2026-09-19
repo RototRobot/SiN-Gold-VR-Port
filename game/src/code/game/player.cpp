@@ -6418,70 +6418,96 @@ void Player::SetViewAngles(Vector ang)
 }
 
 /*
- * SiN Gold VR: shots come from the player's right hand, and go where it points.
+ * SiN Gold VR: shots come from the weapon in the player's right hand.
  *
- * The renderer gives the hand in the frame it recentred - from the player's
- * eyes, with +x the way their body faces - so the player's own yaw turns it
- * into the world. Without a tracked hand, or with gravity turned on its side,
- * or with vr_aim off, this is the ordinary SiN behaviour.
+ * The renderer draws the view weapon in the tracked hand and says where: the
+ * model's origin and angles in the frame it recentred - from the player's eyes,
+ * with +x the way their body faces - and the size it draws it at. The player's
+ * own yaw turns that into the world. GunPosition is the model's origin and
+ * GetGunOrientation its axes, so the barrel bone Weapon::MuzzleOffset measures
+ * from the model's origin lands on the barrel the player sees.
+ *
+ * Only the first client - the player at this machine - aims this way. With no
+ * weapon in the hand, gravity turned on its side, or vr_aim off, this is the
+ * ordinary SiN behaviour.
  */
 static cvar_t *vr_aim = NULL;
 static qboolean vr_said_aiming = false;
 
-static qboolean vr_hand_wanted(void)
+qboolean Player::VRWeaponPose(Vector *pos, Vector *angles, float *scale, qboolean *server_effects)
 {
+   float    origin[3];
+   float    ang[3];
+   float    size;
+   float    yaw;
+   float    s, c;
+   int      flags;
+
    if(!vr_aim)
    {
       vr_aim = gi.cvar("vr_aim", "1", 0);
    }
 
-   return vr_aim->value != 0;
-}
-
-Vector Player::GunPosition(void)
-{
-   float    origin[3];
-   float    angles[3];
-   float    yaw;
-   float    s, c;
-   int      tracked;
-
-   tracked = VR_HandPose(VR_HAND_RIGHT, origin, angles);
-
-   if(tracked && !vr_said_aiming)
+   if(!vr_aim->value || gravaxis || entnum != 1 || !VR_WeaponPose(origin, ang, &size, &flags))
    {
-      vr_said_aiming = true;
-      gi.printf("SiN Gold VR: shots come from the tracked right hand\n");
+      return false;
    }
 
-   if(!vr_hand_wanted() || gravaxis || !tracked)
+   if(!vr_said_aiming)
    {
-      return Sentient::GunPosition();
+      vr_said_aiming = true;
+      gi.printf("SiN Gold VR: shots come from the weapon in the player's hand\n");
    }
 
    yaw = worldangles[YAW] * (M_PI / 180.0f);
    s = sin(yaw);
    c = cos(yaw);
 
-   return EyePosition() + Vector(origin[0] * c - origin[1] * s,
-                                 origin[0] * s + origin[1] * c,
-                                 origin[2]);
+   if(pos)
+   {
+      *pos = EyePosition() + Vector(origin[0] * c - origin[1] * s,
+                                    origin[0] * s + origin[1] * c,
+                                    origin[2]);
+   }
+   if(angles)
+   {
+      *angles = Vector(ang[0], ang[1] + worldangles[YAW], ang[2]);
+   }
+   if(scale)
+   {
+      *scale = size;
+   }
+   if(server_effects)
+   {
+      *server_effects = (flags & VR_CLIENT_BULLETS_OFF) != 0;
+   }
+
+   return true;
+}
+
+Vector Player::GunPosition(void)
+{
+   Vector   pos;
+
+   if(!VRWeaponPose(&pos, NULL, NULL, NULL))
+   {
+      return Sentient::GunPosition();
+   }
+
+   return pos;
 }
 
 void Player::GetGunOrientation(Vector pos, Vector *forward, Vector *right, Vector *up)
 {
-   float    origin[3];
-   float    angles[3];
-   Vector   hand;
+   Vector   angles;
 
-   if(!vr_hand_wanted() || gravaxis || !VR_HandPose(VR_HAND_RIGHT, origin, angles))
+   if(!VRWeaponPose(NULL, &angles, NULL, NULL))
    {
       Sentient::GetGunOrientation(pos, forward, right, up);
       return;
    }
 
-   hand = Vector(angles[0], angles[1] + worldangles[YAW], angles[2]);
-   hand.AngleVectors(forward, right, up);
+   angles.AngleVectors(forward, right, up);
 }
 
 void Player::GetPlayerView(Vector *pos, Vector *angle)

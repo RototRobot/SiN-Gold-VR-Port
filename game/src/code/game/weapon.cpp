@@ -26,6 +26,7 @@
 #include "specialfx.h"
 #include "chaingun.h"
 #include "assaultrifle.h"
+#include "player.h"
 
 #ifdef SIN_ARCADE
 static ScriptVariablePtr sv_infinitebullets;
@@ -275,8 +276,16 @@ Vector Weapon::MuzzleOffset(void)
          if(gi.GetBoneTransform(edict->s.modelindex, groupindex, tri_num, orient, useanim, useframe,
                                 edict->s.scale, trans, offset.vec3()))
          {
+            float vr_scale;
+
+            // SiN Gold VR: the model is in the player's hand, drawn at this size
+            if(owner && owner->isClient() && ((Player *)(Entity *)owner)->VRWeaponPose(NULL, NULL, &vr_scale, NULL))
+            {
+               return offset * vr_scale;
+            }
+
             //
-            // we scale the pos by 0.3 because of RF_DEPTHHACK 
+            // we scale the pos by 0.3 because of RF_DEPTHHACK
             //
             offset *= 0.3f;
             if(owner && owner->isClient())
@@ -366,12 +375,20 @@ void Weapon::GetMuzzlePosition(Vector *position, Vector *forward, Vector *right,
    //
    // calculate where this projectile is going to hit
    //
-   end = gunpos + f * 2048;
-   trace = G_FullTrace(gunpos, vec_zero, vec_zero, end, 10, owner, MASK_SHOT, "Weapon::GetMuzzlePosition");
-   dir = trace.endpos - pos;
-   dir.normalize();
-   if(dir*f < 0.707)
+   // SiN Gold VR: a weapon in the hand fires straight down its barrel
+   if(owner->isClient() && ((Player *)(Entity *)owner)->VRWeaponPose(NULL, NULL, NULL, NULL))
+   {
       dir = f;
+   }
+   else
+   {
+      end = gunpos + f * 2048;
+      trace = G_FullTrace(gunpos, vec_zero, vec_zero, end, 10, owner, MASK_SHOT, "Weapon::GetMuzzlePosition");
+      dir = trace.endpos - pos;
+      dir.normalize();
+      if(dir*f < 0.707)
+         dir = f;
+   }
 
    if(position)
    {
