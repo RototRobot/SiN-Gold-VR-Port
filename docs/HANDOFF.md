@@ -111,7 +111,7 @@ The mod adds these cvars:
 | `vr_weapon_reset` | 0 | Set to 1 to forget the setting for the weapon in hand; clears itself |
 | `vr_weapon_client` | 1 | 0 stops sin.exe's own calls being redirected, so the weapon is moved in RenderFrame instead |
 | `vr_client_bullets` | 0 | 1 puts back the client's own bullet impacts, which start at the eye (archived) |
-| `vr_crosshair` | 0 | 1 keeps SiN's crosshair while the weapon is in the hand (archived) |
+| `vr_crosshair` | 1 | SiN's crosshair follows the gun; 0 leaves it out, 2 leaves it in the middle of the view (archived) |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. Needed for unattended VR runs |
 | `vr_trace` | 1 | Log the renderer calls of each new kind of frame |
 
@@ -452,13 +452,19 @@ touches it: the controllers arrive the way a player's own binds and joystick wou
    rather than `DrawPic`, so nothing in the renderer's own traffic gives it away.
 7. **Clicking the left stick twice recentres** (`vr_recentre_double 0` for one click), which is the same
    thing `vr_recenter 1` does from the console.
-8. **The menu is the right stick's click.** Both menu buttons are bound to Escape as well, but on the
+8. **A button held across a change of mode must not read as a fresh press.** `release_buttons` used to
+   clear `down` as well as stopping what the button was doing, so a button still under the player's
+   thumb was seen as pressed again the moment the mode changed - and opening the menu *is* a change of
+   mode. One click of the stick therefore came out as press, open, press, close, press, open, once a
+   frame, which is what the owner saw. It now stops what the button was doing and leaves it held, and
+   nothing is pressed again until the thumb comes off.
+9. **The menu is the right stick's click.** Both menu buttons are bound to Escape as well, but on the
    Reverb G2 they never arrive: SteamVR keeps them for its own dashboard. The owner's log shows it
    plainly - two presses, no action, and each one followed by
    `the runtime has the input focus - the controllers are idle until it gives it back` half a second
    apart. The Windows button is the runtime's too. Whatever a runtime does pass on still works, so the
    bindings stay.
-9. **The idle pump.** While SiN's "PRESS ANY KEY TO CONTINUE" card is up the engine stops calling the
+10. **The idle pump.** While SiN's "PRESS ANY KEY TO CONTINUE" card is up the engine stops calling the
    renderer altogether - but it keeps pumping window messages, which is how the keyboard reaches the card.
    Everything above runs inside renderer calls, so on the card the controllers went deaf and the headset
    was left on SteamVR's loading grid. A `WM_TIMER` on the engine's window (`idle_timer` in `ref_vr.c`)
@@ -470,7 +476,7 @@ touches it: the controllers arrive the way a player's own binds and joystick wou
    - Verified with `desk-test.ps1 -NoCardKey`, which leaves the card to the mod, and
      `+set vr_fake_idle_press 1`, a pretend button pressed once a second while the engine is quiet: the
      card went at 10.97 s and the world was in stereo at 11.0 s, with 50 idle frames in between.
-10. **Input needs the headset awake.** OpenXR only gives an application its actions while the session is
+11. **Input needs the headset awake.** OpenXR only gives an application its actions while the session is
     `FOCUSED`, and SteamVR drops that when the headset's proximity sensor says nobody is wearing it. That
     is the runtime's rule, not something to work around: for desk testing, stop the headset sleeping.
 
@@ -547,8 +553,14 @@ maths is what the owner's next headset test exercises.
    - **Size** is the entity's own `scale` at +0xAC: ref_gl multiplies SiN model vertices by it, and the
      client's bone code scales bone positions by it too, so the barrel bone stays on the barrel. (An
      earlier note here said +0xAC was not a scale. It is: eye dumps of 1.0 against 0.35 settle it.)
-   - **The crosshair** is SiN's `ch<n>_on`/`ch<n>_off` pic in the middle of the view - where the head
-     looks. While the weapon is in the hand it is left out (`vr_crosshair 1` keeps it).
+   - **The crosshair follows the gun.** It is SiN's own `ch<n>_on`/`ch<n>_off` pic, drawn through
+     `DrawPic` in the middle of the view - where the head looks, which is no use once the gun aims
+     itself. So the pic is offset instead: the weapon's direction is taken into the eye's frame, and
+     `vr_gl_panel_offset` turns that into the window coordinates that land there once the 2D has been
+     mapped into the HUD panel. Both eyes get the same angle, so it hangs in that direction the way a
+     red dot does rather than sitting on the panel. Measured in eye dumps: a gun 20 degrees right and
+     one 15 degrees down put the pic within a pixel or two of where the geometry says, and nowhere
+     else. `vr_crosshair 0` leaves it out, 2 leaves it where SiN put it.
 
 6. **The client places it, so its effects follow** (`vr_weapon.c`, "Through sin.exe"). Moving the entity
    in `RenderFrame` moves the model and nothing else: SiN's client builds the view weapon's entity, hands

@@ -24,6 +24,7 @@
 #include "ref_vr.h"
 #include "vr_gl.h"
 #include "vr_input.h"
+#include "vr_math.h"
 #include "vr_weapon.h"
 #include "vr_view.h"
 #include "vr_xr.h"
@@ -388,7 +389,7 @@ static void register_cvars(void)
 	vr_worldscale = cvar_get("vr_worldscale", "39.37", CVAR_ARCHIVE);
 	vr_hud_fov = cvar_get("vr_hud_fov", "60", CVAR_ARCHIVE);
 	vr_hud_depth = cvar_get("vr_hud_depth", "6", CVAR_ARCHIVE);
-	vr_crosshair = cvar_get("vr_crosshair", "0", CVAR_ARCHIVE);
+	vr_crosshair = cvar_get("vr_crosshair", "1", CVAR_ARCHIVE);
 	vr_trace = cvar_get("vr_trace", "1", 0);
 	vr_force_render = cvar_get("vr_force_render", "0", 0);
 	vr_recenter = cvar_get("vr_recenter", "0", 0);
@@ -772,6 +773,8 @@ static void vr_BeginFrame(float camera_separation)
 	}
 }
 
+static void place_crosshair(const refdef_t *fd);
+
 static void vr_RenderFrame(refdef_t *fd)
 {
 	vr_view_saved_t saved;
@@ -812,6 +815,7 @@ static void vr_RenderFrame(refdef_t *fd)
 	vr_weapon_to_hand(fd);
 
 	vr_view_apply(fd, g_eye, vr_worldscale_units(), &saved);
+	place_crosshair(fd);
 
 	if (g_eye_renders_logged < 4)
 	{
@@ -876,15 +880,17 @@ static void note_pic(const char *name)
 
 /*
  * SiN's crosshair is a pic, ch<n>_on or ch<n>_off, drawn in the middle of the
- * view - where the head looks. Once the gun is in the hand and aims itself,
- * that only misleads, so it is left out unless vr_crosshair asks for it.
+ * view - where the head looks, which is not where a gun in the hand is
+ * pointing. So it is moved instead: this frame's weapon says which way it
+ * points, and the pic is drawn that far off the middle of the HUD panel. Both
+ * eyes then see it at the same angle, so it hangs in that direction the way a
+ * red dot does. vr_crosshair 2 leaves it where SiN put it, 0 leaves it out.
  */
-static int crosshair_hidden(const char *name)
+static int is_crosshair(const char *name)
 {
 	const char *p;
 
-	if (!vr_weapon_in_hand() || (vr_crosshair && vr_crosshair->value != 0.0f) || !name ||
-		_strnicmp(name, "ch", 2) != 0)
+	if (!name || _strnicmp(name, "ch", 2) != 0)
 	{
 		return 0;
 	}
@@ -896,23 +902,76 @@ static int crosshair_hidden(const char *name)
 	return p > name + 2 && _strnicmp(p, "_o", 2) == 0;
 }
 
+/* Where this eye must draw the crosshair, as an offset from the middle of the
+   window. Worked out once the view is the eye's, in vr_RenderFrame. */
+static float g_crosshair_dx, g_crosshair_dy;
+static int g_crosshair_placed;
+
+static void place_crosshair(const refdef_t *fd)
+{
+	float origin[3], forward[3], axis[3][3];
+	float ahead, right, up;
+
+	g_crosshair_placed = 0;
+	if (!vr_weapon_world_aim(origin, forward))
+	{
+		return;
+	}
+
+	vr_angles_to_axis(fd->viewangles, axis);
+	ahead = forward[0] * axis[0][0] + forward[1] * axis[0][1] + forward[2] * axis[0][2];
+	if (ahead < 0.2f)
+	{
+		return; /* the gun is pointing away from the view: no crosshair to draw */
+	}
+
+	right = -(forward[0] * axis[1][0] + forward[1] * axis[1][1] + forward[2] * axis[1][2]);
+	up = forward[0] * axis[2][0] + forward[1] * axis[2][1] + forward[2] * axis[2][2];
+	g_crosshair_placed = vr_gl_panel_offset(right / ahead, up / ahead, &g_crosshair_dx, &g_crosshair_dy);
+}
+
+/* 0 to leave the pic out, 1 to draw it where dx, dy say. */
+static int crosshair_at(const char *name, int *dx, int *dy)
+{
+	float mode = vr_crosshair ? vr_crosshair->value : 1.0f;
+
+	*dx = *dy = 0;
+	if (!vr_weapon_in_hand() || !is_crosshair(name) || mode >= 2.0f)
+	{
+		return 1; /* not ours to move, or asked for where SiN puts it */
+	}
+
+	if (mode == 0.0f || !g_crosshair_placed)
+	{
+		return 0;
+	}
+
+	*dx = (int)(g_crosshair_dx + (g_crosshair_dx < 0.0f ? -0.5f : 0.5f));
+	*dy = (int)(g_crosshair_dy + (g_crosshair_dy < 0.0f ? -0.5f : 0.5f));
+	return 1;
+}
+
 static void vr_DrawPic(int x, int y, const char *name)
 {
+	int dx, dy;
+
 	record_call(RE_DRAW_PIC);
 	note_pic(name);
-	if (!crosshair_hidden(name))
+	if (crosshair_at(name, &dx, &dy))
 	{
-		((re_draw_pic_t)g_real_slot[RE_DRAW_PIC])(x, y, name);
+		((re_draw_pic_t)g_real_slot[RE_DRAW_PIC])(x + dx, y + dy, name);
 	}
 }
 
 static void vr_DrawStretchPic(int x, int y, int width, int height, const char *name)
 {
+	int dx, dy;
+
 	record_call(RE_DRAW_STRETCH_PIC);
 	note_pic(name);
-	if (!crosshair_hidden(name))
+	if (crosshair_at(name, &dx, &dy))
 	{
-		((re_draw_stretch_pic_t)g_real_slot[RE_DRAW_STRETCH_PIC])(x, y, width, height, name);
+		((re_draw_stretch_pic_t)g_real_slot[RE_DRAW_STRETCH_PIC])(x + dx, y + dy, width, height, name);
 	}
 }
 

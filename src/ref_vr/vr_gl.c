@@ -164,6 +164,24 @@ static void compute_panel(void)
 	eye.panel_height = y1 - y0;
 }
 
+int vr_gl_panel_offset(float tan_x, float tan_y, float *dx, float *dy)
+{
+	double half_width = tan(hud.fov * 0.5 * RAD_PER_DEG);
+	double half_height = half_width * eye.window_height / eye.window_width;
+	double centre_x = hud.depth > 0.0f ? -eye.offset_x / hud.depth : 0.0;
+
+	if (!eye.active || eye.window_width <= 0 || eye.window_height <= 0 || half_width <= 0.0)
+	{
+		return 0;
+	}
+
+	/* The panel holds the whole window, tangent for tangent, and its own middle
+	   is centre_x - the shift that puts it at hud.depth. Window y grows down. */
+	*dx = (float)((tan_x - centre_x) / (2.0 * half_width) * eye.window_width);
+	*dy = (float)(-tan_y / (2.0 * half_height) * eye.window_height);
+	return 1;
+}
+
 int vr_gl_load(void)
 {
 	vrgl.GenFramebuffers = (void *)wglGetProcAddress("glGenFramebuffers");

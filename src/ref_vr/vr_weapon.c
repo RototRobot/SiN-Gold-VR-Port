@@ -198,6 +198,8 @@ static struct
 } hands[2];
 
 static placement_t placed[2];
+static vr_pose_t world_aim;    /* the right hand's weapon in the world, as drawn */
+static int world_aim_valid;
 static int placing;            /* between a publish and the end of that frame */
 static int placed_this_frame;  /* the weapon was put in the hand this frame */
 static int said_placed;
@@ -477,6 +479,7 @@ void vr_weapon_end_frame(void)
 {
 	placing = 0;
 	placed_this_frame = 0;
+	world_aim_valid = 0;
 	vr_gl_clear_clips();
 }
 
@@ -487,7 +490,8 @@ int vr_weapon_in_hand(void)
 
 /* The weapon, moved from the eye to the hand: origin, angles, the orientation
    matrix SiN's bone code reads, and the size it is drawn and its bones placed
-   at. There is no interpolating from where the client had it. */
+   at. There is no interpolating from where the client had it. The right hand's
+   goes into world_aim as well, for the crosshair to follow. */
 static void put_in_hand(entity_t *e, const placement_t *p, const float vieworg[3], float yaw)
 {
 	vr_pose_t world;
@@ -498,6 +502,24 @@ static void put_in_hand(entity_t *e, const placement_t *p, const float vieworg[3
 	memcpy(e->axis, world.axis, sizeof(e->axis));
 	vr_axis_to_angles(world.axis, e->angles);
 	e->scale = p->scale;
+
+	if (p == &placed[RIGHT])
+	{
+		world_aim = world;
+		world_aim_valid = 1;
+	}
+}
+
+int vr_weapon_world_aim(float origin[3], float forward[3])
+{
+	if (!world_aim_valid || !placed_this_frame)
+	{
+		return 0;
+	}
+
+	memcpy(origin, world_aim.origin, sizeof(float) * 3);
+	memcpy(forward, world_aim.axis[0], sizeof(float) * 3);
+	return 1;
 }
 
 /*

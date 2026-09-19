@@ -67,6 +67,10 @@ void vr_weapon_after_eye(refdef_t *fd);
    head looks would only mislead. */
 int vr_weapon_in_hand(void);
 
+/* Where the weapon is and which way it points, in the world, as it was drawn
+   this frame: what the crosshair follows. Returns 0 if it is not in the hand. */
+int vr_weapon_world_aim(float origin[3], float forward[3]);
+
 /* The right grip button, and the right stick's up and down, which sizes the
    weapon while it is being adjusted. */
 void vr_weapon_adjust_button(int down);

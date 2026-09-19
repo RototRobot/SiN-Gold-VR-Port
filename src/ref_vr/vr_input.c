@@ -649,17 +649,29 @@ static void do_fake_key(void)
 	vr_cvar_set("vr_fake_key", "");
 }
 
-/* A button held when it stops counting - its controller gone, the mode changed -
-   is let go of, or it would stay held for good. */
-static void let_go(int index)
+/*
+ * Whatever a button was doing stops - the mode changed, or the focus went - but
+ * it stays held as far as this is concerned, so that a button still under the
+ * player's thumb is not taken as a fresh press in the new mode. Opening the
+ * menu with a button and holding it down otherwise reads as press, open,
+ * release, press, close, press, open, once a frame, which is how one click of
+ * the stick came out as a flurry of escapes.
+ */
+static void stop_holding(int index)
 {
-	actions[index].down = 0;
 	if (index == ACT_ADJUST)
 	{
 		vr_weapon_adjust_button(0);
 		return;
 	}
 	dispatch(&actions[index], 0);
+}
+
+/* The button really is up - its controller has gone, or the player let go. */
+static void let_go(int index)
+{
+	actions[index].down = 0;
+	stop_holding(index);
 }
 
 static void press_action(int index, int down, int menu)
@@ -1026,8 +1038,12 @@ void vr_input_idle(XrSession session)
 	}
 }
 
-/* Anything held down is let go of, as if the player had released it. A press
-   from vr_fake_press is left alone: it releases itself, on its own count. */
+/*
+ * Anything a held button was doing stops, without the button counting as
+ * released: nothing of the old mode is left running, and nothing is pressed
+ * afresh until the player's thumb actually comes off. A press from
+ * vr_fake_press is left alone: it releases itself, on its own count.
+ */
 static void release_buttons(void)
 {
 	int i;
@@ -1036,7 +1052,7 @@ static void release_buttons(void)
 	{
 		if (i != fake_held && actions[i].kind == KIND_BUTTON && actions[i].down)
 		{
-			let_go(i);
+			stop_holding(i);
 		}
 	}
 }

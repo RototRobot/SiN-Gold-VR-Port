@@ -97,6 +97,7 @@ unaffected either way.
 | Left **Y** | Previous weapon |
 | Left grip | Run |
 | Right stick, click | Opens and closes the game menu (Escape) |
+| Right stick, up/down, while adjusting a weapon | Makes it bigger or smaller |
 | Right grip, held | Lets go of the weapon so you can take it another way - see below |
 | Any button, on "PRESS ANY KEY TO CONTINUE" | Continues |
 | Left stick, click twice | Recentre: the way you are standing and facing becomes forward |
@@ -145,7 +146,7 @@ These console variables control the mod:
 | `vr_weapon_hand` | 1 | Draw the weapon in the right hand instead of in front of the camera. |
 | `vr_grip_<weapon>` | empty | Where that weapon sits in the hand: offset, angles and size. The grip button writes it; empty means the measured guess. |
 | `vr_weapon_reset` | 0 | Set it to 1 to forget the setting for the weapon in hand. Clears itself. |
-| `vr_crosshair` | 0 | 1 keeps SiN's crosshair while the weapon is in the hand. It is drawn where you look, not where the gun points. |
+| `vr_crosshair` | 1 | SiN's crosshair follows the gun while it is in the hand. 0 leaves it out; 2 leaves it in the middle of the view, where SiN draws it. |
 | `vr_client_bullets` | 0 | 1 puts back the client's own bullet impacts, which are drawn from the eye rather than from the barrel. |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. For testing with the headset off. |
 | `vr_dump_eye` | 0 | Set it to 1 to write the next frame's two eye images beside `sin.exe`, for checking a build at the desk. |
@@ -162,8 +163,11 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 - Do not apply changes in the game's video options while running through the mod. Applying them
   resets `vid_ref` to `gl`, which swaps the VR renderer out.
 - Every weapon's place in the hand starts from a guess measured off the model. Settle the ones you use
-  with the grip button, as above. SiN's crosshair is hidden while the weapon is in the hand, because it
-  is drawn where you look rather than where the gun points; a reticle that follows the gun is still to come.
+  with the grip button, as above.
+- The crosshair follows the gun rather than the head: it is SiN's own crosshair, drawn in the direction
+  the weapon points, and both eyes see it at the same angle, so it sits out there like a red dot rather
+  than on a pane of glass. Point the gun away from where you are looking and it leaves the view, which
+  is what it should do.
 - Most of SiN's two-handed weapons only ever modelled the left hand, on the fore-end, so that is the
   hand you see on them; the fists are the one weapon with two arms, and they get one each.
 - The weapon is put into the frame by sin.exe itself, through two calls this mod redirects, which is

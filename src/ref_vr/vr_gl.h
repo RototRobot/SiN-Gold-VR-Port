@@ -80,6 +80,15 @@ void vr_gl_clip_model_at(const float origin[3], const float plane[4]);
 void vr_gl_clear_clips(void);
 
 /*
+ * How far from the middle of the window a 2D thing must be drawn to appear in a
+ * given direction from the eye, once the 2D has been mapped into the HUD panel.
+ * The tangents are from the eye's own axis, as vr_gl_eye_begin takes them, and
+ * the answer is in the window coordinates ref_gl draws 2D in, y downwards. That
+ * is how the crosshair follows the gun. Returns 0 if no eye is being drawn.
+ */
+int vr_gl_panel_offset(float tan_x, float tan_y, float *dx, float *dy);
+
+/*
  * While an eye is rendered, ref_gl's viewports and scissors, which are in window
  * coordinates, are mapped onto the eye's target - the whole of it for the world,
  * the HUD panel for 2D - and every projection it sets up is replaced by the eye's
