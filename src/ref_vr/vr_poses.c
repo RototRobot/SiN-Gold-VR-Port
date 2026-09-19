@@ -16,6 +16,8 @@ void vr_poses_begin(float units_per_metre)
 	poses.head_valid = 0;
 	poses.hand_valid[SINVR_HAND_LEFT] = 0;
 	poses.hand_valid[SINVR_HAND_RIGHT] = 0;
+	poses.weapon_valid = 0;
+	poses.flags = 0;
 }
 
 void vr_poses_head(const float origin[3], const float angles[3])
@@ -35,6 +37,15 @@ void vr_poses_hand(int hand, const float origin[3], const float angles[3])
 	memcpy(poses.hand_origin[hand], origin, sizeof(poses.hand_origin[hand]));
 	memcpy(poses.hand_angles[hand], angles, sizeof(poses.hand_angles[hand]));
 	poses.hand_valid[hand] = 1;
+}
+
+void vr_poses_weapon(const float origin[3], const float angles[3], float scale, int flags)
+{
+	memcpy(poses.weapon_origin, origin, sizeof(poses.weapon_origin));
+	memcpy(poses.weapon_angles, angles, sizeof(poses.weapon_angles));
+	poses.weapon_scale = scale;
+	poses.flags = flags;
+	poses.weapon_valid = 1;
 }
 
 void vr_poses_end(void)

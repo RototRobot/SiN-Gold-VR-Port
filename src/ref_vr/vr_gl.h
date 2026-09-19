@@ -48,8 +48,9 @@ int vr_gl_load(void);
 /*
  * Call before ref_gl's Init. ref_gl looks every GL function up by name through
  * GetProcAddress (its QGL layer); this answers glFrustum, glOrtho, glViewport
- * and glScissor with versions that follow vr_gl_eye_begin/end. Returns 0 if the
- * import could not be patched.
+ * and glScissor with versions that follow vr_gl_eye_begin/end, and glTranslatef
+ * and glPopMatrix with ones that can cut a model (vr_gl_clip_model_at). Returns
+ * 0 if the import could not be patched.
  */
 int vr_gl_hook_refgl(HMODULE refgl);
 
@@ -70,10 +71,13 @@ void vr_gl_set_hud(float fov, float depth);
 void vr_gl_full_screen_2d(int on);
 
 /*
- * Draws the model placed at origin - to within a hundredth of a unit - at
- * scale times its size, for as long as eyes are being drawn. 1 turns it off.
+ * Draws the model placed at origin - to within a hundredth of a unit - with
+ * everything on the far side of a plane cut away: the plane is a, b, c, d in
+ * the world, and what is kept is where a x + b y + c z + d >= 0. Up to four
+ * models a frame; vr_gl_clear_clips forgets them all.
  */
-void vr_gl_resize_model_at(const float origin[3], float scale);
+void vr_gl_clip_model_at(const float origin[3], const float plane[4]);
+void vr_gl_clear_clips(void);
 
 /*
  * While an eye is rendered, ref_gl's viewports and scissors, which are in window

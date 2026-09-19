@@ -16,6 +16,7 @@
 #include "vr_keys.h"
 #include "vr_poses.h"
 #include "vr_view.h"
+#include "vr_weapon.h"
 #include "vr_xr.h"
 #include "vrlog.h"
 
@@ -35,10 +36,13 @@ enum
 	ACT_RUN,
 	ACT_MENU,
 	ACT_RECENTRE,
+	ACT_ADJUST,
 	ACT_MOVE,
 	ACT_TURN,
 	ACT_HAND_LEFT,
 	ACT_HAND_RIGHT,
+	ACT_GRIP_LEFT,
+	ACT_GRIP_RIGHT,
 	ACT_COUNT
 };
 
@@ -70,10 +74,13 @@ static action_t actions[ACT_COUNT] = {
 	{ "run",         "Run",             KIND_BUTTON, "+speed" },
 	{ "menu",        "Menu",            KIND_BUTTON, "key:escape" },
 	{ "recentre",    "Recentre",        KIND_BUTTON, "" },
+	{ "adjust",      "Adjust weapon",   KIND_BUTTON, "" },
 	{ "move",        "Move",            KIND_AXES,   NULL },
 	{ "turn",        "Turn",            KIND_AXES,   NULL },
 	{ "hand_left",   "Left hand",       KIND_POSE,   NULL },
-	{ "hand_right",  "Right hand",      KIND_POSE,   NULL }
+	{ "hand_right",  "Right hand",      KIND_POSE,   NULL },
+	{ "grip_left",   "Left grip",       KIND_POSE,   NULL },
+	{ "grip_right",  "Right grip",      KIND_POSE,   NULL }
 };
 
 typedef struct
@@ -82,7 +89,12 @@ typedef struct
 	const char *path;
 } binding_t;
 
-/* The Reverb G2, through the HP extension: everything has a home here. */
+/*
+ * The Reverb G2, through the HP extension: everything has a home here. SteamVR
+ * keeps both menu buttons for its own dashboard on these controllers - a press
+ * takes the input focus away and never arrives - so the menu is on the right
+ * stick's click as well.
+ */
 static const binding_t bindings_hp[] = {
 	{ ACT_FIRE,        "/user/hand/right/input/trigger/value" },
 	{ ACT_USE,         "/user/hand/left/input/trigger/value" },
@@ -93,11 +105,15 @@ static const binding_t bindings_hp[] = {
 	{ ACT_RUN,         "/user/hand/left/input/squeeze/value" },
 	{ ACT_MENU,        "/user/hand/left/input/menu/click" },
 	{ ACT_MENU,        "/user/hand/right/input/menu/click" },
+	{ ACT_MENU,        "/user/hand/right/input/thumbstick/click" },
 	{ ACT_RECENTRE,    "/user/hand/left/input/thumbstick/click" },
+	{ ACT_ADJUST,      "/user/hand/right/input/squeeze/value" },
 	{ ACT_MOVE,        "/user/hand/left/input/thumbstick" },
 	{ ACT_TURN,        "/user/hand/right/input/thumbstick" },
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
-	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" }
+	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" },
+	{ ACT_GRIP_LEFT,   "/user/hand/left/input/grip/pose" },
+	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" }
 };
 
 /* Windows Mixed Reality controllers without that extension: no lettered
@@ -116,7 +132,9 @@ static const binding_t bindings_wmr[] = {
 	{ ACT_MOVE,        "/user/hand/left/input/thumbstick" },
 	{ ACT_TURN,        "/user/hand/right/input/thumbstick" },
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
-	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" }
+	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" },
+	{ ACT_GRIP_LEFT,   "/user/hand/left/input/grip/pose" },
+	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" }
 };
 
 static const binding_t bindings_touch[] = {
@@ -128,13 +146,18 @@ static const binding_t bindings_touch[] = {
 	{ ACT_WEAPON_PREV, "/user/hand/left/input/y/click" },
 	{ ACT_RUN,         "/user/hand/left/input/squeeze/value" },
 	{ ACT_MENU,        "/user/hand/left/input/menu/click" },
+	{ ACT_MENU,        "/user/hand/right/input/thumbstick/click" },
 	{ ACT_RECENTRE,    "/user/hand/left/input/thumbstick/click" },
+	{ ACT_ADJUST,      "/user/hand/right/input/squeeze/value" },
 	{ ACT_MOVE,        "/user/hand/left/input/thumbstick" },
 	{ ACT_TURN,        "/user/hand/right/input/thumbstick" },
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
-	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" }
+	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" },
+	{ ACT_GRIP_LEFT,   "/user/hand/left/input/grip/pose" },
+	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" }
 };
 
+/* The Index has no menu button, so the menu is the right stick's click. */
 static const binding_t bindings_index[] = {
 	{ ACT_FIRE,        "/user/hand/right/input/trigger/value" },
 	{ ACT_USE,         "/user/hand/left/input/trigger/value" },
@@ -143,11 +166,15 @@ static const binding_t bindings_index[] = {
 	{ ACT_WEAPON_NEXT, "/user/hand/right/input/b/click" },
 	{ ACT_WEAPON_PREV, "/user/hand/left/input/b/click" },
 	{ ACT_RUN,         "/user/hand/left/input/squeeze/value" },
+	{ ACT_MENU,        "/user/hand/right/input/thumbstick/click" },
 	{ ACT_RECENTRE,    "/user/hand/left/input/thumbstick/click" },
+	{ ACT_ADJUST,      "/user/hand/right/input/squeeze/value" },
 	{ ACT_MOVE,        "/user/hand/left/input/thumbstick" },
 	{ ACT_TURN,        "/user/hand/right/input/thumbstick" },
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
-	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" }
+	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" },
+	{ ACT_GRIP_LEFT,   "/user/hand/left/input/grip/pose" },
+	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" }
 };
 
 /* Whatever else a runtime offers: the two buttons every profile has. */
@@ -156,7 +183,9 @@ static const binding_t bindings_simple[] = {
 	{ ACT_USE,         "/user/hand/left/input/select/click" },
 	{ ACT_MENU,        "/user/hand/left/input/menu/click" },
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
-	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" }
+	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" },
+	{ ACT_GRIP_LEFT,   "/user/hand/left/input/grip/pose" },
+	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" }
 };
 
 typedef struct
@@ -184,6 +213,7 @@ static cvar_t *vr_fake_axes;
 static cvar_t *vr_fake_press;
 static cvar_t *vr_fake_key;
 static cvar_t *vr_fake_hand;
+static cvar_t *vr_fake_hand_left;
 static cvar_t *vr_fake_idle_press;
 static DWORD last_fake_idle;
 static int fake_held = -1;
@@ -196,7 +226,8 @@ static int said_polled;
 static int said_unpolled;
 static unsigned frames;
 static cvar_t *vr_recentre_double;
-static XrSpace hand_space[2];
+static XrSpace hand_space[2]; /* where each controller points from, and which way */
+static XrSpace grip_space[2]; /* where the hand holds it */
 static int said_hands;
 static unsigned last_recentre_click;
 static int was_in_menu;
@@ -229,6 +260,7 @@ void vr_input_startup(void)
 	vr_fake_press = vr_cvar("vr_fake_press", "", 0);
 	vr_fake_key = vr_cvar("vr_fake_key", "", 0);
 	vr_fake_hand = vr_cvar("vr_fake_hand", "", 0);
+	vr_fake_hand_left = vr_cvar("vr_fake_hand_left", "", 0);
 	vr_fake_idle_press = vr_cvar("vr_fake_idle_press", "", 0);
 	vr_recentre_double = vr_cvar("vr_recentre_double", "1", CVAR_ARCHIVE);
 
@@ -390,10 +422,12 @@ int vr_input_create(XrInstance instance, XrSession session)
 		suggest_profile(instance, &profiles[i]);
 	}
 
-	for (i = 0; i < 2; ++i)
+	for (i = 0; i < 4; ++i)
 	{
+		static const int pose_actions[4] = { ACT_HAND_LEFT, ACT_HAND_RIGHT, ACT_GRIP_LEFT, ACT_GRIP_RIGHT };
 		XrActionSpaceCreateInfo space_info = { XR_TYPE_ACTION_SPACE_CREATE_INFO };
-		int index = i == SINVR_HAND_LEFT ? ACT_HAND_LEFT : ACT_HAND_RIGHT;
+		XrSpace *space = i < 2 ? &hand_space[i] : &grip_space[i - 2];
+		int index = pose_actions[i];
 
 		if (actions[index].action == XR_NULL_HANDLE)
 		{
@@ -402,10 +436,11 @@ int vr_input_create(XrInstance instance, XrSession session)
 
 		space_info.action = actions[index].action;
 		space_info.poseInActionSpace.orientation.w = 1.0f;
-		if (XR_FAILED(xrCreateActionSpace(session, &space_info, &hand_space[i])))
+		if (XR_FAILED(xrCreateActionSpace(session, &space_info, space)))
 		{
-			vr_printf("VR: could not follow the %s hand", i == SINVR_HAND_LEFT ? "left" : "right");
-			hand_space[i] = XR_NULL_HANDLE;
+			vr_printf("VR: could not follow the %s %s", (i & 1) == SINVR_HAND_LEFT ? "left" : "right",
+				i < 2 ? "hand" : "grip");
+			*space = XR_NULL_HANDLE;
 		}
 	}
 
@@ -497,52 +532,61 @@ static void dispatch(action_t *action, int down)
 }
 
 /*
- * Desk testing: "vr_fake_press jump" presses that action for one frame, through
- * the same path a controller button takes. The names are the ones in the
- * vr_bind_* cvars.
+ * Desk testing: "vr_fake_press jump" presses that action, through the same path
+ * a controller button takes, and lets go a few frames later; "vr_fake_press
+ * adjust 200" holds it for 200 frames, "vr_fake_press adjust 0" until
+ * "vr_fake_press release". The names are the ones in the vr_bind_* cvars.
  */
+static void release_fake(void)
+{
+	actions[fake_held].down = 0;
+	press_action(fake_held, 0, fake_menu);
+	fake_held = -1;
+}
+
 static void do_fake_press(void)
 {
-	int i;
+	char name[32];
+	int i, hold = 12;
 
 	/* Held for a few frames: the engine samples its buttons when it builds a
 	   movement command, not when ours arrives. */
-	if (fake_held >= 0)
+	if (fake_held >= 0 && fake_frames > 0 && --fake_frames == 0)
 	{
-		if (--fake_frames > 0)
-		{
-			return;
-		}
-
-		actions[fake_held].down = 0;
-		press_action(fake_held, 0, fake_menu);
-		fake_held = -1;
+		release_fake();
 	}
 
-	if (!vr_fake_press || !vr_fake_press->string || !vr_fake_press->string[0])
+	if (!vr_fake_press || !vr_fake_press->string || !vr_fake_press->string[0] ||
+		sscanf(vr_fake_press->string, "%31s %d", name, &hold) < 1)
+	{
+		return;
+	}
+	vr_cvar_set("vr_fake_press", "");
+
+	/* A new press lets go of the one before; "release" does only that. */
+	if (fake_held >= 0)
+	{
+		release_fake();
+	}
+	if (strcmp(name, "release") == 0)
 	{
 		return;
 	}
 
 	for (i = 0; i < ACT_COUNT; ++i)
 	{
-		if (actions[i].kind == KIND_BUTTON && strcmp(actions[i].name, vr_fake_press->string) == 0)
+		if (actions[i].kind == KIND_BUTTON && strcmp(actions[i].name, name) == 0)
 		{
 			actions[i].down = 1;
 			fake_menu = vr_in_menu();
 			press_action(i, 1, fake_menu);
 			fake_held = i;
-			fake_frames = 12;
-			break;
+			fake_frames = hold > 0 ? hold : -1;
+			return;
 		}
 	}
 
-	if (fake_held < 0)
-	{
-		vr_printf("VR: there is no button called \"%s\"", vr_fake_press->string);
-	}
-
-	vr_cvar_set("vr_fake_press", "");
+	vr_printf("VR: there is no button called \"%s\"", name);
 }
 
 /*
@@ -605,8 +649,28 @@ static void do_fake_key(void)
 	vr_cvar_set("vr_fake_key", "");
 }
 
+/* A button held when it stops counting - its controller gone, the mode changed -
+   is let go of, or it would stay held for good. */
+static void let_go(int index)
+{
+	actions[index].down = 0;
+	if (index == ACT_ADJUST)
+	{
+		vr_weapon_adjust_button(0);
+		return;
+	}
+	dispatch(&actions[index], 0);
+}
+
 static void press_action(int index, int down, int menu)
 {
+	/* Held, it lets go of the weapon so the hand can take it another way. */
+	if (index == ACT_ADJUST)
+	{
+		vr_weapon_adjust_button(down && !menu);
+		return;
+	}
+
 	if (index == ACT_RECENTRE)
 	{
 		if (down)
@@ -650,12 +714,10 @@ static void read_buttons(XrSession session, int menu)
 		get_info.action = actions[i].action;
 		if (XR_FAILED(xrGetActionStateBoolean(session, &get_info, &state)) || !state.isActive)
 		{
-			/* The controller it is bound to has gone. Anything held on it has
-			   to be let go of, or it stays held for good. */
+			/* The controller it is bound to has gone. */
 			if (actions[i].down && i != fake_held)
 			{
-				actions[i].down = 0;
-				dispatch(&actions[i], 0);
+				let_go(i);
 			}
 			continue;
 		}
@@ -768,16 +830,18 @@ static void read_sticks(XrSession session, int menu)
 	side = move_x;
 	turn = turn_x;
 
-	/* Desk testing: "vr_fake_axes <forward> <side> <turn>" with no controllers. */
+	/* Desk testing: "vr_fake_axes <forward> <side> <turn> [<turning stick up>]"
+	   with no controllers. */
 	if (vr_fake_axes && vr_fake_axes->string && vr_fake_axes->string[0])
 	{
-		float fake_forward = 0.0f, fake_side = 0.0f, fake_turn = 0.0f;
+		float fake_forward = 0.0f, fake_side = 0.0f, fake_turn = 0.0f, fake_up = 0.0f;
 
-		if (sscanf(vr_fake_axes->string, "%f %f %f", &fake_forward, &fake_side, &fake_turn) >= 1)
+		if (sscanf(vr_fake_axes->string, "%f %f %f %f", &fake_forward, &fake_side, &fake_turn, &fake_up) >= 1)
 		{
 			forward = fake_forward;
 			side = fake_side;
 			turn = fake_turn;
+			turn_y = fake_up;
 		}
 	}
 
@@ -785,8 +849,16 @@ static void read_sticks(XrSession session, int menu)
 	{
 		/* The player is not moving: the sticks are working the menu. */
 		vr_joy_set(0.0f, 0.0f, 0.0f);
+		vr_weapon_adjust_stick(0.0f);
 		navigate_menu(forward, side);
 		return;
+	}
+
+	/* While the weapon is being adjusted, the turning stick sizes it instead. */
+	vr_weapon_adjust_stick(turn_y);
+	if (vr_weapon_adjusting())
+	{
+		turn = 0.0f;
 	}
 
 	vr_joy_set(forward, side, turn);
@@ -941,11 +1013,7 @@ void vr_input_idle(XrSession session)
 		/* Held since the game was running: let the game have its release. */
 		if (actions[i].down && !down)
 		{
-			actions[i].down = 0;
-			if (i != ACT_RECENTRE)
-			{
-				dispatch(&actions[i], 0);
-			}
+			let_go(i);
 			continue;
 		}
 
@@ -968,66 +1036,95 @@ static void release_buttons(void)
 	{
 		if (i != fake_held && actions[i].kind == KIND_BUTTON && actions[i].down)
 		{
-			actions[i].down = 0;
-			dispatch(&actions[i], 0);
+			let_go(i);
 		}
 	}
+}
+
+/* A space's pose, in the recentred frame. Both bits are needed: a hand with no
+   position is no use for aiming. */
+static int locate(XrSpace hand, XrSpace space, XrTime time, float units_per_metre, float origin[3],
+	float angles[3])
+{
+	XrSpaceLocation location = { XR_TYPE_SPACE_LOCATION };
+	float position[3], orientation[4];
+
+	if (hand == XR_NULL_HANDLE || XR_FAILED(xrLocateSpace(hand, space, time, &location)) ||
+		!(location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) ||
+		!(location.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT))
+	{
+		return 0;
+	}
+
+	position[0] = location.pose.position.x;
+	position[1] = location.pose.position.y;
+	position[2] = location.pose.position.z;
+	orientation[0] = location.pose.orientation.x;
+	orientation[1] = location.pose.orientation.y;
+	orientation[2] = location.pose.orientation.z;
+	orientation[3] = location.pose.orientation.w;
+
+	vr_view_local(position, orientation, units_per_metre, origin, angles);
+	return 1;
+}
+
+/* Desk testing, with no controllers: "vr_fake_hand <x> <y> <z> <pitch> <yaw>
+   <roll>" puts the right hand there, in the game's own units and senses, held
+   where it points from; vr_fake_hand_left does the same for the left. */
+static int fake_hand(const cvar_t *cvar, int hand)
+{
+	float origin[3] = { 0.0f, 0.0f, 0.0f };
+	float angles[3] = { 0.0f, 0.0f, 0.0f };
+
+	if (!cvar || !cvar->string || !cvar->string[0] ||
+		sscanf(cvar->string, "%f %f %f %f %f %f", &origin[0], &origin[1], &origin[2],
+			&angles[0], &angles[1], &angles[2]) < 3)
+	{
+		return 0;
+	}
+
+	vr_poses_hand(hand, origin, angles);
+	vr_weapon_track_hand(hand, origin, origin, angles);
+	return 1;
 }
 
 void vr_input_hands(XrSession session, XrSpace space, XrTime time, float units_per_metre)
 {
 	int i;
 
-	/* Desk testing, with no controllers: "vr_fake_hand <x> <y> <z> <pitch> <yaw>
-	   <roll>" puts the right hand there, in the game's own units and senses. */
-	if (vr_fake_hand && vr_fake_hand->string && vr_fake_hand->string[0])
-	{
-		float origin[3] = { 0.0f, 0.0f, 0.0f };
-		float angles[3] = { 0.0f, 0.0f, 0.0f };
+	(void)session;
+	vr_weapon_hands_begin();
 
-		if (sscanf(vr_fake_hand->string, "%f %f %f %f %f %f", &origin[0], &origin[1], &origin[2],
-				&angles[0], &angles[1], &angles[2]) >= 3)
-		{
-			vr_poses_hand(SINVR_HAND_RIGHT, origin, angles);
-			return;
-		}
+	if (fake_hand(vr_fake_hand, SINVR_HAND_RIGHT))
+	{
+		fake_hand(vr_fake_hand_left, SINVR_HAND_LEFT);
+		return;
 	}
 
 	for (i = 0; i < 2; ++i)
 	{
-		XrSpaceLocation location = { XR_TYPE_SPACE_LOCATION };
-		float origin[3], angles[3];
-		float position[3], orientation[4];
+		float origin[3], angles[3], grip[3], grip_angles[3];
 
-		if (hand_space[i] == XR_NULL_HANDLE ||
-			XR_FAILED(xrLocateSpace(hand_space[i], space, time, &location)))
+		if (!locate(hand_space[i], space, time, units_per_metre, origin, angles))
 		{
 			continue;
 		}
 
-		/* Both bits are needed: a hand with no position is no use for aiming. */
-		if (!(location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) ||
-			!(location.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT))
-		{
-			continue;
-		}
-
-		position[0] = location.pose.position.x;
-		position[1] = location.pose.position.y;
-		position[2] = location.pose.position.z;
-		orientation[0] = location.pose.orientation.x;
-		orientation[1] = location.pose.orientation.y;
-		orientation[2] = location.pose.orientation.z;
-		orientation[3] = location.pose.orientation.w;
-
-		vr_view_local(position, orientation, units_per_metre, origin, angles);
 		vr_poses_hand(i, origin, angles);
+
+		/* The weapon goes where the hand holds the controller, pointing the way
+		   the controller points; without the grip, where it points from. */
+		if (!locate(grip_space[i], space, time, units_per_metre, grip, grip_angles))
+		{
+			memcpy(grip, origin, sizeof(grip));
+		}
+		vr_weapon_track_hand(i, grip, origin, angles);
 
 		if (!said_hands && i == SINVR_HAND_RIGHT)
 		{
 			said_hands = 1;
-			vr_printf("VR: hands tracked; right hand at (%.1f %.1f %.1f) units, "
-				"pointing (%.1f %.1f %.1f)", origin[0], origin[1], origin[2],
+			vr_printf("VR: hands tracked; right hand at (%.1f %.1f %.1f) units, held at (%.1f %.1f %.1f), "
+				"pointing (%.1f %.1f %.1f)", origin[0], origin[1], origin[2], grip[0], grip[1], grip[2],
 				angles[0], angles[1], angles[2]);
 		}
 	}
@@ -1053,6 +1150,11 @@ void vr_input_destroy(void)
 		{
 			xrDestroySpace(hand_space[i]);
 			hand_space[i] = XR_NULL_HANDLE;
+		}
+		if (grip_space[i] != XR_NULL_HANDLE)
+		{
+			xrDestroySpace(grip_space[i]);
+			grip_space[i] = XR_NULL_HANDLE;
 		}
 	}
 	said_hands = 0;

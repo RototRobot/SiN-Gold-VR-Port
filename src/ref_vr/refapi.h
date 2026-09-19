@@ -84,16 +84,22 @@ typedef struct cvar_s
  * One model in the frame: Quake 2's entity_t, grown by SiN to 200 bytes.
  * ref_gl walks the list in steps of 0xC8, tests the flags at +0x48 and takes
  * the model from +0; the rest was read off the view weapon's entity at runtime
- * (docs/ENGINE_NOTES.md). Fields named unknown_* have not been identified.
+ * and out of the code that fills and draws it (docs/ENGINE_NOTES.md). Fields
+ * named unknown_* have not been identified.
  */
 #define RF_MINLIGHT 0x1
 #define RF_VIEWERMODEL 0x2
 #define RF_WEAPONMODEL 0x4
 #define RF_FRAMELERP 0x40
 
+/* entity_t.groups is indexed by the groups a model's .def names, not by the
+   groups its .sbm is built of; a model whose .def names none has none. */
+#define MAX_MODEL_GROUPS 24
+#define MDL_GROUP_NODRAW 0x80 /* in entity_t.groups: that group is not drawn */
+
 typedef struct
 {
-	void *model;                    /* +0x00 */
+	void *model;                    /* +0x00 ref_gl's model_t, which starts with its name */
 	float angles[3];                /* +0x04 pitch, yaw, roll */
 	float origin[3];                /* +0x10 */
 	int frame;                      /* +0x1C */
@@ -107,9 +113,14 @@ typedef struct
 	int unknown_44;                 /* +0x44 SiN's own; zero on the view weapon */
 	int flags;                      /* +0x48 RF_* */
 	float axis[3][3];               /* +0x4C forward, left, up */
-	unsigned char unknown_70[0x3C]; /* +0x70 */
-	float scale;                    /* +0xAC 1 on the view weapon */
-	unsigned char unknown_b0[0x18]; /* +0xB0 */
+	unsigned char unknown_70[0x18]; /* +0x70 begins with what it is attached to, if anything */
+	int id;                         /* +0x88 names it to what is attached to it */
+	unsigned char groups[MAX_MODEL_GROUPS]; /* +0x8C flags OR-ed into each group's own */
+	int unknown_a4;                 /* +0xA4 */
+	int anim;                       /* +0xA8 the animation frame counts in */
+	float scale;                    /* +0xAC size: SiN models are drawn and their bones placed at it */
+	unsigned char unknown_b0[0x14]; /* +0xB0 */
+	int gravity_axis;               /* +0xC4 */
 } entity_t;
 
 /*
@@ -151,7 +162,10 @@ typedef char refdef_size_check[sizeof(refdef_t) == 0x78 ? 1 : -1];
 typedef char entity_size_check[sizeof(entity_t) == 0xC8 ? 1 : -1];
 typedef char entity_flags_check[offsetof(entity_t, flags) == 0x48 ? 1 : -1];
 typedef char entity_axis_check[offsetof(entity_t, axis) == 0x4C ? 1 : -1];
+typedef char entity_groups_check[offsetof(entity_t, groups) == 0x8C ? 1 : -1];
+typedef char entity_anim_check[offsetof(entity_t, anim) == 0xA8 ? 1 : -1];
 typedef char entity_scale_check[offsetof(entity_t, scale) == 0xAC ? 1 : -1];
+typedef char entity_gravity_check[offsetof(entity_t, gravity_axis) == 0xC4 ? 1 : -1];
 typedef char cvar_value_check[offsetof(cvar_t, value) == 0x14 ? 1 : -1];
 
 #endif /* REFAPI_H */

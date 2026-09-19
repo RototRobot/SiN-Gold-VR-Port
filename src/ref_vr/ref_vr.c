@@ -623,6 +623,7 @@ static int vr_Init(void *hinstance, void *wndproc)
 		{
 			g_last_draw_tick = GetTickCount();
 			start_idle_timer();
+			vr_weapon_install();
 		}
 	}
 
@@ -680,6 +681,9 @@ static void vr_Shutdown(void)
 
 	record_call(RE_SHUTDOWN);
 	stop_idle_timer();
+
+	/* sin.exe's calls into this DLL go back to where they went before. */
+	vr_weapon_uninstall();
 
 	/* Before ref_gl destroys the GL context the OpenXR session belongs to. */
 	g_eye = NULL;
@@ -803,7 +807,8 @@ static void vr_RenderFrame(refdef_t *fd)
 		return;
 	}
 
-	/* Before the view moves to the eye: the hand is measured from the engine's own. */
+	/* Before the view moves to the eye: the hand is measured from the engine's
+	   own. Usually the client has done this already (vr_weapon.c). */
 	vr_weapon_to_hand(fd);
 
 	vr_view_apply(fd, g_eye, vr_worldscale_units(), &saved);
@@ -821,6 +826,7 @@ static void vr_RenderFrame(refdef_t *fd)
 	((re_render_frame_t)g_real_slot[RE_RENDER_FRAME])(fd);
 
 	/* The engine may render from the same refdef again, paused or not. */
+	vr_weapon_after_eye(fd);
 	vr_view_restore(fd, &saved);
 }
 
@@ -950,6 +956,7 @@ static void vr_EndFrame(void)
 	g_frame_had_menu_pic = 0;
 	g_pass = 0;
 	g_stereo_frame = 0;
+	vr_weapon_end_frame();
 	update_stereo();
 	end_frame_trace();
 	g_last_draw_tick = GetTickCount();

@@ -70,3 +70,76 @@ int vr_hook_import(HMODULE module, const char *dll, const char *function, void *
 
 	return 0;
 }
+
+/* What vr_hook_call changed, so it can be put back. */
+static struct
+{
+	BYTE *site;
+	LONG displacement;
+} g_calls[8];
+static int g_call_count;
+
+static int write_displacement(BYTE *site, LONG displacement)
+{
+	DWORD protection;
+
+	if (!VirtualProtect(site + 1, sizeof(LONG), PAGE_EXECUTE_READWRITE, &protection))
+	{
+		return 0;
+	}
+	memcpy(site + 1, &displacement, sizeof(LONG));
+	VirtualProtect(site + 1, sizeof(LONG), protection, &protection);
+	FlushInstructionCache(GetCurrentProcess(), site, 5);
+	return 1;
+}
+
+int vr_hook_call(HMODULE module, DWORD site_rva, DWORD target_rva, void *replacement, void **original)
+{
+	BYTE *base = (BYTE *)module;
+	const IMAGE_NT_HEADERS *nt;
+	BYTE *site;
+	LONG displacement;
+
+	if (!base || g_call_count >= (int)(sizeof(g_calls) / sizeof(g_calls[0])))
+	{
+		return 0;
+	}
+
+	nt = (const IMAGE_NT_HEADERS *)(base + ((const IMAGE_DOS_HEADER *)base)->e_lfanew);
+	if (nt->Signature != IMAGE_NT_SIGNATURE || site_rva + 5 > nt->OptionalHeader.SizeOfImage ||
+		target_rva >= nt->OptionalHeader.SizeOfImage)
+	{
+		return 0;
+	}
+
+	site = base + site_rva;
+	memcpy(&displacement, site + 1, sizeof(LONG));
+	if (site[0] != 0xE8 || site + 5 + displacement != base + target_rva)
+	{
+		return 0;
+	}
+
+	if (!write_displacement(site, (LONG)((BYTE *)replacement - (site + 5))))
+	{
+		return 0;
+	}
+
+	g_calls[g_call_count].site = site;
+	g_calls[g_call_count].displacement = displacement;
+	g_call_count++;
+
+	if (original)
+	{
+		*original = base + target_rva;
+	}
+	return 1;
+}
+
+void vr_unhook_calls(void)
+{
+	while (g_call_count > 0)
+	{
+		g_call_count--;
+		write_displacement(g_calls[g_call_count].site, g_calls[g_call_count].displacement);
+	}
+}

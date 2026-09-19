@@ -27,6 +27,7 @@
 #include "vr_gl.h"
 #include "vr_input.h"
 #include "vr_poses.h"
+#include "vr_weapon.h"
 #include "vr_xr.h"
 #include "xr_layers.h"
 
@@ -928,8 +929,10 @@ static int xr_begin_stereo(int force_render)
 
 /*
  * What the game module gets to see of the player: the head from between the
- * eyes, and both hands. Written once a frame, with this frame's display time,
- * so that the hands and the view agree about when they are.
+ * eyes, both hands, and the weapon placed in them. Written once a frame, with
+ * this frame's display time, so that the hands and the view agree about when
+ * they are - and before the engine builds the frame's scene, which is when the
+ * weapon is put into it (vr_weapon.c).
  */
 static void publish_poses(void)
 {
@@ -948,6 +951,7 @@ static void publish_poses(void)
 		vr_view_local(head_position, xr.eye_views[0].orientation, scale, head_origin, head_angles);
 		vr_poses_head(head_origin, head_angles);
 		vr_input_hands(xr.session, xr.space, xr.display_time, scale);
+		vr_weapon_publish();
 	}
 
 	vr_poses_end();
@@ -1100,8 +1104,12 @@ const vr_eye_t *vr_xr_begin_eye(int pass, int window_width, int window_height, i
 /*
  * The bound eye's image, as an uncompressed 24-bit TGA. GL reads rows from the
  * bottom up and TGA stores them that way by default, so the rows go straight
- * out, and GL_BGR is already the order TGA wants.
+ * out, and GL_BGR is already the order TGA wants. The first dump of a session
+ * is sinvr_eye0.tga and sinvr_eye1.tga; later ones are numbered, so that one
+ * test run can compare several.
  */
+static unsigned dumps_written;
+
 static void dump_eye_image(const xr_target_t *t, int eye)
 {
 	char path[64];
@@ -1133,7 +1141,14 @@ static void dump_eye_image(const xr_target_t *t, int eye)
 		eye, (int)read_binding, (int)draw_binding, (unsigned)error,
 		pixels[middle + 2], pixels[middle + 1], pixels[middle]);
 
-	sprintf(path, "sinvr_eye%d.tga", eye);
+	if (dumps_written == 0)
+	{
+		sprintf(path, "sinvr_eye%d.tga", eye);
+	}
+	else
+	{
+		sprintf(path, "sinvr_eye%d_%u.tga", eye, dumps_written);
+	}
 	file = fopen(path, "wb");
 	if (file)
 	{
@@ -1180,6 +1195,7 @@ void vr_xr_end_eye(void)
 		if (eye == 1)
 		{
 			xr.dump_wanted = 0;
+			dumps_written++;
 		}
 	}
 

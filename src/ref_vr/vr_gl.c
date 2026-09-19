@@ -47,36 +47,81 @@ static struct
 } hud = { 60.0f, 6.0f };
 
 /*
- * A model to be drawn at another size: the view weapon in the hand. ref_gl
- * places each model with glTranslatef to its origin and then turns it with
- * glRotatef, so a uniform scale straight after the translate to that origin
- * scales exactly that model, and anything drawn with it, and nothing else.
+ * Models drawn with part of them cut away by a plane: the fists, drawn once in
+ * each hand, each copy showing only its own arm. ref_gl draws a model between
+ * a glPushMatrix, a glTranslatef to its origin, and the glPopMatrix after it,
+ * with nothing else pushed or popped in between. So the plane goes on just
+ * before the translate to that origin - given in the world, while the
+ * modelview still holds only the view, which is how GL takes clip planes -
+ * and comes off at the pop.
  */
 typedef void(APIENTRY *gl_translate_t)(GLfloat x, GLfloat y, GLfloat z);
+typedef void(APIENTRY *gl_void_t)(void);
 static gl_translate_t real_glTranslatef;
+static gl_void_t real_glPopMatrix;
+
+#define MAX_CLIPPED 4
 
 static struct
 {
-	int armed;
-	float origin[3];
-	float scale;
-} resize;
+	int count;
+	float origin[MAX_CLIPPED][3];
+	GLdouble plane[MAX_CLIPPED][4];
+	int on;
+} clip;
 
-void vr_gl_resize_model_at(const float origin[3], float scale)
+void vr_gl_clip_model_at(const float origin[3], const float plane[4])
 {
-	resize.armed = scale > 0.0f && scale != 1.0f;
-	memcpy(resize.origin, origin, sizeof(resize.origin));
-	resize.scale = scale;
+	int i;
+
+	if (clip.count >= MAX_CLIPPED)
+	{
+		return;
+	}
+
+	memcpy(clip.origin[clip.count], origin, sizeof(clip.origin[clip.count]));
+	for (i = 0; i < 4; ++i)
+	{
+		clip.plane[clip.count][i] = plane[i];
+	}
+	clip.count++;
+}
+
+void vr_gl_clear_clips(void)
+{
+	clip.count = 0;
 }
 
 static void APIENTRY hook_glTranslatef(GLfloat x, GLfloat y, GLfloat z)
 {
-	real_glTranslatef(x, y, z);
+	int i;
 
-	if (eye.active && resize.armed && fabsf(x - resize.origin[0]) < 0.01f &&
-		fabsf(y - resize.origin[1]) < 0.01f && fabsf(z - resize.origin[2]) < 0.01f)
+	if (eye.active && !clip.on)
 	{
-		glScalef(resize.scale, resize.scale, resize.scale);
+		for (i = 0; i < clip.count; ++i)
+		{
+			if (fabsf(x - clip.origin[i][0]) < 0.01f && fabsf(y - clip.origin[i][1]) < 0.01f &&
+				fabsf(z - clip.origin[i][2]) < 0.01f)
+			{
+				glClipPlane(GL_CLIP_PLANE0, clip.plane[i]);
+				glEnable(GL_CLIP_PLANE0);
+				clip.on = 1;
+				break;
+			}
+		}
+	}
+
+	real_glTranslatef(x, y, z);
+}
+
+static void APIENTRY hook_glPopMatrix(void)
+{
+	real_glPopMatrix();
+
+	if (clip.on)
+	{
+		glDisable(GL_CLIP_PLANE0);
+		clip.on = 0;
 	}
 }
 
@@ -286,6 +331,11 @@ static FARPROC WINAPI hook_GetProcAddress(HMODULE module, LPCSTR name)
 		real_glTranslatef = (gl_translate_t)proc;
 		return (FARPROC)hook_glTranslatef;
 	}
+	if (strcmp(name, "glPopMatrix") == 0)
+	{
+		real_glPopMatrix = (gl_void_t)proc;
+		return (FARPROC)hook_glPopMatrix;
+	}
 	if (strcmp(name, "glOrtho") == 0)
 	{
 		real_glOrtho = (gl_frustum_t)proc;
@@ -345,4 +395,10 @@ void vr_gl_eye_end(void)
 	eye.active = 0;
 	eye.in_2d = 0;
 	eye.full_screen_2d = 0;
+
+	if (clip.on)
+	{
+		glDisable(GL_CLIP_PLANE0);
+		clip.on = 0;
+	}
 }
