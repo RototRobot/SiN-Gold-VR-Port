@@ -632,7 +632,10 @@ Left-handed, at the desk on 2026-09-20: the same weapon and hand position mirror
 (1.5 -6.6 2.8) against the right-handed (1.5 6.6 2.8), to the last digit; the eye dumps show the gun in
 the left hand with its own details on the other side, and reflecting the right-handed picture puts the
 same side of the gun in view as the left-handed one (`lefty_side_by_side`); the fists still come out one
-arm per hand. Comparing the two runs pixel for pixel is not worth much: each eye's frustum reaches
+arm per hand. `vid_restart` is enough to change the setting over: the renderer shuts down, starts
+again, latches it, suggests the swapped bindings and the weapon comes back in the other hand - the
+whole OpenXR session is rebuilt and the run carries on. Comparing the two runs pixel for pixel is not
+worth much: each eye's frustum reaches
 further to its own side, so the same gun in the same place is cut off by a different edge in each eye,
 and the runtime's eye size moves between sessions.
 
