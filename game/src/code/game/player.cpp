@@ -6432,13 +6432,14 @@ void Player::SetViewAngles(Vector ang)
  * ordinary SiN behaviour.
  *
  * A left-handed player holds a mirrored model, and mirrored is set for whoever
- * measures anything off it.
+ * measures anything off it; still says the weapon's idle animation should be
+ * held where it is.
  */
 static cvar_t *vr_aim = NULL;
 static qboolean vr_said_aiming = false;
 
 qboolean Player::VRWeaponPose(Vector *pos, Vector *angles, float *scale, qboolean *server_effects,
-                              qboolean *mirrored)
+                              qboolean *mirrored, qboolean *still)
 {
    float    origin[3];
    float    ang[3];
@@ -6488,6 +6489,10 @@ qboolean Player::VRWeaponPose(Vector *pos, Vector *angles, float *scale, qboolea
    if(mirrored)
    {
       *mirrored = (flags & VR_WEAPON_MIRRORED) != 0;
+   }
+   if(still)
+   {
+      *still = (flags & VR_WEAPON_STILL) != 0;
    }
 
    return true;

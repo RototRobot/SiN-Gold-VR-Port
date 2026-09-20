@@ -1079,24 +1079,79 @@ void Weapon::PickupWeapon(Event *ev)
    }
 }
 
+//
+// SiN Gold VR: the view weapon is held still - it is being placed in the
+// player's hand, or vr_freeze_idle asks for it in play as well. The weapon is
+// on a controller there, which gives it all the movement it needs.
+//
+#define VR_IDLE_BEAT 0.5f
+
+static qboolean vr_said_still = false;
+
+static qboolean vr_hold_still(Sentient *owner)
+{
+   qboolean still = false;
+
+   if(owner && owner->isClient())
+   {
+      ((Player *)(Entity *)owner)->VRWeaponPose(NULL, NULL, NULL, NULL, NULL, &still);
+   }
+
+   // said either way, once each time it changes: it is a question a player
+   // asks of the picture, and the log answers it
+   if(still != vr_said_still)
+   {
+      vr_said_still = still;
+      gi.printf(still ? "SiN Gold VR: the weapon's idle animation is held still\n" :
+                "SiN Gold VR: the weapon's idle animation is running again\n");
+   }
+
+   return still;
+}
+
 void Weapon::ForceIdle(void)
 {
+   const char *animname;
+
    weaponstate = WEAPON_READY;
 
    if(dualmode)
    {
       if(weaponmode == PRIMARY)
-         RandomAnimate("primaryidle", EV_Weapon_Idle);
+         animname = "primaryidle";
       else
-         RandomAnimate("secondaryidle", EV_Weapon_Idle);
+         animname = "secondaryidle";
    }
    else
    {
       if(owner && (owner->flags & FL_SILENCER) && (silenced))
-         RandomAnimate("silidle", EV_Weapon_Idle);
+         animname = "silidle";
       else
-         RandomAnimate("idle", EV_Weapon_Idle);
+         animname = "idle";
    }
+
+   // SiN Gold VR: the idle animation is where the weapon's breathing comes
+   // from. Held still, it takes the idle pose once and keeps that frame - and
+   // a beat stands in for the animation's end, which is what brings the weapon
+   // back here to reload and to pick its next idle.
+   if(vr_hold_still(owner))
+   {
+      const char *playing = gi.Anim_NameForNum(edict->s.modelindex, edict->s.anim);
+
+      if(!playing || strncmp(playing, animname, strlen(animname)))
+      {
+         RandomAnimate(animname, (Event *)NULL);
+         // the change is pending until the next animated frame, and there
+         // will not be one
+         AnimateFrame();
+      }
+      StopAnimating();
+      CancelEventsOfType(EV_Weapon_Idle);
+      PostEvent(EV_Weapon_Idle, VR_IDLE_BEAT);
+      return;
+   }
+
+   RandomAnimate(animname, EV_Weapon_Idle);
 }
 
 void Weapon::DoneLowering(Event *ev)
@@ -1242,6 +1297,16 @@ qboolean Weapon::CheckReload(void)
 
 void Weapon::Idle(Event *ev)
 {
+   // SiN Gold VR: the beat that stands in for the idle animation can arrive
+   // while the weapon is firing or reloading, where the animation's own end
+   // never would. It has nothing to say then but "ask again".
+   if((weaponstate != WEAPON_READY) && vr_hold_still(owner))
+   {
+      CancelEventsOfType(EV_Weapon_Idle);
+      PostEvent(EV_Weapon_Idle, VR_IDLE_BEAT);
+      return;
+   }
+
    if(ammo_clip_size && (!ammo_in_clip || level.time > last_attack_time + 2))
    {
       if(CheckReload())
