@@ -6430,11 +6430,15 @@ void Player::SetViewAngles(Vector ang)
  * Only the first client - the player at this machine - aims this way. With no
  * weapon in the hand, gravity turned on its side, or vr_aim off, this is the
  * ordinary SiN behaviour.
+ *
+ * A left-handed player holds a mirrored model, and mirrored is set for whoever
+ * measures anything off it.
  */
 static cvar_t *vr_aim = NULL;
 static qboolean vr_said_aiming = false;
 
-qboolean Player::VRWeaponPose(Vector *pos, Vector *angles, float *scale, qboolean *server_effects)
+qboolean Player::VRWeaponPose(Vector *pos, Vector *angles, float *scale, qboolean *server_effects,
+                              qboolean *mirrored)
 {
    float    origin[3];
    float    ang[3];
@@ -6480,6 +6484,10 @@ qboolean Player::VRWeaponPose(Vector *pos, Vector *angles, float *scale, qboolea
    if(server_effects)
    {
       *server_effects = (flags & VR_CLIENT_BULLETS_OFF) != 0;
+   }
+   if(mirrored)
+   {
+      *mirrored = (flags & VR_WEAPON_MIRRORED) != 0;
    }
 
    return true;

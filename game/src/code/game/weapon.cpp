@@ -276,12 +276,18 @@ Vector Weapon::MuzzleOffset(void)
          if(gi.GetBoneTransform(edict->s.modelindex, groupindex, tri_num, orient, useanim, useframe,
                                 edict->s.scale, trans, offset.vec3()))
          {
-            float vr_scale;
+            float    vr_scale;
+            qboolean vr_mirrored = false;
 
             // SiN Gold VR: the model is in the player's hand, drawn at this size
-            if(owner && owner->isClient() && ((Player *)(Entity *)owner)->VRWeaponPose(NULL, NULL, &vr_scale, NULL))
+            if(owner && owner->isClient() &&
+               ((Player *)(Entity *)owner)->VRWeaponPose(NULL, NULL, &vr_scale, NULL, &vr_mirrored))
             {
-               return offset * vr_scale;
+               offset *= vr_scale;
+               // a left-handed player's weapon is drawn mirrored, barrel and all
+               if(vr_mirrored)
+                  offset[1] = -offset[1];
+               return offset;
             }
 
             //
