@@ -7,7 +7,7 @@ test workflow, and the traps already hit.
 2. **Never modify or replace files that ship with SiN Gold.** The mod runs through `+set vid_ref vr` and
    `+set game sinvr`.
 3. **`game/` is Night Dive Studios' code, under their licence** (`game/license.txt`). Keep changes there minimal and
-   commit them separately, so that `git diff 07ae69c -- game` shows exactly what we changed.
+   commit them separately, so that `git diff 5236699 -- game` shows exactly what we changed.
 4. **No GPL code** from Quake2Quest or Quake II PCVR goes into this repository. Their ideas and measured values are fine;
    their code is not.
 5. **Git is local.** The owner uploads to GitHub by hand, so never add a remote and never push. Keep commits small,

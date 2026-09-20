@@ -248,7 +248,7 @@ python -c "from PIL import Image; im = Image.open('sinvr_eye0.tga').convert('L')
 | `src/ref_vr/vr_hook.c` | Patching another module in this process: its imports (the GL and joystick hooks), and single direct calls inside sin.exe |
 | `src/ref_vr/xr_layers.c` | Implicit-layer hygiene for 32-bit processes (shared with xrprobe) |
 | `src/ref_vr/vrlog.c` | `sinvr.log` |
-| `game/` | Night Dive's source (SiN in `src/code/game`, WoS in `src/code/game2015`, shared `elib`) plus `game/CMakeLists.txt`. `git diff 07ae69c -- game` shows everything we changed there: VR aiming in `player.cpp`/`player.h`, the muzzle and shot direction in `weapon.cpp`, server-side bullet impacts in `bullet.cpp`, and a line in `g_main.cpp`. |
+| `game/` | Night Dive's source (SiN in `src/code/game`, WoS in `src/code/game2015`, shared `elib`) plus `game/CMakeLists.txt`. `git diff 5236699 -- game` shows everything we changed there: VR aiming in `player.cpp`/`player.h`, the muzzle and shot direction in `weapon.cpp`, server-side bullet impacts in `bullet.cpp`, and a line in `g_main.cpp`. |
 | `cmake/openxr.cmake` | Builds the loader from the sibling SDK, or fetches `release-1.1.63` |
 | `tools/deploy.ps1`, `tools/desk-test.ps1`, `tools/xrprobe/` | Install/uninstall, an unattended run, and the OpenXR probe |
 | `docs/ENGINE_NOTES.md` | How the engine works: the slot map, RVAs, `refdef_t`, the stereo path and runtime observations |
