@@ -34,6 +34,12 @@
    bone's y - its distance to the model's left - changes sign. */
 #define SINVR_WEAPON_MIRRORED 0x2
 
+/* The view weapon's idle animation should be held still: it is being placed in
+   the player's hand, or vr_freeze_idle asks for it. A weapon on a controller
+   has the hand's own movement already, and breathing under it makes lining the
+   two up harder. */
+#define SINVR_WEAPON_STILL 0x4
+
 typedef struct
 {
 	int version;             /* SINVR_POSES_VERSION */
@@ -56,7 +62,7 @@ typedef struct
 	float weapon_origin[3];
 	float weapon_angles[3];
 	float weapon_scale;
-	int flags;               /* SINVR_CLIENT_BULLETS_OFF, SINVR_WEAPON_MIRRORED */
+	int flags;               /* SINVR_CLIENT_BULLETS_OFF, _MIRRORED, _STILL */
 } sinvr_poses_t;
 
 /* ref_vr.dll's export. NULL if it speaks a different version. */

@@ -652,6 +652,25 @@ maths is what the owner's next headset test exercises.
      turned up 10 and left 20 degrees; moving the hand 6 units to the right moved it 375 px against a
      predicted 377. Nothing is drawn in play, and it appears the moment the weapon freezes.
 
+10. **The idle animation can be held still** (`vr_freeze_idle`, and always while a weapon is being
+   placed). `Weapon::ForceIdle` plays the model's `idle` animation, which is where the breathing and
+   the swaying arm come from; a weapon on a controller has the hand's own movement instead, and
+   breathing under a weapon being lined up with a hand is only in the way.
+   - **The renderer decides, the game acts.** `vr_weapon.c` sets `SINVR_WEAPON_STILL` when the grip
+     button has the weapon frozen or `vr_freeze_idle` is on, and `Weapon::ForceIdle` takes the idle
+     pose once and then `StopAnimating`s, which holds that frame.
+   - **The idle animation is also a heartbeat.** Its end posts `EV_Weapon_Idle`, which is what brings
+     the weapon back to `Weapon::Idle` to check whether it should reload and to pick its next idle. So
+     the frozen path posts that event itself every half second; `Weapon::Idle` sends it away again
+     while the weapon is firing or reloading, where the animation's end would never have arrived.
+   - **Only the idle is held.** Firing, reloading, raising and putting away animate as before, which
+     matters because the client's muzzle flash, shell cases and `shootbullets` hang off the *fire*
+     animation's first frame (docs/ENGINE_NOTES.md).
+   - Measured at the desk on 2026-09-20, two dumps a second apart with the hand held still: with the
+     animation running, 14,719 pixels of the weapon changed; with it held, 1,971 - and those are the
+     one-pixel outlines a sub-pixel shift of the head leaves behind, against 459 and 129 in a patch of
+     world with no weapon in it. The game says which state it is in, either way, once per change.
+
 What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
 computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the
 grip button freezing and re-attaching the weapon (frozen with the hand at yaw 0, released with it at yaw

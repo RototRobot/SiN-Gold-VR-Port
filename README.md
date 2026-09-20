@@ -121,8 +121,9 @@ holds it and how big it should be. To change one, hold it and **squeeze the grip
 and hangs in the air. **Your controllers appear while you do it**: a cross where each hand is holding,
 its arms along the way the hand is turned, and a line out of the front of the controller showing where
 it points. Line the cross up with the part of the gun you want in your hand and the line up with the
-barrel. Move your hand to hold it the way you want - and push that hand's stick up or down to make it
-bigger or smaller - then let go of the grip.
+barrel. The weapon also stops breathing while you do this - its idle animation is held still, so the
+only thing moving is your hand. Move your hand to hold it the way you want - and push that hand's
+stick up or down to make it bigger or smaller - then let go of the grip.
 It is remembered for that weapon, and kept between sessions. `vr_weapon_reset 1` in the console puts
 the weapon you are holding back to its first guess.
 
@@ -159,6 +160,7 @@ These console variables control the mod:
 | `vr_weapon_hand` | 1 | Draw the weapon in the hand instead of in front of the camera. |
 | `vr_left_handed` | 0 | 1 puts the weapon in the left hand, mirrored, and swaps the two controllers' buttons and sticks. Read when the renderer starts, so `vid_restart` after changing it. |
 | `vr_show_hands` | 1 | Draw the controllers - a cross and the line they point along - while a weapon is being placed. 2 draws them all the time, 0 never. |
+| `vr_freeze_idle` | 0 | 1 holds the weapon's idle animation still in play as well - no breathing, no swaying arm. It is always held while a weapon is being placed. |
 | `vr_grip_<weapon>` | empty | Where that weapon sits in the hand: offset, angles and size. The grip button writes it; empty means the measured guess. |
 | `vr_weapon_reset` | 0 | Set it to 1 to forget the setting for the weapon in hand. Clears itself. |
 | `vr_crosshair` | 1 | SiN's crosshair follows the gun while it is in the hand. 0 leaves it out; 2 leaves it in the middle of the view, where SiN draws it. |
@@ -185,6 +187,10 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   is what it should do.
 - Most of SiN's two-handed weapons only ever modelled the left hand, on the fore-end, so that is the
   hand you see on them; the fists are the one weapon with two arms, and they get one each.
+- The weapon's idle animation is what makes it breathe and sway. A weapon on a controller already
+  moves with the hand, so `vr_freeze_idle 1` holds that animation on its first frame. Only the idle is
+  held: firing, reloading and putting the weapon away animate as they always did, and the muzzle stays
+  where the model has it.
 - A mirrored weapon - left-handed mode - is lit as its mirror image was: SiN shades a model from its
   own list of normals, which the mirror does not reach, so the light on the gun falls where it would
   have fallen in the right hand. Nothing else about it is out of place, and the fists, having an arm

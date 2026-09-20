@@ -314,6 +314,17 @@ does the movement work itself. The console says `joystick detected` where it use
   as the translate - so counting them is a reliable way to know when the matrix has reached the model's
   own frame. That is where `vr_gl_mirror_model_at` puts its `glScalef(1, -1, 1)` and its swap of the
   winding, to draw a model mirrored down its own middle for the other hand.
+- **A view weapon's `.def` names its animations, and its client effects hang off their frames.**
+  `view_magnum.def` has `ready`, `fire`, `idle1`, `idle2`, `reload`, `putaway` and a silenced set of
+  each, and lines like `client fire first attach barrel sprites/gunblast.spr` and
+  `client fire first shootbullets 1 10 10 10 8192` - so the muzzle flash, the shells and the client's
+  own bullets are commands on the *first frame of the fire animation*. Holding the idle animation
+  still leaves all of that alone.
+- **The barrel the game fires from does not move with the animation.** `!init:` carries
+  `server setaimanim idle1 0`, which sets the `aimanim`/`aimframe` that `Weapon::MuzzleOffset` reads in
+  place of the current frame: the muzzle is measured from idle1's first frame whatever the weapon is
+  doing. Freezing the drawn idle therefore brings the picture closer to where shots come from, not
+  further away.
 - **A mirrored model is lit unmirrored.** Shading comes from each vertex's normal index through the
   engine's own table, and a mirror in the matrix does not reach it, so a mirrored weapon carries its
   original vertex shades - the light on it appears to come from the other side. Visible if looked for,

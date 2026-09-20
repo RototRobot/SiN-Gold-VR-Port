@@ -77,6 +77,7 @@ static cvar_t *vr_weapon_client;
 static cvar_t *vr_client_bullets;
 static cvar_t *vr_weapon_reset;
 static cvar_t *vr_show_hands;
+static cvar_t *vr_freeze_idle;
 static cvar_t *vr_aim;
 
 /* Read once, at start-up: the buttons are attached to the session with the
@@ -213,6 +214,7 @@ void vr_weapon_startup(void)
 	vr_client_bullets = vr_cvar("vr_client_bullets", "0", CVAR_ARCHIVE);
 	vr_weapon_reset = vr_cvar("vr_weapon_reset", "0", 0);
 	vr_show_hands = vr_cvar("vr_show_hands", "1", CVAR_ARCHIVE);
+	vr_freeze_idle = vr_cvar("vr_freeze_idle", "0", CVAR_ARCHIVE);
 	vr_aim = vr_cvar("vr_aim", "1", 0);
 	lefty = vr_left_handed->value != 0.0f;
 	if (lefty)
@@ -568,6 +570,13 @@ void vr_weapon_publish(void)
 	if (mirror_weapon())
 	{
 		flags |= SINVR_WEAPON_MIRRORED;
+	}
+
+	/* Breathing under a weapon that is being lined up with a hand is only in
+	   the way; in play it is the player's own choice. */
+	if (adjust.active || (vr_freeze_idle && vr_freeze_idle->value != 0.0f))
+	{
+		flags |= SINVR_WEAPON_STILL;
 	}
 
 	vr_pose_angles(&placed[gun].pose, angles);

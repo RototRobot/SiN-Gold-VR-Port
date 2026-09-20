@@ -23,6 +23,9 @@
    distance to the model's left changes sign with it. */
 #define VR_WEAPON_MIRRORED 0x2
 
+/* The view weapon's idle animation should be held still. */
+#define VR_WEAPON_STILL 0x4
+
 /*
  * A hand, in the frame the renderer recentred: origin in game units from the
  * player's eyes, +x the way the player's body faces, +y to their left, +z up,
@@ -39,8 +42,8 @@ int VR_HeadPose(float origin[3], float angles[3]);
  * The view weapon as the renderer draws it in the player's hand, in the same
  * frame: the model's origin and angles, and the size it is drawn at - which is
  * also the size of its bones, so the barrel bone scaled by it is the barrel
- * the player sees. flags holds VR_CLIENT_BULLETS_OFF and VR_WEAPON_MIRRORED.
- * Returns 0 when the weapon is not in the hand.
+ * the player sees. flags holds VR_CLIENT_BULLETS_OFF, VR_WEAPON_MIRRORED and
+ * VR_WEAPON_STILL. Returns 0 when the weapon is not in the hand.
  */
 int VR_WeaponPose(float origin[3], float angles[3], float *scale, int *flags);
 

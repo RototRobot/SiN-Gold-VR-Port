@@ -42,7 +42,7 @@
 #include "refapi.h"
 
 /* Registers the cvars: vr_weapon_hand, vr_left_handed, vr_show_hands,
-   vr_grip_<weapon>, vr_weapon_reset. */
+   vr_freeze_idle, vr_grip_<weapon>, vr_weapon_reset. */
 void vr_weapon_startup(void);
 
 /*
