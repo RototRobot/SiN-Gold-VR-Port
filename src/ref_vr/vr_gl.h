@@ -98,6 +98,19 @@ void vr_gl_clear_models(void);
 int vr_gl_panel_offset(float tan_x, float tan_y, float *dx, float *dy);
 
 /*
+ * Draws something of this mod's own in world coordinates, after ref_gl has
+ * finished with an eye and while its framebuffer is still bound: the eye's own
+ * frustum and the view the refdef holds are set up again, the whole eye is the
+ * viewport, and texturing, the depth test and the scissor are off, so plain
+ * coloured lines land where the world is and nothing is hidden behind it.
+ * Returns 0 if no eye is being drawn, or if ref_gl never asked for one of the
+ * GL entry points this needs, in which case nothing was changed.
+ * vr_gl_world_end puts it all back.
+ */
+int vr_gl_world_begin(const float vieworg[3], const float viewangles[3]);
+void vr_gl_world_end(void);
+
+/*
  * While an eye is rendered, ref_gl's viewports and scissors, which are in window
  * coordinates, are mapped onto the eye's target - the whole of it for the world,
  * the HUD panel for 2D - and every projection it sets up is replaced by the eye's

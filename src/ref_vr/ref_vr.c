@@ -829,6 +829,10 @@ static void vr_RenderFrame(refdef_t *fd)
 
 	((re_render_frame_t)g_real_slot[RE_RENDER_FRAME])(fd);
 
+	/* Into the same framebuffer, over the world and under the HUD: where the
+	   controllers are, while a weapon is being placed on one. */
+	vr_weapon_draw_hands(fd);
+
 	/* The engine may render from the same refdef again, paused or not. */
 	vr_weapon_after_eye(fd);
 	vr_view_restore(fd, &saved);

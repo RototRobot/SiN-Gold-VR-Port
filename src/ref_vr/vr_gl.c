@@ -360,6 +360,61 @@ static void reapply_rects(void)
 	}
 }
 
+int vr_gl_world_begin(const float vieworg[3], const float viewangles[3])
+{
+	const double near_z = 4.0, far_z = 4096.0;
+
+	if (!eye.active || !real_glFrustum || !real_glViewport || !real_glRotatef || !real_glTranslatef)
+	{
+		return 0;
+	}
+
+	glPushAttrib(GL_ENABLE_BIT | GL_CURRENT_BIT | GL_LINE_BIT | GL_DEPTH_BUFFER_BIT);
+	glDisable(GL_TEXTURE_2D);
+	glDisable(GL_DEPTH_TEST);
+	glDepthMask(GL_FALSE);
+	glDisable(GL_BLEND);
+	glDisable(GL_CULL_FACE);
+	glDisable(GL_SCISSOR_TEST);
+	glDisable(GL_CLIP_PLANE0);
+	glLineWidth(eye.target_width > 1600 ? 3.0f : 2.0f); /* about a tenth of a degree */
+
+	/* The real entry points throughout: the hooked ones are for ref_gl's own
+	   calls and would read this as a phase of its frame. */
+	real_glViewport(0, 0, eye.target_width, eye.target_height);
+
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
+	glLoadIdentity();
+	real_glFrustum(near_z * eye.tan_left, near_z * eye.tan_right, near_z * eye.tan_down,
+		near_z * eye.tan_up, near_z, far_z);
+
+	/* Quake's own view matrix: z upwards, then the view angles, then the
+	   origin (ref_gl's R_SetupGL, and the same order). */
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glLoadIdentity();
+	real_glRotatef(-90.0f, 1.0f, 0.0f, 0.0f);
+	real_glRotatef(90.0f, 0.0f, 0.0f, 1.0f);
+	real_glRotatef(-viewangles[2], 1.0f, 0.0f, 0.0f);
+	real_glRotatef(-viewangles[0], 0.0f, 1.0f, 0.0f);
+	real_glRotatef(-viewangles[1], 0.0f, 0.0f, 1.0f);
+	real_glTranslatef(-vieworg[0], -vieworg[1], -vieworg[2]);
+	return 1;
+}
+
+void vr_gl_world_end(void)
+{
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+	glPopMatrix();
+	glPopAttrib();
+
+	/* ref_gl's own viewport and scissor, under whichever phase it is in. */
+	reapply_rects();
+}
+
 void vr_gl_full_screen_2d(int on)
 {
 	if (eye.full_screen_2d == on)

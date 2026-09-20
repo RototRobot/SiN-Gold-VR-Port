@@ -41,8 +41,8 @@
 
 #include "refapi.h"
 
-/* Registers the cvars: vr_weapon_hand, vr_left_handed, vr_grip_<weapon>,
-   vr_weapon_reset. */
+/* Registers the cvars: vr_weapon_hand, vr_left_handed, vr_show_hands,
+   vr_grip_<weapon>, vr_weapon_reset. */
 void vr_weapon_startup(void);
 
 /*
@@ -69,6 +69,15 @@ void vr_weapon_publish(void);
 
 /* The frame is over: nothing is placed until the next publish. */
 void vr_weapon_end_frame(void);
+
+/*
+ * Where the controllers are, drawn into the eye after ref_gl has finished with
+ * it: a cross in each hand and a line the way it points, which is what makes
+ * lining a frozen weapon up with the hand possible. fd must hold the view of
+ * the eye just drawn. vr_show_hands says when: 1 while a weapon is being
+ * placed, 2 always, 0 never.
+ */
+void vr_weapon_draw_hands(const refdef_t *fd);
 
 /*
  * Only when sin.exe could not be redirected: moves the view weapon in fd to

@@ -155,13 +155,23 @@ are parameters. What to expect:
 - **Input can be tested without controllers**, all through the real path:
   `vr_fake_axes "<forward> <side> <turn> [<turning stick up>]"` holds the sticks somewhere;
   `vr_fake_press jump` presses a button for a few frames, `vr_fake_press "adjust 200"` for 200 rendered
-  frames, and `vr_fake_press "adjust 0"` until `vr_fake_press release`; `vr_fake_hand "<x> <y> <z>
+  frames, and `vr_fake_press "adjust 0"` until `vr_fake_press release` - and a `wait` is not a frame, so
+  the 0.8 s the grip has to be held is nearer 400 `wait`s than 120; `vr_fake_hand "<x> <y> <z>
   <pitch> <yaw> <roll>"` and `vr_fake_hand_left` put the hands somewhere in the game's own units and
   senses. `viewpos` prints the player's position and yaw, which is how the axes were checked.
 - **A cvar a test sets is still set in the next test.** SiN writes `config.cfg` on the way out, and
   every `vr_` cvar worth keeping is archived, so a run that ends with `vr_weapon_hand 0` leaves the next
   run with no weapon in the hand and no sign of why. Put the cvars a test depends on at the top of its
   own step list, and put back anything it changes.
+- **A left-handed cvar is worse than most**, because `vr_left_handed` is read once at start-up: a run
+  that archives it leaves every later run in the other hand, with the fake right hand tracking nothing
+  and no weapon placed - which looks like the weapon code failing. Pass `+set vr_left_handed 0` (or 1)
+  on the command line in every test that cares, and remember that SiN writes the player's `config.cfg`
+  without being asked, not only at exit.
+- **The HUD is drawn in the same colours a marker is.** Finding a drawn line by looking for pure red or
+  pure green pixels also finds the health and armour bars, which sit in the same part of the picture; a
+  centroid over the lot points somewhere between the two and looks like a bug in the drawing. Group the
+  pixels into clusters and take the one shaped like what was drawn.
 - **`vr_weapon_hand 0` does not take the weapon out of the picture**; it hands it back to SiN, which
   draws it in front of the camera. To photograph a view with no weapon in it, leave the weapon in the
   hand and move the hand behind the eyes (`vr_fake_hand "-80 0 -30 0 0 0"`).
@@ -235,7 +245,7 @@ python -c "from PIL import Image; im = Image.open('sinvr_eye0.tga').convert('L')
 | `src/ref_vr/ref_vr.c` | `GetRefAPI`, loading ref_gl, the 36 recording thunks, C wrappers for Init/Shutdown/BeginFrame/RenderFrame/EndFrame, the frame tracer and cvars |
 | `src/ref_vr/refapi.h` | The renderer interface reconstructed from the binaries, with compile-time checks of sizes and offsets |
 | `src/ref_vr/vr_xr.c` | OpenXR: instance, session on ref_gl's GL context, event loop, the theatre-screen quad layer, and the per-eye swapchains and projection layer |
-| `src/ref_vr/vr_gl.c` | Redirects ref_gl's `glFrustum`, `glOrtho`, `glViewport`, `glScissor`, `glTranslatef`, `glRotatef` and `glPopMatrix` while an eye is bound, by hooking its `GetProcAddress` import. Holds the HUD panel geometry, the clip plane that halves a model, and the mirror that turns a right-handed weapon round |
+| `src/ref_vr/vr_gl.c` | Redirects ref_gl's `glFrustum`, `glOrtho`, `glViewport`, `glScissor`, `glTranslatef`, `glRotatef` and `glPopMatrix` while an eye is bound, by hooking its `GetProcAddress` import. Holds the HUD panel geometry, the clip plane that halves a model, the mirror that turns a right-handed weapon round, and the world drawing this mod does of its own |
 | `src/ref_vr/vr_view.c` | Turns an OpenXR eye pose into the engine's `refdef_t` (axes, scale, angles, field of view) and back |
 | `src/ref_vr/vr_input.c` | OpenXR actions and bindings, and the mapping from them to console commands and stick axes |
 | `src/ref_vr/vr_joy.c` | The joystick that only exists in this process, which is how the sticks reach the engine |
@@ -622,6 +632,25 @@ maths is what the owner's next headset test exercises.
      renderer sends `SINVR_WEAPON_MIRRORED` and `Weapon::MuzzleOffset` changes the sign of the bone's
      y - its distance to the model's left - for the mirrored model.
    - **The buttons swap with it** (§11), which is why the setting is read once, at start-up.
+
+9. **The controllers are drawn while a weapon is being placed** (`vr_show_hands`, default 1; 2 draws
+   them always). A weapon frozen in mid-air has nothing to line up against, so each tracked hand gets a
+   cross at the point it holds, its arms along the hand's own forward, left and up, and a line 30 cm out
+   the way the controller points.
+   - **It is drawn after ref_gl has finished with the eye**, into the same framebuffer, before the
+     client draws the HUD. `vr_gl_world_begin` sets the eye's own frustum and rebuilds the view matrix
+     from the refdef exactly as `R_SetupGL` does - the disassembly confirms SiN's is Quake II's, to the
+     rotation - takes the whole eye as the viewport, and turns off texturing, the scissor and the depth
+     test, so the cross is visible through the weapon it is being lined up with. Everything is put back
+     with `glPushAttrib`/`glPopAttrib` and the matrix stacks.
+   - **The hands are in the recentred frame**, so turning them into the world needs the engine's own
+     view, not the eye's; `vr_weapon_to_hand` keeps it each frame, before the view moves to the eye.
+   - Measured at the desk on 2026-09-20, with the magnum's grip set to nothing at all so that the
+     weapon's origin and direction are the hand's own: the cross landed within 5 px of where the eye's
+     logged frustum says it should, in a 2524x2468 eye; its aim ray pointed at the crosshair - projected
+     by code measured earlier - to within 3 px over a 680 px extension, and within 1 px with the hand
+     turned up 10 and left 20 degrees; moving the hand 6 units to the right moved it 375 px against a
+     predicted 377. Nothing is drawn in play, and it appears the moment the weapon freezes.
 
 What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
 computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the

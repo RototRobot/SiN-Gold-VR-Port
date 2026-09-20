@@ -713,6 +713,7 @@ static void stop_holding(int index)
 {
 	if (index == ACT_ADJUST)
 	{
+		vrlog("    input: adjust is no longer held");
 		vr_weapon_adjust_button(0);
 		return;
 	}
@@ -731,6 +732,8 @@ static void press_action(int index, int down, int menu)
 	/* Held, it lets go of the weapon so the hand can take it another way. */
 	if (index == ACT_ADJUST)
 	{
+		vrlog("    input: adjust %s", down ? (menu ? "pressed, but an interface has the controllers" :
+			"held") : "let go");
 		vr_weapon_adjust_button(down && !menu);
 		return;
 	}
@@ -1074,8 +1077,11 @@ void vr_input_idle(XrSession session)
 
 		down = state.isActive && state.currentState;
 
-		/* Held since the game was running: let the game have its release. */
-		if (actions[i].down && !down)
+		/* Held since the game was running: let the game have its release. A
+		   pretend press is left alone, as everywhere else - it lets go on its
+		   own count, and the idle pump runs between frames, in the middle of
+		   whatever a test is doing. */
+		if (actions[i].down && !down && i != fake_held)
 		{
 			let_go(i);
 			continue;

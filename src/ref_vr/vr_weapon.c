@@ -76,6 +76,7 @@ static cvar_t *vr_left_handed;
 static cvar_t *vr_weapon_client;
 static cvar_t *vr_client_bullets;
 static cvar_t *vr_weapon_reset;
+static cvar_t *vr_show_hands;
 static cvar_t *vr_aim;
 
 /* Read once, at start-up: the buttons are attached to the session with the
@@ -211,6 +212,7 @@ void vr_weapon_startup(void)
 	vr_weapon_client = vr_cvar("vr_weapon_client", "1", 0);
 	vr_client_bullets = vr_cvar("vr_client_bullets", "0", CVAR_ARCHIVE);
 	vr_weapon_reset = vr_cvar("vr_weapon_reset", "0", 0);
+	vr_show_hands = vr_cvar("vr_show_hands", "1", CVAR_ARCHIVE);
 	vr_aim = vr_cvar("vr_aim", "1", 0);
 	lefty = vr_left_handed->value != 0.0f;
 	if (lefty)
@@ -244,9 +246,13 @@ static struct
 } hands[2];
 
 static placement_t placed[2];
-static vr_pose_t world_aim;    /* the right hand's weapon in the world, as drawn */
+static float base_origin[3];   /* the engine's own view, before it moved to an eye */
+static float base_yaw;
+static int base_valid;
+static vr_pose_t world_aim;    /* the weapon in the world, as drawn */
 static int world_aim_valid;
 static int placing;            /* between a publish and the end of that frame */
+static int said_hands_drawn;
 static int placed_this_frame;  /* the weapon was put in the hand this frame */
 static int said_placed;
 
@@ -573,7 +579,85 @@ void vr_weapon_end_frame(void)
 	placing = 0;
 	placed_this_frame = 0;
 	world_aim_valid = 0;
+	base_valid = 0;
 	vr_gl_clear_models();
+}
+
+/* ------------------------------------------------------------------------- */
+/* Where the hands are                                                        */
+/* ------------------------------------------------------------------------- */
+
+/* A cross at the hand, its arms along the way the hand is held, and a line out
+   the way it points. Bright for the hand the weapon is in, dim for the other. */
+static void draw_hand_marker(const vr_pose_t *pose, float units, int bright)
+{
+	const float cross = 0.05f * units; /* 5 cm arms, 30 cm of aim */
+	const float ray = 0.30f * units;
+	float shade = bright ? 1.0f : 0.45f;
+	int axis;
+
+	glBegin(GL_LINES);
+	for (axis = 0; axis < 3; ++axis)
+	{
+		/* forward red, left green, up blue */
+		glColor3f(axis == 0 ? shade : 0.0f, axis == 1 ? shade : 0.0f, axis == 2 ? shade : 0.0f);
+		glVertex3f(pose->origin[0] - pose->axis[axis][0] * cross,
+			pose->origin[1] - pose->axis[axis][1] * cross,
+			pose->origin[2] - pose->axis[axis][2] * cross);
+		glVertex3f(pose->origin[0] + pose->axis[axis][0] * cross,
+			pose->origin[1] + pose->axis[axis][1] * cross,
+			pose->origin[2] + pose->axis[axis][2] * cross);
+	}
+
+	glColor3f(shade, shade, shade * 0.4f);
+	glVertex3fv(pose->origin);
+	glVertex3f(pose->origin[0] + pose->axis[0][0] * ray, pose->origin[1] + pose->axis[0][1] * ray,
+		pose->origin[2] + pose->axis[0][2] * ray);
+	glEnd();
+}
+
+void vr_weapon_draw_hands(const refdef_t *fd)
+{
+	int mode = vr_show_hands ? (int)vr_show_hands->value : 1;
+	float units = vr_worldscale_units();
+	int hand, drawn = 0;
+
+	if (!fd || !base_valid || mode <= 0 || (mode < 2 && !adjust.active))
+	{
+		return;
+	}
+
+	if (!hands[LEFT].valid && !hands[RIGHT].valid)
+	{
+		return;
+	}
+
+	if (!vr_gl_world_begin(fd->vieworg, fd->viewangles))
+	{
+		return;
+	}
+
+	for (hand = 0; hand < 2; ++hand)
+	{
+		vr_pose_t world;
+
+		if (!hands[hand].valid)
+		{
+			continue;
+		}
+
+		vr_pose_to_world(&hands[hand].frame, base_origin, base_yaw, &world);
+		draw_hand_marker(&world, units, hand == gun_hand());
+		drawn++;
+	}
+
+	vr_gl_world_end();
+
+	if (!said_hands_drawn && drawn)
+	{
+		said_hands_drawn = 1;
+		vrlog("VR: the controllers are drawn in the view (vr_show_hands %d)", mode);
+	}
 }
 
 int vr_weapon_in_hand(void)
@@ -896,7 +980,18 @@ void vr_weapon_to_hand(refdef_t *fd)
 	entity_t *gun = NULL;
 
 	engine_entities = NULL;
-	if (!fd || !fd->entities || fd->num_entities <= 0)
+	if (!fd)
+	{
+		return;
+	}
+
+	/* The engine's own view, which is what the hands were measured from: kept
+	   whether or not there is anything to move, for drawing them later. */
+	memcpy(base_origin, fd->vieworg, sizeof(base_origin));
+	base_yaw = fd->viewangles[YAW];
+	base_valid = 1;
+
+	if (!fd->entities || fd->num_entities <= 0)
 	{
 		return;
 	}

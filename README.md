@@ -118,8 +118,11 @@ set it and run `vid_restart`, or set it before launching.
 **Putting a weapon where you want it.** Every weapon starts from a measured guess at where your hand
 holds it and how big it should be. To change one, hold it and **squeeze the grip of the hand it is in**
 (the right, or the left if you are left-handed): after a moment the weapon stops following your hand
-and hangs in the air. Move your hand to hold it the way you want - and push that hand's stick up or
-down to make it bigger or smaller - then let go of the grip.
+and hangs in the air. **Your controllers appear while you do it**: a cross where each hand is holding,
+its arms along the way the hand is turned, and a line out of the front of the controller showing where
+it points. Line the cross up with the part of the gun you want in your hand and the line up with the
+barrel. Move your hand to hold it the way you want - and push that hand's stick up or down to make it
+bigger or smaller - then let go of the grip.
 It is remembered for that weapon, and kept between sessions. `vr_weapon_reset 1` in the console puts
 the weapon you are holding back to its first guess.
 
@@ -155,6 +158,7 @@ These console variables control the mod:
 | `vr_aim` | 1 | Shots come from the weapon in the hand rather than from the player's angles. |
 | `vr_weapon_hand` | 1 | Draw the weapon in the hand instead of in front of the camera. |
 | `vr_left_handed` | 0 | 1 puts the weapon in the left hand, mirrored, and swaps the two controllers' buttons and sticks. Read when the renderer starts, so `vid_restart` after changing it. |
+| `vr_show_hands` | 1 | Draw the controllers - a cross and the line they point along - while a weapon is being placed. 2 draws them all the time, 0 never. |
 | `vr_grip_<weapon>` | empty | Where that weapon sits in the hand: offset, angles and size. The grip button writes it; empty means the measured guess. |
 | `vr_weapon_reset` | 0 | Set it to 1 to forget the setting for the weapon in hand. Clears itself. |
 | `vr_crosshair` | 1 | SiN's crosshair follows the gun while it is in the hand. 0 leaves it out; 2 leaves it in the middle of the view, where SiN draws it. |
