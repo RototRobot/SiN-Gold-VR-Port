@@ -73,11 +73,20 @@ void vr_gl_full_screen_2d(int on);
 /*
  * Draws the model placed at origin - to within a hundredth of a unit - with
  * everything on the far side of a plane cut away: the plane is a, b, c, d in
- * the world, and what is kept is where a x + b y + c z + d >= 0. Up to four
- * models a frame; vr_gl_clear_clips forgets them all.
+ * the world, and what is kept is where a x + b y + c z + d >= 0.
  */
 void vr_gl_clip_model_at(const float origin[3], const float plane[4]);
-void vr_gl_clear_clips(void);
+
+/*
+ * Draws the model placed at origin mirrored down its own middle - the plane of
+ * its forward and up - which is what a weapon built for one hand has to be to
+ * look right in the other. The winding is swapped with it, so the model is not
+ * turned inside out.
+ */
+void vr_gl_mirror_model_at(const float origin[3]);
+
+/* Up to four models a frame between them; this forgets them all. */
+void vr_gl_clear_models(void);
 
 /*
  * How far from the middle of the window a 2D thing must be drawn to appear in a

@@ -28,14 +28,30 @@
  * used instead. If sin.exe is not the build this was measured on, nothing in
  * it is touched and the entity is moved in RenderFrame, which places the model
  * but not its effects.
+ *
+ * Left-handed ("vr_left_handed 1"), all of that happens in the left hand, and
+ * a weapon built for the right one is drawn mirrored down its own middle, so
+ * that the side of it the player sees is the side that was modelled. The
+ * measurements are kept right-handed and mirrored as they are used, so a
+ * weapon settled in one mode is settled in the other as well. The fists,
+ * having an arm each side already, are not mirrored.
  */
 #ifndef VR_WEAPON_H
 #define VR_WEAPON_H
 
 #include "refapi.h"
 
-/* Registers the cvars: vr_weapon_hand, vr_grip_<weapon>, vr_weapon_reset. */
+/* Registers the cvars: vr_weapon_hand, vr_left_handed, vr_grip_<weapon>,
+   vr_weapon_reset. */
 void vr_weapon_startup(void);
+
+/*
+ * Whether the player is left-handed, as vr_left_handed said when the renderer
+ * started. The buttons swap over with the weapon (vr_input.c), and a session
+ * takes its bindings once, so the answer does not change until the renderer
+ * does.
+ */
+int vr_weapon_left_handed(void);
 
 /* After ref_gl's Init, and before Shutdown lets this DLL go: the two calls in
    sin.exe that are redirected here. */
@@ -71,8 +87,8 @@ int vr_weapon_in_hand(void);
    this frame: what the crosshair follows. Returns 0 if it is not in the hand. */
 int vr_weapon_world_aim(float origin[3], float forward[3]);
 
-/* The right grip button, and the right stick's up and down, which sizes the
-   weapon while it is being adjusted. */
+/* The grip button of the hand the weapon is in, and that hand's stick up and
+   down, which sizes the weapon while it is being adjusted. */
 void vr_weapon_adjust_button(int down);
 void vr_weapon_adjust_stick(float y);
 int vr_weapon_adjusting(void);

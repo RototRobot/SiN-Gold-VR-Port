@@ -47,65 +47,122 @@ static struct
 } hud = { 60.0f, 6.0f };
 
 /*
- * Models drawn with part of them cut away by a plane: the fists, drawn once in
- * each hand, each copy showing only its own arm. ref_gl draws a model between
- * a glPushMatrix, a glTranslatef to its origin, and the glPopMatrix after it,
- * with nothing else pushed or popped in between. So the plane goes on just
- * before the translate to that origin - given in the world, while the
- * modelview still holds only the view, which is how GL takes clip planes -
- * and comes off at the pop.
+ * Models drawn other than as ref_gl would: part of them cut away by a plane -
+ * the fists, drawn once in each hand, each copy showing only its own arm - or
+ * mirrored down their middle, for a weapon held in the hand it was not built
+ * for. ref_gl draws a model between a glPushMatrix, a glTranslatef to its
+ * origin, and the glPopMatrix after it, with nothing else pushed or popped in
+ * between, so a model is known by that translate and left again at the pop.
+ *
+ * The clip plane goes on at the translate, while the modelview still holds
+ * only the view, which is the frame GL takes clip planes in. The mirror has to
+ * wait for the model's own frame: R_RotateForEntity (docs/ENGINE_NOTES.md) is
+ * that translate and then exactly three rotations - yaw, pitch, roll - so it
+ * goes on after the third.
  */
 typedef void(APIENTRY *gl_translate_t)(GLfloat x, GLfloat y, GLfloat z);
+typedef void(APIENTRY *gl_rotate_t)(GLfloat angle, GLfloat x, GLfloat y, GLfloat z);
 typedef void(APIENTRY *gl_void_t)(void);
 static gl_translate_t real_glTranslatef;
+static gl_rotate_t real_glRotatef;
 static gl_void_t real_glPopMatrix;
 
-#define MAX_CLIPPED 4
+#define MAX_MODELS 4
 
 static struct
 {
 	int count;
-	float origin[MAX_CLIPPED][3];
-	GLdouble plane[MAX_CLIPPED][4];
-	int on;
-} clip;
+	float origin[MAX_MODELS][3];
+	GLdouble plane[MAX_MODELS][4];
+	int has_plane[MAX_MODELS];
+	int mirror[MAX_MODELS];
+	int on;        /* the clip plane is on */
+	int counting;  /* a mirrored model's rotations are being counted */
+	int rotates;
+	int mirrored;  /* the mirror is in the matrix and the winding swapped */
+} models;
 
-void vr_gl_clip_model_at(const float origin[3], const float plane[4])
+/* The entry for the model at origin, adding one if it is new. -1 if there is
+   no room left this frame. */
+static int model_at(const float origin[3])
 {
 	int i;
 
-	if (clip.count >= MAX_CLIPPED)
+	for (i = 0; i < models.count; ++i)
+	{
+		if (fabsf(origin[0] - models.origin[i][0]) < 0.01f &&
+			fabsf(origin[1] - models.origin[i][1]) < 0.01f &&
+			fabsf(origin[2] - models.origin[i][2]) < 0.01f)
+		{
+			return i;
+		}
+	}
+
+	if (models.count >= MAX_MODELS)
+	{
+		return -1;
+	}
+
+	memcpy(models.origin[models.count], origin, sizeof(models.origin[0]));
+	models.has_plane[models.count] = 0;
+	models.mirror[models.count] = 0;
+	return models.count++;
+}
+
+void vr_gl_clip_model_at(const float origin[3], const float plane[4])
+{
+	int at = model_at(origin);
+	int i;
+
+	if (at < 0)
 	{
 		return;
 	}
 
-	memcpy(clip.origin[clip.count], origin, sizeof(clip.origin[clip.count]));
 	for (i = 0; i < 4; ++i)
 	{
-		clip.plane[clip.count][i] = plane[i];
+		models.plane[at][i] = plane[i];
 	}
-	clip.count++;
+	models.has_plane[at] = 1;
 }
 
-void vr_gl_clear_clips(void)
+void vr_gl_mirror_model_at(const float origin[3])
 {
-	clip.count = 0;
+	int at = model_at(origin);
+
+	if (at >= 0)
+	{
+		models.mirror[at] = 1;
+	}
+}
+
+void vr_gl_clear_models(void)
+{
+	models.count = 0;
 }
 
 static void APIENTRY hook_glTranslatef(GLfloat x, GLfloat y, GLfloat z)
 {
 	int i;
 
-	if (eye.active && !clip.on)
+	if (eye.active && !models.on && !models.counting && !models.mirrored)
 	{
-		for (i = 0; i < clip.count; ++i)
+		for (i = 0; i < models.count; ++i)
 		{
-			if (fabsf(x - clip.origin[i][0]) < 0.01f && fabsf(y - clip.origin[i][1]) < 0.01f &&
-				fabsf(z - clip.origin[i][2]) < 0.01f)
+			if (fabsf(x - models.origin[i][0]) < 0.01f && fabsf(y - models.origin[i][1]) < 0.01f &&
+				fabsf(z - models.origin[i][2]) < 0.01f)
 			{
-				glClipPlane(GL_CLIP_PLANE0, clip.plane[i]);
-				glEnable(GL_CLIP_PLANE0);
-				clip.on = 1;
+				if (models.has_plane[i])
+				{
+					glClipPlane(GL_CLIP_PLANE0, models.plane[i]);
+					glEnable(GL_CLIP_PLANE0);
+					models.on = 1;
+				}
+				if (models.mirror[i])
+				{
+					models.counting = 1;
+					models.rotates = 0;
+				}
 				break;
 			}
 		}
@@ -114,15 +171,40 @@ static void APIENTRY hook_glTranslatef(GLfloat x, GLfloat y, GLfloat z)
 	real_glTranslatef(x, y, z);
 }
 
+static void APIENTRY hook_glRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z)
+{
+	real_glRotatef(angle, x, y, z);
+
+	/* The third rotation: the matrix now holds the model's own frame. */
+	if (models.counting && ++models.rotates >= 3)
+	{
+		models.counting = 0;
+		models.mirrored = 1;
+		glScalef(1.0f, -1.0f, 1.0f);
+		glFrontFace(GL_CW);
+	}
+}
+
+/* The mirror itself goes with the matrix; the winding has to be put back. */
+static void end_model(void)
+{
+	if (models.on)
+	{
+		glDisable(GL_CLIP_PLANE0);
+		models.on = 0;
+	}
+	if (models.mirrored)
+	{
+		glFrontFace(GL_CCW);
+		models.mirrored = 0;
+	}
+	models.counting = 0;
+}
+
 static void APIENTRY hook_glPopMatrix(void)
 {
 	real_glPopMatrix();
-
-	if (clip.on)
-	{
-		glDisable(GL_CLIP_PLANE0);
-		clip.on = 0;
-	}
+	end_model();
 }
 
 void vr_gl_set_hud(float fov, float depth)
@@ -349,6 +431,11 @@ static FARPROC WINAPI hook_GetProcAddress(HMODULE module, LPCSTR name)
 		real_glTranslatef = (gl_translate_t)proc;
 		return (FARPROC)hook_glTranslatef;
 	}
+	if (strcmp(name, "glRotatef") == 0)
+	{
+		real_glRotatef = (gl_rotate_t)proc;
+		return (FARPROC)hook_glRotatef;
+	}
 	if (strcmp(name, "glPopMatrix") == 0)
 	{
 		real_glPopMatrix = (gl_void_t)proc;
@@ -413,10 +500,5 @@ void vr_gl_eye_end(void)
 	eye.active = 0;
 	eye.in_2d = 0;
 	eye.full_screen_2d = 0;
-
-	if (clip.on)
-	{
-		glDisable(GL_CLIP_PLANE0);
-		clip.on = 0;
-	}
+	end_model();
 }

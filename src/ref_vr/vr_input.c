@@ -94,6 +94,10 @@ typedef struct
  * keeps both menu buttons for its own dashboard on these controllers - a press
  * takes the input focus away and never arrives - so the menu is on the right
  * stick's click as well.
+ *
+ * Every table is written for a right-handed player. Left-handed, each hand's
+ * part is given to the other one as the bindings are suggested (for_hand), the
+ * poses excepted: a hand is still the hand it is.
  */
 static const binding_t bindings_hp[] = {
 	{ ACT_FIRE,        "/user/hand/right/input/trigger/value" },
@@ -330,6 +334,47 @@ static XrPath string_to_path(XrInstance instance, const char *string)
 	return path;
 }
 
+/*
+ * The same binding on the other controller, for a left-handed player: what the
+ * right hand did, the left does. The poses keep their own hands, and anything
+ * that is not on a hand at all is left alone.
+ */
+static const char *for_hand(const char *path, action_kind_t kind, char *buffer, size_t size)
+{
+	static const char left[] = "/user/hand/left/";
+	static const char right[] = "/user/hand/right/";
+	const char *head, *tail;
+
+	if (kind == KIND_POSE || !vr_weapon_left_handed())
+	{
+		return path;
+	}
+
+	if (strncmp(path, left, sizeof(left) - 1) == 0)
+	{
+		head = right;
+		tail = path + sizeof(left) - 1;
+	}
+	else if (strncmp(path, right, sizeof(right) - 1) == 0)
+	{
+		head = left;
+		tail = path + sizeof(right) - 1;
+	}
+	else
+	{
+		return path;
+	}
+
+	if (strlen(head) + strlen(tail) >= size)
+	{
+		return path;
+	}
+
+	strcpy(buffer, head);
+	strcat(buffer, tail);
+	return buffer;
+}
+
 static void suggest_profile(XrInstance instance, const profile_t *profile)
 {
 	XrInteractionProfileSuggestedBinding suggested = { XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING };
@@ -340,7 +385,10 @@ static void suggest_profile(XrInstance instance, const profile_t *profile)
 
 	for (i = 0; i < profile->count && count < ARRAY_COUNT(list); ++i)
 	{
-		XrPath path = string_to_path(instance, profile->bindings[i].path);
+		char swapped[96];
+		const char *string = for_hand(profile->bindings[i].path,
+			actions[profile->bindings[i].action].kind, swapped, sizeof(swapped));
+		XrPath path = string_to_path(instance, string);
 
 		if (path == XR_NULL_PATH)
 		{
@@ -381,6 +429,10 @@ int vr_input_create(XrInstance instance, XrSession session)
 	}
 
 	xr_instance = instance;
+	if (vr_weapon_left_handed())
+	{
+		vrlog("VR: left-handed - each hand's buttons and stick are given to the other");
+	}
 	strcpy(set_info.actionSetName, "gameplay");
 	strcpy(set_info.localizedActionSetName, "Gameplay");
 	set_info.priority = 0;
@@ -1086,7 +1138,8 @@ static int locate(XrSpace hand, XrSpace space, XrTime time, float units_per_metr
 
 /* Desk testing, with no controllers: "vr_fake_hand <x> <y> <z> <pitch> <yaw>
    <roll>" puts the right hand there, in the game's own units and senses, held
-   where it points from; vr_fake_hand_left does the same for the left. */
+   where it points from; vr_fake_hand_left does the same for the left. Either
+   works on its own, which is what a left-handed test needs. */
 static int fake_hand(const cvar_t *cvar, int hand)
 {
 	float origin[3] = { 0.0f, 0.0f, 0.0f };
@@ -1111,9 +1164,8 @@ void vr_input_hands(XrSession session, XrSpace space, XrTime time, float units_p
 	(void)session;
 	vr_weapon_hands_begin();
 
-	if (fake_hand(vr_fake_hand, SINVR_HAND_RIGHT))
+	if (fake_hand(vr_fake_hand, SINVR_HAND_RIGHT) | fake_hand(vr_fake_hand_left, SINVR_HAND_LEFT))
 	{
-		fake_hand(vr_fake_hand_left, SINVR_HAND_LEFT);
 		return;
 	}
 

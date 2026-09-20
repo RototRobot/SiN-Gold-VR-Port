@@ -34,6 +34,15 @@ void vr_pose_compose(const vr_pose_t *parent, const vr_pose_t *child, vr_pose_t 
 /* pose, given in the same frame as frame, into frame's own. */
 void vr_pose_relative(const vr_pose_t *frame, const vr_pose_t *pose, vr_pose_t *out);
 
+/*
+ * The pose reflected in the y = 0 plane of the frame it is given in - the
+ * plane of that frame's forward and up. A thing held in one hand, reflected
+ * this way in the hand's own frame, is the same thing held in the other hand:
+ * the position goes to the other side, the yaw and roll turn the other way,
+ * and the thing itself is mirrored with it.
+ */
+void vr_pose_mirror_y(vr_pose_t *pose);
+
 /* Turned by yaw degrees about +z and moved by origin: the recentred frame,
    which faces the way the body does, into the world. */
 void vr_pose_to_world(const vr_pose_t *local, const float origin[3], float yaw, vr_pose_t *out);

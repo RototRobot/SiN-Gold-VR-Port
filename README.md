@@ -104,12 +104,22 @@ unaffected either way.
 
 On the Reverb G2 the two **menu** buttons never reach the game: SteamVR keeps them for its own
 dashboard, and a press takes the input focus away instead. So the menu is on the right stick's click.
-They are still bound, for controllers whose runtime does pass them on.
+They are still bound, for controllers whose runtime does pass them on. The Windows button beside them
+is the runtime's own and is never offered to an application at all.
+
+**Left-handed.** `vr_left_handed 1` puts the weapon in the left hand and gives each hand the other's
+buttons and stick: fire is the left trigger, use the right, the menu is the left stick's click, and so
+on down the table. The weapon is drawn mirrored down its own middle, so the side of it that was
+modelled is the side you see and the barrel it fires from moves with it. What a weapon remembers about
+how you hold it is kept as the right hand would hold it and mirrored as it is used, so a weapon you
+have settled in one mode is settled in the other too. The setting is read when the renderer starts:
+set it and run `vid_restart`, or set it before launching.
 
 **Putting a weapon where you want it.** Every weapon starts from a measured guess at where your hand
-holds it and how big it should be. To change one, hold it and **squeeze the right grip**: after a
-moment the weapon stops following your hand and hangs in the air. Move your hand to hold it the way
-you want - and push the right stick up or down to make it bigger or smaller - then let go of the grip.
+holds it and how big it should be. To change one, hold it and **squeeze the grip of the hand it is in**
+(the right, or the left if you are left-handed): after a moment the weapon stops following your hand
+and hangs in the air. Move your hand to hold it the way you want - and push that hand's stick up or
+down to make it bigger or smaller - then let go of the grip.
 It is remembered for that weapon, and kept between sessions. `vr_weapon_reset 1` in the console puts
 the weapon you are holding back to its first guess.
 
@@ -143,7 +153,8 @@ These console variables control the mod:
 | `vr_deadzone` | 0.15 | How far a stick must move before the game sees it. |
 | `vr_recentre_double` | 1 | Require two clicks of the left stick to recentre. 0 makes one do. |
 | `vr_aim` | 1 | Shots come from the weapon in the hand rather than from the player's angles. |
-| `vr_weapon_hand` | 1 | Draw the weapon in the right hand instead of in front of the camera. |
+| `vr_weapon_hand` | 1 | Draw the weapon in the hand instead of in front of the camera. |
+| `vr_left_handed` | 0 | 1 puts the weapon in the left hand, mirrored, and swaps the two controllers' buttons and sticks. Read when the renderer starts, so `vid_restart` after changing it. |
 | `vr_grip_<weapon>` | empty | Where that weapon sits in the hand: offset, angles and size. The grip button writes it; empty means the measured guess. |
 | `vr_weapon_reset` | 0 | Set it to 1 to forget the setting for the weapon in hand. Clears itself. |
 | `vr_crosshair` | 1 | SiN's crosshair follows the gun while it is in the hand. 0 leaves it out; 2 leaves it in the middle of the view, where SiN draws it. |
@@ -170,6 +181,10 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   is what it should do.
 - Most of SiN's two-handed weapons only ever modelled the left hand, on the fore-end, so that is the
   hand you see on them; the fists are the one weapon with two arms, and they get one each.
+- A mirrored weapon - left-handed mode - is lit as its mirror image was: SiN shades a model from its
+  own list of normals, which the mirror does not reach, so the light on the gun falls where it would
+  have fallen in the right hand. Nothing else about it is out of place, and the fists, having an arm
+  each side already, are not mirrored at all.
 - The weapon is put into the frame by sin.exe itself, through two calls this mod redirects, which is
   what carries its muzzle flash, tracers and shell cases along with it. Both are checked against the
   Steam build before anything is changed, so another build of `sin.exe` is left alone - the weapon then
@@ -191,7 +206,8 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 4. ✅ HUD, crosshair and console in a panel at a comfortable distance
 5. ✅ Motion controller input: sticks to move and turn, buttons bound to commands
 6. ✅ Tracked hands: the weapon is drawn in the hand, fires down its own barrel, and carries its
-   effects with it; each weapon's grip can be set in the headset
+   effects with it; each weapon's grip can be set in the headset, and left-handed players get the
+   mirror image of all of it
 7. Roomscale comfort: snap turning, crouching, and the body following the head
 8. Wages of Sin
 9. Release packaging

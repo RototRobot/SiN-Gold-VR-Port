@@ -29,6 +29,11 @@
    (BulletWeapon::FireBullets' server_effects), or there will be none. */
 #define SINVR_CLIENT_BULLETS_OFF 0x1
 
+/* The weapon is drawn mirrored down its own middle, for a left-handed player:
+   everything the game measures off the model is on the other side of it, so a
+   bone's y - its distance to the model's left - changes sign. */
+#define SINVR_WEAPON_MIRRORED 0x2
+
 typedef struct
 {
 	int version;             /* SINVR_POSES_VERSION */
@@ -44,14 +49,14 @@ typedef struct
 	float hand_origin[2][3]; /* where the controller points from ("aim") */
 	float hand_angles[2][3]; /* and the way it points */
 
-	/* Version 2. The view weapon as the renderer draws it in the right hand:
+	/* Version 2. The view weapon as the renderer draws it in the player's hand:
 	   the model's own origin and angles, and the size it is drawn at, which is
 	   also the size of its bones - the barrel is where the model has it. */
 	int weapon_valid;
 	float weapon_origin[3];
 	float weapon_angles[3];
 	float weapon_scale;
-	int flags;               /* SINVR_CLIENT_BULLETS_OFF */
+	int flags;               /* SINVR_CLIENT_BULLETS_OFF, SINVR_WEAPON_MIRRORED */
 } sinvr_poses_t;
 
 /* ref_vr.dll's export. NULL if it speaks a different version. */

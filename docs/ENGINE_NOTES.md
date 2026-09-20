@@ -310,6 +310,14 @@ does the movement work itself. The console says `joystick detected` where it use
   (ref_gl+0xEA00) is translate, `glRotatef(yaw, z)`, `glRotatef(-pitch, y)`, `glRotatef(-roll, x)`;
   the model drawer negates the pitch around it, so the entity's `angles` are in the same sense as the
   player's view angles (pitch positive looks down), and the axis rows at +0x4C are the true orientation.
+  The three rotations are unconditional - straight line, no branches, all through the same QGL pointer
+  as the translate - so counting them is a reliable way to know when the matrix has reached the model's
+  own frame. That is where `vr_gl_mirror_model_at` puts its `glScalef(1, -1, 1)` and its swap of the
+  winding, to draw a model mirrored down its own middle for the other hand.
+- **A mirrored model is lit unmirrored.** Shading comes from each vertex's normal index through the
+  engine's own table, and a mirror in the matrix does not reach it, so a mirrored weapon carries its
+  original vertex shades - the light on it appears to come from the other side. Visible if looked for,
+  not in play.
 - **The crosshair is a 2D pic**, `ch1_off` for the default one, drawn through `DrawPic`.
 
 ## The client's view weapon and its effects (2026-09-19)

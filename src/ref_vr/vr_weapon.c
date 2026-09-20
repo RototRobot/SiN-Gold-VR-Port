@@ -72,10 +72,50 @@ static int weapon_count;
 static weapon_t *current;        /* the view weapon last seen */
 
 static cvar_t *vr_weapon_hand;
+static cvar_t *vr_left_handed;
 static cvar_t *vr_weapon_client;
 static cvar_t *vr_client_bullets;
 static cvar_t *vr_weapon_reset;
 static cvar_t *vr_aim;
+
+/* Read once, at start-up: the buttons are attached to the session with the
+   hands already swapped, and a session takes them only once. */
+static int lefty;
+static int said_lefty_change;
+
+int vr_weapon_left_handed(void)
+{
+	return lefty;
+}
+
+/* The hand the weapon is in, and the other one. */
+static int gun_hand(void)
+{
+	return lefty ? LEFT : RIGHT;
+}
+
+static int other_hand(void)
+{
+	return lefty ? RIGHT : LEFT;
+}
+
+static const char *hand_name(int hand)
+{
+	return hand == LEFT ? "left" : "right";
+}
+
+/* Says once that the setting has been changed under a running session. */
+static void check_mode(void)
+{
+	int wanted = vr_left_handed && vr_left_handed->value != 0.0f;
+
+	if (wanted != lefty && !said_lefty_change)
+	{
+		said_lefty_change = 1;
+		vr_printf("VR: vr_left_handed is now %d - the weapon and the buttons swap over together, "
+			"at the next vid_restart", wanted);
+	}
+}
 
 static weapon_t *find_weapon(const char *key)
 {
@@ -167,10 +207,16 @@ void vr_weapon_startup(void)
 	int i;
 
 	vr_weapon_hand = vr_cvar("vr_weapon_hand", "1", CVAR_ARCHIVE);
+	vr_left_handed = vr_cvar("vr_left_handed", "0", CVAR_ARCHIVE);
 	vr_weapon_client = vr_cvar("vr_weapon_client", "1", 0);
 	vr_client_bullets = vr_cvar("vr_client_bullets", "0", CVAR_ARCHIVE);
 	vr_weapon_reset = vr_cvar("vr_weapon_reset", "0", 0);
 	vr_aim = vr_cvar("vr_aim", "1", 0);
+	lefty = vr_left_handed->value != 0.0f;
+	if (lefty)
+	{
+		vrlog("VR: left-handed: the weapon goes in the left hand, mirrored, and the buttons swap over");
+	}
 
 	/* Every known weapon's cvars now, so that a setting in config.cfg is kept
 	   as an archived one even in a session that never uses that weapon. */
@@ -215,11 +261,26 @@ static struct
 	DWORD last_tick;
 } adjust;
 
+/*
+ * Which setting holds a weapon's grip: its own for each arm of a two-armed
+ * model, and for everything else the one right-handed setting, which is
+ * mirrored when the weapon is in the left hand.
+ */
+static int grip_slot(const weapon_t *w, int hand)
+{
+	return w->info->two_arms ? hand : RIGHT;
+}
+
+static int grip_mirrored(const weapon_t *w, int hand)
+{
+	return !w->info->two_arms && hand == LEFT;
+}
+
 /* The model's pose in the hand's frame, and its size: from vr_grip_<weapon> if
    that holds a setting, or else from the table. */
 static void grip_setting(const weapon_t *w, int hand, vr_pose_t *relative, float *scale)
 {
-	const cvar_t *cvar = w->grip[hand];
+	const cvar_t *cvar = w->grip[grip_slot(w, hand)];
 	float origin[3], angles[3], s;
 	int i;
 
@@ -230,21 +291,31 @@ static void grip_setting(const weapon_t *w, int hand, vr_pose_t *relative, float
 	{
 		vr_pose_set(relative, origin, angles);
 		*scale = s;
-		return;
+	}
+	else
+	{
+		/* The grip point goes where the hand is, the model pointing where it
+		   points. */
+		*scale = w->info->scale;
+		for (i = 0; i < 3; ++i)
+		{
+			origin[i] = -w->info->scale * w->info->grip[i];
+		}
+		if (w->info->two_arms && hand == LEFT)
+		{
+			origin[1] = -origin[1];
+		}
+		angles[PITCH] = angles[YAW] = angles[ROLL] = 0.0f;
+		vr_pose_set(relative, origin, angles);
 	}
 
-	/* The grip point goes where the hand is, the model pointing where it points. */
-	*scale = w->info->scale;
-	for (i = 0; i < 3; ++i)
+	/* Held in the hand it was not built for, the whole arrangement is the
+	   right-handed one reflected in the hand's own middle - and so is the
+	   model, which vr_gl mirrors as it is drawn. */
+	if (grip_mirrored(w, hand))
 	{
-		origin[i] = -w->info->scale * w->info->grip[i];
+		vr_pose_mirror_y(relative);
 	}
-	if (hand == LEFT)
-	{
-		origin[1] = -origin[1];
-	}
-	angles[PITCH] = angles[YAW] = angles[ROLL] = 0.0f;
-	vr_pose_set(relative, origin, angles);
 }
 
 /* A pose's origin and angles, for the log. */
@@ -259,11 +330,12 @@ static void log_pose(const char *what, const vr_pose_t *pose)
 
 static void save_grip(const weapon_t *w, int hand, const placement_t *p)
 {
+	const cvar_t *cvar = w->grip[grip_slot(w, hand)];
 	vr_pose_t relative;
 	float angles[3];
 	char value[160];
 
-	if (!w->grip[hand] || !hands[hand].valid)
+	if (!cvar || !hands[hand].valid)
 	{
 		return;
 	}
@@ -271,11 +343,16 @@ static void save_grip(const weapon_t *w, int hand, const placement_t *p)
 	log_pose(hand == LEFT ? "left hand" : "right hand", &hands[hand].frame);
 	log_pose("weapon", &p->pose);
 	vr_pose_relative(&hands[hand].frame, &p->pose, &relative);
+	if (grip_mirrored(w, hand))
+	{
+		/* Kept as the right hand would hold it, whichever hand settled it. */
+		vr_pose_mirror_y(&relative);
+	}
 	vr_pose_angles(&relative, angles);
 	sprintf(value, "%.2f %.2f %.2f %.1f %.1f %.1f %.3f", relative.origin[0], relative.origin[1],
 		relative.origin[2], angles[PITCH], angles[YAW], angles[ROLL], p->scale);
-	vr_cvar_set(w->grip[hand]->name, value);
-	vr_printf("VR: the %s is held that way from now on: %s \"%s\"", w->key, w->grip[hand]->name, value);
+	vr_cvar_set(cvar->name, value);
+	vr_printf("VR: the %s is held that way from now on: %s \"%s\"", w->key, cvar->name, value);
 }
 
 void vr_weapon_hands_begin(void)
@@ -321,6 +398,13 @@ static int two_arms(void)
 	return current && current->info->two_arms;
 }
 
+/* A weapon with one arm in it, held in the hand it was not built for: ref_gl
+   draws it mirrored down its own middle. */
+static int mirror_weapon(void)
+{
+	return lefty && current && !current->info->two_arms;
+}
+
 /* The grip button: held long enough, the weapon stays where it is; let go,
    and it is taken back the way the hands now hold it. */
 static void run_adjust(void)
@@ -330,7 +414,8 @@ static void run_adjust(void)
 
 	if (!adjust.active)
 	{
-		if (!adjust.button || now - adjust.pressed_at < ADJUST_HOLD_MS || !current || !placed[RIGHT].valid)
+		if (!adjust.button || now - adjust.pressed_at < ADJUST_HOLD_MS || !current ||
+			!placed[gun_hand()].valid)
 		{
 			return;
 		}
@@ -343,9 +428,9 @@ static void run_adjust(void)
 			memcpy(adjust.anchor[hand], hands[hand].frame.origin, sizeof(adjust.anchor[hand]));
 		}
 		vr_printf("VR: adjusting the %s - hold it the way you want it and let go of the grip; "
-			"the right stick sizes it", current->key);
-		log_pose("right hand", &hands[RIGHT].frame);
-		log_pose("weapon", &placed[RIGHT].pose);
+			"that hand's stick sizes it", current->key);
+		log_pose(hand_name(gun_hand()), &hands[gun_hand()].frame);
+		log_pose("weapon", &placed[gun_hand()].pose);
 		return;
 	}
 
@@ -384,10 +469,10 @@ static void run_adjust(void)
 	adjust.active = 0;
 	if (current)
 	{
-		save_grip(current, RIGHT, &adjust.frozen[RIGHT]);
-		if (two_arms() && adjust.frozen[LEFT].valid)
+		save_grip(current, gun_hand(), &adjust.frozen[gun_hand()]);
+		if (two_arms() && adjust.frozen[other_hand()].valid)
 		{
-			save_grip(current, LEFT, &adjust.frozen[LEFT]);
+			save_grip(current, other_hand(), &adjust.frozen[other_hand()]);
 		}
 	}
 }
@@ -427,15 +512,16 @@ static int wants_server_bullets(void);
 
 void vr_weapon_publish(void)
 {
-	int hand, flags = 0;
+	int hand, gun = gun_hand(), flags = 0;
 	float angles[3];
 
 	placed[LEFT].valid = placed[RIGHT].valid = 0;
 	placing = 0;
 
+	check_mode();
 	reset_requested();
 
-	if (!vr_weapon_hand || vr_weapon_hand->value == 0.0f || !hands[RIGHT].valid || !current)
+	if (!vr_weapon_hand || vr_weapon_hand->value == 0.0f || !hands[gun].valid || !current)
 	{
 		adjust.active = 0;
 		return;
@@ -445,7 +531,7 @@ void vr_weapon_publish(void)
 	{
 		vr_pose_t relative;
 
-		if (!hands[hand].valid || (hand == LEFT && !two_arms()))
+		if (!hands[hand].valid || (hand != gun && !two_arms()))
 		{
 			continue;
 		}
@@ -471,8 +557,15 @@ void vr_weapon_publish(void)
 		flags |= SINVR_CLIENT_BULLETS_OFF;
 	}
 
-	vr_pose_angles(&placed[RIGHT].pose, angles);
-	vr_poses_weapon(placed[RIGHT].pose.origin, angles, placed[RIGHT].scale, flags);
+	/* The barrel of a mirrored model is on the other side of its middle, and
+	   the game measures from the model. */
+	if (mirror_weapon())
+	{
+		flags |= SINVR_WEAPON_MIRRORED;
+	}
+
+	vr_pose_angles(&placed[gun].pose, angles);
+	vr_poses_weapon(placed[gun].pose.origin, angles, placed[gun].scale, flags);
 }
 
 void vr_weapon_end_frame(void)
@@ -480,7 +573,7 @@ void vr_weapon_end_frame(void)
 	placing = 0;
 	placed_this_frame = 0;
 	world_aim_valid = 0;
-	vr_gl_clear_clips();
+	vr_gl_clear_models();
 }
 
 int vr_weapon_in_hand(void)
@@ -490,8 +583,8 @@ int vr_weapon_in_hand(void)
 
 /* The weapon, moved from the eye to the hand: origin, angles, the orientation
    matrix SiN's bone code reads, and the size it is drawn and its bones placed
-   at. There is no interpolating from where the client had it. The right hand's
-   goes into world_aim as well, for the crosshair to follow. */
+   at. There is no interpolating from where the client had it. The hand holding
+   it goes into world_aim as well, for the crosshair to follow. */
 static void put_in_hand(entity_t *e, const placement_t *p, const float vieworg[3], float yaw)
 {
 	vr_pose_t world;
@@ -503,7 +596,7 @@ static void put_in_hand(entity_t *e, const placement_t *p, const float vieworg[3
 	vr_axis_to_angles(world.axis, e->angles);
 	e->scale = p->scale;
 
-	if (p == &placed[RIGHT])
+	if (p == &placed[gun_hand()])
 	{
 		world_aim = world;
 		world_aim_valid = 1;
@@ -573,11 +666,13 @@ static void say_placed(const char *how)
 		float angles[3];
 
 		said_placed = 1;
-		vr_pose_angles(&placed[RIGHT].pose, angles);
-		vr_printf("VR: the %s is in the right hand%s, %s: (%.1f %.1f %.1f) from the eyes, "
-			"pointing (%.1f %.1f %.1f), size %.2f", current->key, two_arms() ? " and the left" : "", how,
-			placed[RIGHT].pose.origin[0], placed[RIGHT].pose.origin[1], placed[RIGHT].pose.origin[2],
-			angles[PITCH], angles[YAW], angles[ROLL], placed[RIGHT].scale);
+		vr_pose_angles(&placed[gun_hand()].pose, angles);
+		vr_printf("VR: the %s is in the %s hand%s%s, %s: (%.1f %.1f %.1f) from the eyes, "
+			"pointing (%.1f %.1f %.1f), size %.2f", current->key, hand_name(gun_hand()),
+			two_arms() ? " and the other" : "", mirror_weapon() ? ", mirrored" : "", how,
+			placed[gun_hand()].pose.origin[0], placed[gun_hand()].pose.origin[1],
+			placed[gun_hand()].pose.origin[2], angles[PITCH], angles[YAW], angles[ROLL],
+			placed[gun_hand()].scale);
 	}
 }
 
@@ -658,6 +753,7 @@ static const void *address_in(const BYTE *base, DWORD size, DWORD rva, const BYT
 static void __fastcall add_view_weapon(entity_t *gun)
 {
 	int active = placing && sin_patched();
+	int hand = gun_hand();
 	float yaw;
 
 	if (gun)
@@ -665,7 +761,7 @@ static void __fastcall add_view_weapon(entity_t *gun)
 		see_weapon(gun);
 	}
 
-	if (!active || !gun || !placed[RIGHT].valid)
+	if (!active || !gun || !placed[hand].valid)
 	{
 		keep_client_bullets = 1;
 		real_add_entity(gun);
@@ -673,20 +769,24 @@ static void __fastcall add_view_weapon(entity_t *gun)
 	}
 
 	yaw = *sin_viewyaw;
-	vr_gl_clear_clips();
-	if (two_arms() && placed[LEFT].valid)
+	vr_gl_clear_models();
+	if (two_arms() && placed[other_hand()].valid)
 	{
-		entity_t left = *gun;
+		entity_t other = *gun;
 
-		put_in_hand(&left, &placed[LEFT], sin_vieworg, yaw);
-		keep_one_arm(&left, LEFT);
-		real_add_entity(&left);
+		put_in_hand(&other, &placed[other_hand()], sin_vieworg, yaw);
+		keep_one_arm(&other, other_hand());
+		real_add_entity(&other);
 	}
 
-	put_in_hand(gun, &placed[RIGHT], sin_vieworg, yaw);
+	put_in_hand(gun, &placed[hand], sin_vieworg, yaw);
 	if (two_arms())
 	{
-		keep_one_arm(gun, RIGHT);
+		keep_one_arm(gun, hand);
+	}
+	else if (mirror_weapon())
+	{
+		vr_gl_mirror_model_at(gun->origin);
 	}
 	real_add_entity(gun);
 
@@ -812,22 +912,22 @@ void vr_weapon_to_hand(refdef_t *fd)
 	}
 
 	/* The client did it, or there is nothing to do. */
-	if (!gun || !placing || !placed[RIGHT].valid || (sin_patched() && placed_this_frame))
+	if (!gun || !placing || !placed[gun_hand()].valid || (sin_patched() && placed_this_frame))
 	{
 		return;
 	}
 
 	count = fd->num_entities;
-	vr_gl_clear_clips();
-	if (two_arms() && placed[LEFT].valid && count < MAX_FRAME_ENTITIES)
+	vr_gl_clear_models();
+	if (two_arms() && placed[other_hand()].valid && count < MAX_FRAME_ENTITIES)
 	{
 		/* The engine's list is its own, and full size is not known, so the
 		   second arm goes into a copy of it, for this eye only. */
 		memcpy(frame_entities, fd->entities, count * sizeof(entity_t));
 		gun = &frame_entities[gun - fd->entities];
 		frame_entities[count] = *gun;
-		put_in_hand(&frame_entities[count], &placed[LEFT], fd->vieworg, fd->viewangles[YAW]);
-		keep_one_arm(&frame_entities[count], LEFT);
+		put_in_hand(&frame_entities[count], &placed[other_hand()], fd->vieworg, fd->viewangles[YAW]);
+		keep_one_arm(&frame_entities[count], other_hand());
 
 		engine_entities = fd->entities;
 		engine_entity_count = fd->num_entities;
@@ -835,10 +935,14 @@ void vr_weapon_to_hand(refdef_t *fd)
 		fd->num_entities = count + 1;
 	}
 
-	put_in_hand(gun, &placed[RIGHT], fd->vieworg, fd->viewangles[YAW]);
+	put_in_hand(gun, &placed[gun_hand()], fd->vieworg, fd->viewangles[YAW]);
 	if (two_arms())
 	{
-		keep_one_arm(gun, RIGHT);
+		keep_one_arm(gun, gun_hand());
+	}
+	else if (mirror_weapon())
+	{
+		vr_gl_mirror_model_at(gun->origin);
 	}
 	placed_this_frame = 1;
 	say_placed("moved in the renderer");

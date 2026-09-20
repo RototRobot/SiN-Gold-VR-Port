@@ -131,6 +131,18 @@ void vr_pose_relative(const vr_pose_t *frame, const vr_pose_t *pose, vr_pose_t *
 	*out = result;
 }
 
+void vr_pose_mirror_y(vr_pose_t *pose)
+{
+	/* The reflection m = (1, -1, 1) on both sides of the orientation, which
+	   negates every entry with exactly one index of y: a rotation again, being
+	   two reflections. */
+	pose->origin[1] = -pose->origin[1];
+	pose->axis[0][1] = -pose->axis[0][1];
+	pose->axis[1][0] = -pose->axis[1][0];
+	pose->axis[1][2] = -pose->axis[1][2];
+	pose->axis[2][1] = -pose->axis[2][1];
+}
+
 void vr_pose_to_world(const vr_pose_t *local, const float origin[3], float yaw, vr_pose_t *out)
 {
 	static const float no_turn[3] = { 0.0f, 0.0f, 0.0f };
