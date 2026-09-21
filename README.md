@@ -164,6 +164,7 @@ These console variables control the mod:
 | `vr_show_hands` | 1 | Draw the controllers - a cross and the line they point along - while a weapon is being placed. 2 draws them all the time, 0 never. |
 | `vr_punch` | 1 | Swinging a fist punches while the fists are out. 0 leaves punching to the trigger; 2 also says in the console what each punch hit. |
 | `vr_punch_speed` | 2 | How fast a fist has to be going to punch, in metres a second. |
+| `vr_punch_assist` | 35 | How far to either side of where you look - or where your fist was headed - a punch still finds someone within reach, in degrees. 0 lands punches only where the fist actually goes. |
 | `vr_freeze_idle` | 0 | 1 holds the weapon's idle animation still in play as well - no breathing, no swaying arm. It is always held while a weapon is being placed. |
 | `vr_grip_<weapon>` | empty | Where that weapon sits in the hand: offset, angles and size. The grip button writes it; empty means the measured guess. |
 | `vr_weapon_reset` | 0 | Set it to 1 to forget the setting for the weapon in hand. Clears itself. |
@@ -191,9 +192,11 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   is what it should do.
 - **Punching**: a swing counts when the fist goes past `vr_punch_speed` the way the controller points -
   knuckles first, so a jab, a hook and an uppercut all count and pulling your arm back never does. It
-  lands where the swing was fastest, from a little behind the fist to about 20 cm past it, with the
-  fists' own damage; a fist that has gone through a wall hits the wall where your arm went in. There is
-  no buzz in the controller yet when a punch connects.
+  lands on whatever your fist runs into, out to about 40 cm past it; failing that, on the enemy within
+  the fists' own reach (about 1.6 m, the same as the trigger's punch) nearest where you are looking or
+  where your fist was headed, if there is nothing solid in between; and failing that, on the wall your
+  swing went into, or on nothing. A fist that has gone through a wall hits the wall where your arm went
+  in. There is no buzz in the controller yet when a punch connects.
 - Most of SiN's two-handed weapons only ever modelled the left hand, on the fore-end, so that is the
   hand you see on them; the fists are the one weapon with two arms, and they get one each.
 - The weapon's idle animation is what makes it breathe and sway. A weapon on a controller already

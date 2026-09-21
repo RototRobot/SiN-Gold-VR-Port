@@ -690,15 +690,31 @@ maths is what the owner's next headset test exercises.
      last punch of each hand with a count; `Player::VRPunches`, from `Player::EndFrame`, lands each new
      one if the current weapon is a `Fists` (which takes in `MutantHands`). The first look only notes the
      counts, and a count of 0 is none, so nothing is replayed after a level change or a `vid_restart`.
-   - **Where it lands** (`Fists::VRPunch`): from 16 units (40 cm) behind the fist to 8 (20 cm) past it,
-     along the swing - the fist is already at arm's length, unlike the button's punch, which reaches 64
-     units from the gun hand. If the eye cannot see the start of that, the fist is through a wall, and
-     the blow lands where the arm went in. The damage, sparks, blood and sounds are `Fists::Strike`, which
-     is `Shoot`'s body moved out so both can use it - the button behaves exactly as before. The swing
-     plays the fists' own whoosh, which the button gets from its animation.
-   - `vr_punch 2` prints each punch and what it hit. At the desk: a fist driven into the floor landed
-     ("World", 13.6 m/s); a jab at the air hit nothing; the slower pull back, a fist yanked backwards, a
-     60-unit jump down the fist's own line and a jab with the magnum out threw nothing.
+   - **Where it lands** (`Fists::VRPunch`). The first version traced a thin line along the swing, and the
+     owner found punches "really hard to land". The log of that session showed why: all 48 swings were
+     seen, but a real punch curves, and at its fastest half of them were going up or down more steeply
+     than forward - `(0.46 -0.24 0.85)`, `(0.44 -0.44 -0.78)` - so the line went over or under whoever
+     was being punched. Now, in turn:
+     1. **the fist**: a box 12 units (30 cm) across swept along the swing from 16 units behind the fist to
+        16 past it; anything that can be hurt takes the blow, along a line from the eye through the
+        point the box met it (so a hook to the head is a head hit), or through its middle;
+     2. **aim assist** (`vr_punch_assist`, degrees, default 35): the living `Sentient` whose box comes
+        within the fists' own `strike_reach` of the eye - 64 units, the button's reach - and passes
+        nearest the head's look or the fist's heading, with nothing solid in between;
+     3. **the swing**: whatever wall it went into, or nothing.
+     The cone is measured to the nearest point of the creature's *box*, not its middle: at punching
+     range a creature's middle is 30-odd degrees below the eye, and the first version of the assist
+     missed an uppercut at a grunt the head was plainly looking at. If the eye cannot see the start of
+     the swing, the fist is through a wall, and the blow lands where the arm went in. The damage,
+     sparks, blood and sounds are `Fists::Strike`, which is `Shoot`'s body moved out so all of them can
+     use it - the button behaves exactly as before. The full trace's radius is SiN's own for the fists,
+     64: once a line is inside a creature's box it finds the model generously (bullets use 5).
+   - `vr_punch 2` prints each punch, what it hit and how. At the desk: a fist driven into the floor
+     landed ("World", 13.6 m/s); the slower pull back, a fist yanked backwards, a 60-unit jump down the
+     fist's own line and a jab with the magnum out threw nothing. Against grunts spawned with
+     `spawn grunt_none origin "x y z"` (a grunt with no gun; cheat commands work on a map loaded without
+     `deathmatch`): a jab at the air with a grunt 200 units off hit nothing; a jab that reached one 48
+     units off landed by the fist; an uppercut that went nowhere near him landed by aim assist.
    - Not done: a buzz in the controller when a punch lands (OpenXR haptics want an output action and
      the game to say "hit" back), punches that hit harder the faster they go, and swinging a gun.
 
