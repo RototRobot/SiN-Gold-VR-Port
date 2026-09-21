@@ -21,7 +21,7 @@
 #ifndef SINVR_POSES_H
 #define SINVR_POSES_H
 
-#define SINVR_POSES_VERSION 2
+#define SINVR_POSES_VERSION 3
 #define SINVR_HAND_LEFT 0
 #define SINVR_HAND_RIGHT 1
 
@@ -63,6 +63,16 @@ typedef struct
 	float weapon_angles[3];
 	float weapon_scale;
 	int flags;               /* SINVR_CLIENT_BULLETS_OFF, _MIRRORED, _STILL */
+
+	/* Version 3. The last punch each hand threw by swinging: counted from 1, so
+	   the game can tell a new one from one it has already seen, 0 being none
+	   yet. Where the hand was at the swing's fastest, in the same frame as the
+	   hands, the way it was moving there, and how fast, in metres a second.
+	   The renderer sees every swing; the game decides whether one is a punch. */
+	unsigned punch_count[2];
+	float punch_origin[2][3];
+	float punch_dir[2][3];
+	float punch_speed[2];
 } sinvr_poses_t;
 
 /* ref_vr.dll's export. NULL if it speaks a different version. */

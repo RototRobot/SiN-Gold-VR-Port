@@ -159,6 +159,10 @@ are parameters. What to expect:
   the 0.8 s the grip has to be held is nearer 400 `wait`s than 120; `vr_fake_hand "<x> <y> <z>
   <pitch> <yaw> <roll>"` and `vr_fake_hand_left` put the hands somewhere in the game's own units and
   senses. `viewpos` prints the player's position and yaw, which is how the axes were checked.
+  `vr_fake_swing "<left|right> <x> <y> <z> <frames>"` swings a fake hand out by that much over that
+  many rendered frames, speeding up and slowing down like an arm, and back three times as slowly - a
+  punch at a speed the frame rate decides. SiN's eye is 66 units above the feet, so a fist aimed at the
+  floor has to get most of the way there.
 - **A cvar a test sets is still set in the next test.** SiN writes `config.cfg` on the way out, and
   every `vr_` cvar worth keeping is archived, so a run that ends with `vr_weapon_hand 0` leaves the next
   run with no weapon in the hand and no sign of why. Put the cvars a test depends on at the top of its
@@ -669,6 +673,35 @@ maths is what the owner's next headset test exercises.
      one-pixel outlines a sub-pixel shift of the head leaves behind, against 459 and 129 in a patch of
      world with no weapon in it. The game says which state it is in, either way, once per change.
 
+11. **Punching by swinging** (`vr_punch`, `vr_punch_speed`), 2026-09-21. The fists are one per hand, so a
+   swing of either throws a punch from that fist.
+   - **The renderer sees swings** (`watch_swings` in `vr_weapon.c`). Each hand's speed is measured
+     between this frame's grip position and the last, over the runtime's own display times, so the
+     frame rate does not enter into it. A swing starts when the speed passes `vr_punch_speed` *the way
+     the controller points* - at least a fifth of the motion along the aim, which is along the forearm
+     for a jab, across for a hook, up for an uppercut, and never for pulling the fist back. The punch is
+     thrown at the swing's fastest, where a real punch lands, when the speed falls to 85% of its peak or
+     the fist turns round; then the hand must slow to half the threshold before it can throw another.
+   - **Tracking jumps are not punches.** A controller that loses tracking and finds it again, a recentre,
+     or the desk's pretend hands taking over from real ones all arrive somewhere else in one frame: the
+     first desk run saw 103 and 172 m/s "punches" that way. Anything over 20 m/s is taken as a jump and
+     measured from afresh, and a recentre forgets both hands.
+   - **The renderer sends every swing, the game decides.** The block (`SINVR_POSES_VERSION` 3) keeps the
+     last punch of each hand with a count; `Player::VRPunches`, from `Player::EndFrame`, lands each new
+     one if the current weapon is a `Fists` (which takes in `MutantHands`). The first look only notes the
+     counts, and a count of 0 is none, so nothing is replayed after a level change or a `vid_restart`.
+   - **Where it lands** (`Fists::VRPunch`): from 16 units (40 cm) behind the fist to 8 (20 cm) past it,
+     along the swing - the fist is already at arm's length, unlike the button's punch, which reaches 64
+     units from the gun hand. If the eye cannot see the start of that, the fist is through a wall, and
+     the blow lands where the arm went in. The damage, sparks, blood and sounds are `Fists::Strike`, which
+     is `Shoot`'s body moved out so both can use it - the button behaves exactly as before. The swing
+     plays the fists' own whoosh, which the button gets from its animation.
+   - `vr_punch 2` prints each punch and what it hit. At the desk: a fist driven into the floor landed
+     ("World", 13.6 m/s); a jab at the air hit nothing; the slower pull back, a fist yanked backwards, a
+     60-unit jump down the fist's own line and a jab with the magnum out threw nothing.
+   - Not done: a buzz in the controller when a punch lands (OpenXR haptics want an output action and
+     the game to say "hit" back), punches that hit harder the faster they go, and swinging a gun.
+
 What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
 computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the
 grip button freezing and re-attaching the weapon (frozen with the hand at yaw 0, released with it at yaw
@@ -712,6 +745,5 @@ Still to do, and what is known about each:
   - `Weapon::SecondaryUse` starts `primaryidle`/`secondaryidle` itself for the dual-mode weapons, which
     then play through once before the freeze sees them.
   Nothing else in the game overrides `Idle` or `ForceIdle`.
-- **Punching with the hands** rather than the fire button, now that each fist is on its own controller.
 - **Comfort and roomscale:** snap turning, crouching, and the body following the head.
 - **Hand tracking** (`XR_EXT_hand_tracking`) is the same channel with a different source.

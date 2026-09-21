@@ -964,6 +964,7 @@ static int xr_begin_stereo(int force_render)
 			head[i] = 0.5f * (xr.eye_views[0].position[i] + xr.eye_views[1].position[i]);
 		}
 		vr_view_recenter(head, xr.eye_views[0].orientation);
+		vr_weapon_recentred();
 		xr.recenter_wanted = 0;
 		vr_printf("VR: measuring from where the headset is now");
 	}

@@ -111,6 +111,23 @@ int VR_HeadPose(float origin[3], float angles[3])
 	return 1;
 }
 
+int VR_Punch(int hand, unsigned *number, float origin[3], float dir[3], float *speed)
+{
+	const sinvr_poses_t *p;
+
+	if ((hand != VR_HAND_LEFT && hand != VR_HAND_RIGHT) || !tracking())
+	{
+		return 0;
+	}
+
+	p = poses;
+	*number = p->punch_count[hand];
+	memcpy(origin, p->punch_origin[hand], sizeof(float) * 3);
+	memcpy(dir, p->punch_dir[hand], sizeof(float) * 3);
+	*speed = p->punch_speed[hand];
+	return 1;
+}
+
 int VR_WeaponPose(float origin[3], float angles[3], float *scale, int *flags)
 {
 	const sinvr_poses_t *p;

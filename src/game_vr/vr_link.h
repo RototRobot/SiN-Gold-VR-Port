@@ -48,6 +48,14 @@ int VR_HeadPose(float origin[3], float angles[3]);
 int VR_WeaponPose(float origin[3], float angles[3], float *scale, int *flags);
 
 /*
+ * The last punch a hand threw by swinging: its number, which grows by one with
+ * each and is 0 before the first, where the hand was at the swing's fastest,
+ * in the same frame as VR_HandPose, the way it was going (a unit vector) and
+ * how fast, in metres a second. Returns 0 while the renderer is not tracking.
+ */
+int VR_Punch(int hand, unsigned *number, float origin[3], float dir[3], float *speed);
+
+/*
  * 1 the first time the renderer's poses arrive, -1 the first time they stop,
  * 0 whenever nothing has changed. For telling the player the link is up.
  */

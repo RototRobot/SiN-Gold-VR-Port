@@ -14,6 +14,10 @@ void vr_poses_begin(float units_per_metre);
 void vr_poses_head(const float origin[3], const float angles[3]);
 void vr_poses_hand(int hand, const float origin[3], const float angles[3]);
 void vr_poses_weapon(const float origin[3], const float angles[3], float scale, int flags);
+
+/* A punch thrown with a hand. Kept, and counted, until the next one from the
+   same hand: it is an event, and the game reads the block ten times a second. */
+void vr_poses_punch(int hand, const float origin[3], const float dir[3], float speed);
 void vr_poses_end(void);
 
 /* Nothing is tracked any more: the game should go back to its own aiming. */

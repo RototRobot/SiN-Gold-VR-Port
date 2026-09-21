@@ -42,7 +42,7 @@
 #include "refapi.h"
 
 /* Registers the cvars: vr_weapon_hand, vr_left_handed, vr_show_hands,
-   vr_freeze_idle, vr_grip_<weapon>, vr_weapon_reset. */
+   vr_freeze_idle, vr_punch, vr_punch_speed, vr_grip_<weapon>, vr_weapon_reset. */
 void vr_weapon_startup(void);
 
 /*
@@ -59,11 +59,16 @@ void vr_weapon_install(void);
 void vr_weapon_uninstall(void);
 
 /*
- * The controllers, in the recentred frame, once a frame: begin, then each hand
- * that is tracked - where it is held (grip), and where and which way it points
- * (aim) - then publish, which places the weapon and hands it to the game.
+ * The controllers, in the recentred frame, once a frame: begin, with the time
+ * the poses are for, in seconds, then each hand that is tracked - where it is
+ * held (grip), and where and which way it points (aim) - then publish, which
+ * places the weapon, watches for punches and hands it all to the game.
  */
-void vr_weapon_hands_begin(void);
+void vr_weapon_hands_begin(double seconds);
+
+/* The frame the hands are measured in has just moved: whatever they seem to
+   do across that is not the player's doing. */
+void vr_weapon_recentred(void);
 void vr_weapon_track_hand(int hand, const float grip[3], const float aim_origin[3], const float aim_angles[3]);
 void vr_weapon_publish(void);
 

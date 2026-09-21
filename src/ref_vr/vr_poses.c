@@ -48,6 +48,22 @@ void vr_poses_weapon(const float origin[3], const float angles[3], float scale, 
 	poses.weapon_valid = 1;
 }
 
+void vr_poses_punch(int hand, const float origin[3], const float dir[3], float speed)
+{
+	if (hand != SINVR_HAND_LEFT && hand != SINVR_HAND_RIGHT)
+	{
+		return;
+	}
+
+	memcpy(poses.punch_origin[hand], origin, sizeof(poses.punch_origin[hand]));
+	memcpy(poses.punch_dir[hand], dir, sizeof(poses.punch_dir[hand]));
+	poses.punch_speed[hand] = speed;
+	if (++poses.punch_count[hand] == 0)
+	{
+		poses.punch_count[hand] = 1; /* 0 is "none yet" */
+	}
+}
+
 void vr_poses_end(void)
 {
 	poses.time_ms = GetTickCount();

@@ -78,6 +78,8 @@ static cvar_t *vr_client_bullets;
 static cvar_t *vr_weapon_reset;
 static cvar_t *vr_show_hands;
 static cvar_t *vr_freeze_idle;
+static cvar_t *vr_punch;
+static cvar_t *vr_punch_speed;
 static cvar_t *vr_aim;
 
 /* Read once, at start-up: the buttons are attached to the session with the
@@ -215,6 +217,8 @@ void vr_weapon_startup(void)
 	vr_weapon_reset = vr_cvar("vr_weapon_reset", "0", 0);
 	vr_show_hands = vr_cvar("vr_show_hands", "1", CVAR_ARCHIVE);
 	vr_freeze_idle = vr_cvar("vr_freeze_idle", "0", CVAR_ARCHIVE);
+	vr_punch = vr_cvar("vr_punch", "1", CVAR_ARCHIVE);
+	vr_punch_speed = vr_cvar("vr_punch_speed", "2", CVAR_ARCHIVE);
 	vr_aim = vr_cvar("vr_aim", "1", 0);
 	lefty = vr_left_handed->value != 0.0f;
 	if (lefty)
@@ -363,10 +367,13 @@ static void save_grip(const weapon_t *w, int hand, const placement_t *p)
 	vr_printf("VR: the %s is held that way from now on: %s \"%s\"", w->key, cvar->name, value);
 }
 
-void vr_weapon_hands_begin(void)
+static double hands_time; /* what this frame's hands are for, in seconds */
+
+void vr_weapon_hands_begin(double seconds)
 {
 	hands[LEFT].valid = 0;
 	hands[RIGHT].valid = 0;
+	hands_time = seconds;
 }
 
 void vr_weapon_track_hand(int hand, const float grip[3], const float aim_origin[3], const float aim_angles[3])
@@ -515,6 +522,145 @@ static void reset_requested(void)
 	vr_printf("VR: the %s is back to its first guess", current->key);
 }
 
+/* ------------------------------------------------------------------------- */
+/* Punches                                                                    */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * A punch is a swing: the hand goes past vr_punch_speed the way its knuckles
+ * lead - roughly where the controller points, which is along the forearm for
+ * a jab, across the body for a hook and upwards for an uppercut - and the
+ * punch is thrown at the swing's fastest, where a real one lands, with the
+ * hand's position and direction there. Pulling the fist back goes against the
+ * way it points, so that is never a punch, however fast; and after a punch the
+ * hand has to slow to half the speed before it can throw another, so one swing
+ * is one punch. Speed is taken between this frame's pose and the last,
+ * both for the display times the runtime gave, so it does not depend on how
+ * fast the engine happens to be running. Every swing is sent; the game only
+ * counts the ones thrown with the fists out.
+ */
+static struct
+{
+	int known;              /* a position from the last frame to measure against */
+	float origin[3];        /* the grip, recentred, game units */
+	double time;
+	int armed;              /* slow enough, since the last punch, to throw another */
+	int swinging;           /* past the speed, waiting for the fastest moment */
+	float peak;             /* m/s */
+	float peak_origin[3];
+	float peak_dir[3];
+} swing[2];
+
+#define PUNCH_ALONG 0.2f /* the least of the swing that goes the way the fist points */
+#define PUNCH_MAX 20.0f  /* m/s: faster than any fist; that is the tracking jumping */
+
+static unsigned punches_thrown;
+
+void vr_weapon_recentred(void)
+{
+	swing[LEFT].known = 0;
+	swing[RIGHT].known = 0;
+}
+
+static void watch_swings(void)
+{
+	float units = vr_worldscale_units();
+	float threshold = vr_punch_speed ? vr_punch_speed->value : 2.0f;
+	int enabled = (!vr_punch || vr_punch->value != 0.0f) && !adjust.active;
+	int hand, i;
+
+	if (threshold < 0.5f)
+	{
+		threshold = 0.5f;
+	}
+
+	for (hand = 0; hand < 2; ++hand)
+	{
+		float velocity[3], speed, along;
+		double dt;
+
+		if (!hands[hand].valid)
+		{
+			swing[hand].known = 0;
+			continue;
+		}
+
+		dt = hands_time - swing[hand].time;
+		if (!swing[hand].known || dt <= 0.0 || dt > 0.1 || units <= 0.0f)
+		{
+			/* the first sight of it, or a gap: nothing to measure against */
+			memcpy(swing[hand].origin, hands[hand].frame.origin, sizeof(swing[hand].origin));
+			swing[hand].time = hands_time;
+			swing[hand].known = 1;
+			swing[hand].swinging = 0;
+			continue;
+		}
+
+		speed = 0.0f;
+		for (i = 0; i < 3; ++i)
+		{
+			velocity[i] = (float)((hands[hand].frame.origin[i] - swing[hand].origin[i]) / dt / units);
+			speed += velocity[i] * velocity[i];
+		}
+		speed = sqrtf(speed);
+		along = 0.0f;
+		if (speed > 0.0f)
+		{
+			for (i = 0; i < 3; ++i)
+			{
+				along += velocity[i] * hands[hand].frame.axis[0][i];
+			}
+			along /= speed;
+		}
+		memcpy(swing[hand].origin, hands[hand].frame.origin, sizeof(swing[hand].origin));
+		swing[hand].time = hands_time;
+
+		/* A controller that loses its tracking and finds it again, or a hand
+		   that changes hands - the desk's pretend ones taking over - arrives
+		   somewhere else in one frame. Measure from there next time. */
+		if (speed > PUNCH_MAX)
+		{
+			swing[hand].swinging = 0;
+			continue;
+		}
+
+		if (!enabled)
+		{
+			swing[hand].swinging = 0;
+			continue;
+		}
+
+		if (!swing[hand].armed)
+		{
+			swing[hand].armed = speed < threshold * 0.5f;
+			continue;
+		}
+
+		if (speed >= threshold && along >= PUNCH_ALONG && (!swing[hand].swinging || speed > swing[hand].peak))
+		{
+			swing[hand].swinging = 1;
+			swing[hand].peak = speed;
+			memcpy(swing[hand].peak_origin, hands[hand].frame.origin, sizeof(swing[hand].peak_origin));
+			for (i = 0; i < 3; ++i)
+			{
+				swing[hand].peak_dir[i] = velocity[i] / speed;
+			}
+			continue;
+		}
+
+		/* past its fastest, or coming back: that was the punch */
+		if (swing[hand].swinging && (speed < swing[hand].peak * 0.85f || along < 0.0f))
+		{
+			vr_poses_punch(hand, swing[hand].peak_origin, swing[hand].peak_dir, swing[hand].peak);
+			vrlog("VR: a punch with the %s hand, %.1f m/s, going (%.2f %.2f %.2f)", hand_name(hand),
+				swing[hand].peak, swing[hand].peak_dir[0], swing[hand].peak_dir[1], swing[hand].peak_dir[2]);
+			punches_thrown++;
+			swing[hand].swinging = 0;
+			swing[hand].armed = 0;
+		}
+	}
+}
+
 static int sin_patched(void);
 static int wants_server_bullets(void);
 
@@ -528,6 +674,7 @@ void vr_weapon_publish(void)
 
 	check_mode();
 	reset_requested();
+	watch_swings();
 
 	if (!vr_weapon_hand || vr_weapon_hand->value == 0.0f || !hands[gun].valid || !current)
 	{
@@ -970,7 +1117,7 @@ void vr_weapon_uninstall(void)
 	vr_unhook_calls();
 	patched = 0;
 	vrlog("VR: the view weapon was placed by the client %u times; %u of its bullet impacts were left "
-		"to the server", client_placements, bullets_left_out);
+		"to the server; %u punches were thrown", client_placements, bullets_left_out, punches_thrown);
 }
 
 /* ------------------------------------------------------------------------- */

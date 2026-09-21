@@ -219,6 +219,7 @@ static cvar_t *vr_fake_key;
 static cvar_t *vr_fake_hand;
 static cvar_t *vr_fake_hand_left;
 static cvar_t *vr_fake_idle_press;
+static cvar_t *vr_fake_swing;
 static DWORD last_fake_idle;
 static int fake_held = -1;
 static int fake_frames;
@@ -266,6 +267,7 @@ void vr_input_startup(void)
 	vr_fake_hand = vr_cvar("vr_fake_hand", "", 0);
 	vr_fake_hand_left = vr_cvar("vr_fake_hand_left", "", 0);
 	vr_fake_idle_press = vr_cvar("vr_fake_idle_press", "", 0);
+	vr_fake_swing = vr_cvar("vr_fake_swing", "", 0);
 	vr_recentre_double = vr_cvar("vr_recentre_double", "1", CVAR_ARCHIVE);
 
 	for (i = 0; i < ACT_COUNT; ++i)
@@ -1142,6 +1144,77 @@ static int locate(XrSpace hand, XrSpace space, XrTime time, float units_per_metr
 	return 1;
 }
 
+/*
+ * Desk testing: "vr_fake_swing <left|right> <x> <y> <z> <frames>" takes that
+ * fake hand out by (x y z) game units over that many rendered frames, speeding
+ * up and then slowing down, holds it there as long, and brings it back three
+ * times as slowly - a punch, at whatever speed the frame rate makes of it.
+ */
+static struct
+{
+	int hand;
+	float reach[3];
+	int frames;
+	int step;
+} fake_swing;
+
+static void read_fake_swing(void)
+{
+	char which[16];
+	float reach[3];
+	int frames;
+
+	if (!vr_fake_swing || !vr_fake_swing->string || !vr_fake_swing->string[0])
+	{
+		return;
+	}
+
+	if (sscanf(vr_fake_swing->string, "%15s %f %f %f %d", which, &reach[0], &reach[1], &reach[2],
+			&frames) == 5 && frames > 0)
+	{
+		fake_swing.hand = _stricmp(which, "left") == 0 ? SINVR_HAND_LEFT : SINVR_HAND_RIGHT;
+		memcpy(fake_swing.reach, reach, sizeof(reach));
+		fake_swing.frames = frames;
+		fake_swing.step = 0;
+	}
+	else
+	{
+		vr_printf("VR: vr_fake_swing wants <left|right> <x> <y> <z> <frames>");
+	}
+	vr_cvar_set("vr_fake_swing", "");
+}
+
+static void fake_swing_offset(int hand, float offset[3])
+{
+	int n = fake_swing.frames, s = fake_swing.step;
+	float f = 0.0f;
+	int i;
+
+	if (n > 0 && hand == fake_swing.hand)
+	{
+		if (s <= n)
+		{
+			/* eased in and out, as an arm moves: fastest halfway */
+			float t = (float)s / n;
+
+			f = t * t * (3.0f - 2.0f * t);
+		}
+		else if (s <= 2 * n)
+		{
+			f = 1.0f;
+		}
+		else if (s <= 5 * n)
+		{
+			f = 1.0f - (float)(s - 2 * n) / (3 * n);
+		}
+	}
+
+	for (i = 0; i < 3; ++i)
+	{
+		offset[i] = fake_swing.reach[i] * f;
+	}
+}
+
 /* Desk testing, with no controllers: "vr_fake_hand <x> <y> <z> <pitch> <yaw>
    <roll>" puts the right hand there, in the game's own units and senses, held
    where it points from; vr_fake_hand_left does the same for the left. Either
@@ -1150,12 +1223,20 @@ static int fake_hand(const cvar_t *cvar, int hand)
 {
 	float origin[3] = { 0.0f, 0.0f, 0.0f };
 	float angles[3] = { 0.0f, 0.0f, 0.0f };
+	float offset[3];
+	int i;
 
 	if (!cvar || !cvar->string || !cvar->string[0] ||
 		sscanf(cvar->string, "%f %f %f %f %f %f", &origin[0], &origin[1], &origin[2],
 			&angles[0], &angles[1], &angles[2]) < 3)
 	{
 		return 0;
+	}
+
+	fake_swing_offset(hand, offset);
+	for (i = 0; i < 3; ++i)
+	{
+		origin[i] += offset[i];
 	}
 
 	vr_poses_hand(hand, origin, angles);
@@ -1168,7 +1249,13 @@ void vr_input_hands(XrSession session, XrSpace space, XrTime time, float units_p
 	int i;
 
 	(void)session;
-	vr_weapon_hands_begin();
+	vr_weapon_hands_begin((double)time * 1e-9);
+
+	read_fake_swing();
+	if (fake_swing.frames > 0 && ++fake_swing.step > 5 * fake_swing.frames)
+	{
+		fake_swing.frames = 0;
+	}
 
 	if (fake_hand(vr_fake_hand, SINVR_HAND_RIGHT) | fake_hand(vr_fake_hand_left, SINVR_HAND_LEFT))
 	{
