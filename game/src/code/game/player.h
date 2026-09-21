@@ -396,6 +396,7 @@ public:
    virtual void      GetGunOrientation(Vector pos, Vector *forward, Vector *right, Vector *up);
    qboolean          VRWeaponPose(Vector *pos, Vector *angles, float *scale, qboolean *server_effects,
                                   qboolean *mirrored = NULL, qboolean *still = NULL);
+   void              VRPunches(void);
    void              DropWeaponEvent(Event *ev);
    void              CTF_DropFlag(Event *ev);
 };

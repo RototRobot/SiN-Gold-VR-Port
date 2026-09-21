@@ -43,14 +43,8 @@ Fists::Fists() : Weapon()
 
 void Fists::Shoot(Event * ev)
 {
-   trace_t	trace;
    Vector	start;
-   Vector	end;
-   float    damage;
-   Vector   org;
-   Vector   dir;
-   int      surfflags;
-   int      surftype;
+   Vector	dir;
 
    assert(owner);
    if(!owner)
@@ -60,10 +54,67 @@ void Fists::Shoot(Event * ev)
 
    NextAttack(1);
 
-   damage = G_Random(strike_damage)+strike_damage;
-
    GetMuzzlePosition(&start, &dir);
-   end	= start + dir * strike_reach;
+   Strike(start, start + dir * strike_reach);
+}
+
+//
+// SiN Gold VR: a punch thrown by swinging a controller. The fist is where the
+// player's hand is, not a reach away from the eye, so the blow runs along the
+// swing, from a little behind the fist to a little past it - about 40 cm and
+// 20 cm. The player's real arm goes through walls the game's would not, so if
+// the way from the eye to the start of that is blocked, the blow lands where
+// the arm went into the wall.
+//
+#define VR_PUNCH_BEHIND 16.0f
+#define VR_PUNCH_AHEAD  8.0f
+
+trace_t Fists::VRPunch(Vector fist, Vector dir)
+{
+   trace_t  reach;
+   Vector   eye;
+   Vector   start;
+   Vector   end;
+   Vector   in;
+
+   memset(&reach, 0, sizeof(reach));
+   reach.fraction = 1.0f;
+   if(!owner || ((weaponstate != WEAPON_READY) && (weaponstate != WEAPON_FIRING)))
+   {
+      return reach;
+   }
+
+   eye = owner->EyePosition();
+   start = fist - dir * VR_PUNCH_BEHIND;
+   end = fist + dir * VR_PUNCH_AHEAD;
+
+   reach = G_Trace(eye, vec_zero, vec_zero, start, owner, MASK_SOLID, "Fists::VRPunch");
+   if(reach.fraction < 1.0f)
+   {
+      in = Vector(reach.endpos) - eye;
+      in.normalize();
+      start = eye;
+      end = Vector(reach.endpos) + in * 4;
+   }
+
+   // the swing's own whoosh: the fire animation plays it for the button
+   owner->sound(G_Random(1) < 0.5f ? "weapons/punch/whsh1.wav" : "weapons/punch/whsh2.wav", 1.0f, CHAN_WEAPON);
+
+   return Strike(start, end);
+}
+
+// A blow from start to end: whatever is first in the way takes it. This is
+// what Shoot always did once it knew where from; a swung fist uses it too.
+trace_t Fists::Strike(Vector start, Vector end)
+{
+   trace_t	trace;
+   float    damage;
+   Vector   org;
+   Vector   dir;
+   int      surfflags;
+   int      surftype;
+
+   damage = G_Random(strike_damage)+strike_damage;
 
    trace = G_FullTrace(start, vec_zero, vec_zero, end, 64, owner, MASK_PROJECTILE, "Fists::Shoot");
 
@@ -159,6 +210,8 @@ void Fists::Shoot(Event * ev)
          gi.multicast(org.vec3(), MULTICAST_PVS);
       }
    }
+
+   return trace;
 }
 
 // EOF

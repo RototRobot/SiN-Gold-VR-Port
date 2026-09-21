@@ -19,6 +19,7 @@
 #include "player.h"
 #include "worldspawn.h"
 #include "weapon.h"
+#include "fists.h"
 #include "trigger.h"
 #include "scriptmaster.h"
 #include "vehicle.h"
@@ -4993,6 +4994,7 @@ and right after spawning
 EXPORT_FROM_DLL void Player::EndFrame(Event *ev)
 {
    FinishMove();
+   VRPunches();
    UpdateStats();
    UpdateMusic();
 
@@ -6496,6 +6498,85 @@ qboolean Player::VRWeaponPose(Vector *pos, Vector *angles, float *scale, qboolea
    }
 
    return true;
+}
+
+/*
+ * SiN Gold VR: punches thrown by swinging the controllers, while the fists are
+ * out. The renderer counts every swing of each hand; a new count is a new
+ * punch, landed from where the hand was, the way it was going. Only the player
+ * at this machine has controllers, so the counts seen are kept here rather
+ * than in the player. The first look only notes where the counts are, so
+ * nothing thrown before is replayed. vr_punch 0 leaves the fists to the fire
+ * button; 2 says what each punch hit.
+ */
+static cvar_t    *vr_punch = NULL;
+static unsigned   vr_punch_seen[2];
+static qboolean   vr_punch_primed[2];
+
+void Player::VRPunches(void)
+{
+   unsigned number;
+   float    origin[3];
+   float    dir[3];
+   float    speed;
+   float    yaw;
+   float    s, c;
+   int      hand;
+   Vector   fist;
+   Vector   way;
+   trace_t  trace;
+
+   if(!vr_punch)
+   {
+      vr_punch = gi.cvar("vr_punch", "1", 0);
+   }
+
+   if(entnum != 1)
+   {
+      return;
+   }
+
+   for(hand = 0; hand < 2; hand++)
+   {
+      if(!VR_Punch(hand, &number, origin, dir, &speed))
+      {
+         continue;
+      }
+
+      if(!vr_punch_primed[hand])
+      {
+         vr_punch_primed[hand] = true;
+         vr_punch_seen[hand] = number;
+         continue;
+      }
+
+      if(!number || (number == vr_punch_seen[hand]))
+      {
+         continue;
+      }
+      vr_punch_seen[hand] = number;
+
+      if(!vr_punch->value || !currentWeapon || !currentWeapon->isSubclassOf<Fists>())
+      {
+         continue;
+      }
+
+      yaw = worldangles[YAW] * (M_PI / 180.0f);
+      s = sin(yaw);
+      c = cos(yaw);
+      fist = EyePosition() + Vector(origin[0] * c - origin[1] * s, origin[0] * s + origin[1] * c, origin[2]);
+      way = Vector(dir[0] * c - dir[1] * s, dir[0] * s + dir[1] * c, dir[2]);
+
+      trace = ((Fists *)currentWeapon)->VRPunch(fist, way);
+
+      if(vr_punch->value >= 2)
+      {
+         gi.printf("SiN Gold VR: a punch with the %s hand, %.1f m/s - %s\n",
+                   hand == VR_HAND_LEFT ? "left" : "right", speed,
+                   (trace.fraction < 1.0f && trace.ent && trace.ent->entity) ?
+                   trace.ent->entity->getClassname() : "nothing");
+      }
+   }
 }
 
 Vector Player::GunPosition(void)
