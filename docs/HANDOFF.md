@@ -410,14 +410,14 @@ Still to do, in the order it matters:
   on weaker cards, and is easy to add: the swapchains are created in one place.
 - The level-start card (§8) is worth handling in VR: it is a non-world frame, so it lands on the theatre
   screen while the world behind it is not being drawn.
-- `refdef_t` beyond `rdflags` and `entity_t` are unmapped. They are needed to put the weapon in the hand (see
-  [Q2VR_REFERENCE](Q2VR_REFERENCE.md), "weapon model in the hand").
 
 **Input**
 
-- Movement and aiming input need hooks in `sin.exe`'s client (`CL_BaseMove`, `cl.viewangles`), or joystick emulation.
-- The head pose is already in the renderer. Getting it to the game DLL - for aiming, and for the body to
-  follow the head - needs a channel between the two DLLs (a shared memory block, or cvars for a first cut).
+- The body does not follow the head yet. The head pose already reaches the game module
+  (`VR_HeadPose`, §12), so walking in the room can become the player walking - the game moves the
+  player by the head's change of position each frame, and recentres around it - without a new channel.
+- Snap turning, and a real crouch - the head going down past a threshold pressing crouch - are the
+  rest of roadmap milestone 7.
 
 **Content and release**
 
@@ -703,11 +703,17 @@ Still to do, and what is known about each:
   gesture only has to reach it: watching the off hand under the weapon in `vr_weapon.c` and running
   the bound command is the whole of it, with a small console command of our own in the game DLL if it
   should not also open doors.
-- **The idle animation.** `Weapon::Idle` plays the model's `idle` animation, which is where the arm's
-  breathing comes from; it is drawn from the same animation tables the muzzle bone is read from, so
-  holding the frame still (`StopAnimating` for the VR player, or pinning `frame` as the entity goes
-  past `add_view_weapon`) stops the sway without disturbing where the barrel is. Worth checking weapon
-  by weapon: an idle that starts by lowering the gun would freeze it lowered.
+- **The idle freeze is not always consistent** (owner, in the headset, 2026-09-21: "works, but didn't
+  seem 100% consistent"; to revisit). Leads, none of them confirmed:
+  - it only takes hold at the next `Weapon::ForceIdle`, so there is up to one idle cycle of breathing
+    after the grip freezes the weapon or `vr_freeze_idle` goes on. Poking the weapon with
+    `EV_Weapon_Idle` from the player's frame when the flag changes would make it immediate;
+  - `ForceIdle` is usually reached at the *end* of an idle animation, and its "already idling?" check
+    then keeps whatever frame the weapon is on - the last one of that idle, not the first - so the held
+    pose can differ between `idle1` and `idle2`, and from the first frame the muzzle is measured at;
+  - `Weapon::SecondaryUse` starts `primaryidle`/`secondaryidle` itself for the dual-mode weapons, which
+    then play through once before the freeze sees them.
+  Nothing else in the game overrides `Idle` or `ForceIdle`.
 - **Punching with the hands** rather than the fire button, now that each fist is on its own controller.
 - **Comfort and roomscale:** snap turning, crouching, and the body following the head.
 - **Hand tracking** (`XR_EXT_hand_tracking`) is the same channel with a different source.
