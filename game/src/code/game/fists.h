@@ -33,7 +33,7 @@ public:
    Fists();
    virtual void      Shoot(Event *ev);
    trace_t           Strike(Vector start, Vector end);
-   trace_t           VRPunch(Vector fist, Vector dir);
+   trace_t           VRPunch(Vector fist, Vector dir, Vector look, const char **how);
    virtual void      Archive(Archiver &arc)   override;
    virtual void      Unarchive(Archiver &arc) override;
 };

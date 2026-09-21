@@ -6515,16 +6515,20 @@ static qboolean   vr_punch_primed[2];
 
 void Player::VRPunches(void)
 {
-   unsigned number;
-   float    origin[3];
-   float    dir[3];
-   float    speed;
-   float    yaw;
-   float    s, c;
-   int      hand;
-   Vector   fist;
-   Vector   way;
-   trace_t  trace;
+   unsigned    number;
+   float       origin[3];
+   float       dir[3];
+   float       speed;
+   float       yaw;
+   float       s, c;
+   float       head_origin[3];
+   float       head_angles[3];
+   int         hand;
+   Vector      fist;
+   Vector      way;
+   Vector      look;
+   trace_t     trace;
+   const char  *how;
 
    if(!vr_punch)
    {
@@ -6567,14 +6571,24 @@ void Player::VRPunches(void)
       fist = EyePosition() + Vector(origin[0] * c - origin[1] * s, origin[0] * s + origin[1] * c, origin[2]);
       way = Vector(dir[0] * c - dir[1] * s, dir[0] * s + dir[1] * c, dir[2]);
 
-      trace = ((Fists *)currentWeapon)->VRPunch(fist, way);
+      // where the head is looking, which is not where the body faces
+      if(VR_HeadPose(head_origin, head_angles))
+      {
+         Vector(head_angles[0], head_angles[1] + worldangles[YAW], head_angles[2]).AngleVectors(&look, NULL, NULL);
+      }
+      else
+      {
+         v_angle.AngleVectors(&look, NULL, NULL);
+      }
+
+      trace = ((Fists *)currentWeapon)->VRPunch(fist, way, look, &how);
 
       if(vr_punch->value >= 2)
       {
-         gi.printf("SiN Gold VR: a punch with the %s hand, %.1f m/s - %s\n",
+         gi.printf("SiN Gold VR: a punch with the %s hand, %.1f m/s - %s, %s\n",
                    hand == VR_HAND_LEFT ? "left" : "right", speed,
                    (trace.fraction < 1.0f && trace.ent && trace.ent->entity) ?
-                   trace.ent->entity->getClassname() : "nothing");
+                   trace.ent->entity->getClassname() : "nothing", how);
       }
    }
 }
