@@ -29,6 +29,7 @@
 #include "vr_poses.h"
 #include "vr_weapon.h"
 #include "vr_xr.h"
+#include "vrlog.h"
 #include "xr_layers.h"
 
 typedef BOOL(WINAPI *swap_interval_t)(int interval);
@@ -81,6 +82,8 @@ static struct
 	/* Stereo. */
 	int stereo_failed;
 	xr_target_t eye[2];
+	float eye_scale;  /* the resolution the eye buffers were made for, as asked */
+	float eye_made;   /* the last one the runtime actually made; 0 before any */
 	int in_frame;      /* pass 0 began an OpenXR frame that vr_xr_end_stereo_frame() ends */
 	int should_render;
 	XrTime display_time;
@@ -820,10 +823,23 @@ int vr_xr_stereo_possible(void)
 	return xr.started && xr.running && !xr.failed && !xr.stereo_failed;
 }
 
-static int xr_make_eye_targets(void)
+#define RESOLUTION_MIN 0.25f
+
+/*
+ * The eye buffers, at the size the runtime recommends times resolution on each
+ * side. The recommended size is core OpenXR, so every runtime gives one: it is
+ * the size that puts one rendered pixel on each of the display's at the middle
+ * of the lens, where the distortion magnifies most, and a runtime with a
+ * resolution setting of its own - SteamVR's - folds that in. There is no
+ * portable way to ask for the panel's own pixel count, and rendering at it
+ * would be softer in the middle than this. The runtime's maximum is never
+ * passed, and one factor serves both sides and both eyes, so the shape stays.
+ */
+static int xr_make_eye_targets(float resolution)
 {
 	XrViewConfigurationView config[2];
 	uint32_t count = 0;
+	float scale = resolution;
 	int i;
 
 	memset(config, 0, sizeof(config));
@@ -834,16 +850,45 @@ static int xr_make_eye_targets(void)
 		return 0;
 	}
 
+	if (scale < RESOLUTION_MIN)
+	{
+		scale = RESOLUTION_MIN;
+	}
 	for (i = 0; i < 2; ++i)
 	{
-		if (!xr_create_target(&xr.eye[i], (int)config[i].recommendedImageRectWidth,
-				(int)config[i].recommendedImageRectHeight, 1))
+		float fit_x = (float)config[i].maxImageRectWidth / (float)config[i].recommendedImageRectWidth;
+		float fit_y = (float)config[i].maxImageRectHeight / (float)config[i].recommendedImageRectHeight;
+
+		if (config[i].recommendedImageRectWidth == 0 || config[i].recommendedImageRectHeight == 0)
+		{
+			return 0;
+		}
+		if (config[i].maxImageRectWidth && scale > fit_x)
+		{
+			scale = fit_x;
+		}
+		if (config[i].maxImageRectHeight && scale > fit_y)
+		{
+			scale = fit_y;
+		}
+	}
+
+	for (i = 0; i < 2; ++i)
+	{
+		if (!xr_create_target(&xr.eye[i], (int)(config[i].recommendedImageRectWidth * scale + 0.5f),
+				(int)(config[i].recommendedImageRectHeight * scale + 0.5f), 1))
 		{
 			return 0;
 		}
 	}
 
-	vr_printf("VR: stereo eye buffers %dx%d, format 0x%X", xr.eye[0].width, xr.eye[0].height, (unsigned)xr.format);
+	xr.eye_scale = resolution;
+	xr.eye_made = resolution;
+	vr_printf("VR: stereo eye buffers %dx%d - %.2f of the %ux%u the runtime recommends%s", xr.eye[0].width,
+		xr.eye[0].height, scale, config[0].recommendedImageRectWidth, config[0].recommendedImageRectHeight,
+		scale < resolution ? ", as far as it allows" : (scale > resolution ? ", the least there is" : ""));
+	vrlog("VR: format 0x%X; the runtime allows up to %ux%u", (unsigned)xr.format, config[0].maxImageRectWidth,
+		config[0].maxImageRectHeight);
 	return 1;
 }
 
@@ -1046,10 +1091,16 @@ static float eye_offset_x(int pass)
 	return pass == 0 ? -half : half;
 }
 
-const vr_eye_t *vr_xr_begin_eye(int pass, int window_width, int window_height, int force_render)
+const vr_eye_t *vr_xr_begin_eye(int pass, int window_width, int window_height, int force_render,
+	float resolution)
 {
 	xr_target_t *t;
 	const vr_eye_t *eye;
+
+	if (resolution <= 0.0f)
+	{
+		resolution = 1.0f;
+	}
 
 	if (pass == 0)
 	{
@@ -1058,13 +1109,41 @@ const vr_eye_t *vr_xr_begin_eye(int pass, int window_width, int window_height, i
 			return NULL;
 		}
 
-		if (xr.eye[0].swapchain == XR_NULL_HANDLE && !xr_make_eye_targets())
+		/* A new size: between frames nothing holds an image, so the buffers can
+		   simply go and be made again below. */
+		if (xr.eye[0].swapchain != XR_NULL_HANDLE && resolution != xr.eye_scale)
 		{
 			xr_destroy_target(&xr.eye[0]);
 			xr_destroy_target(&xr.eye[1]);
-			xr.stereo_failed = 1;
-			vr_printf("VR: stereo is not available - staying on the theatre screen");
-			return NULL;
+		}
+
+		if (xr.eye[0].swapchain == XR_NULL_HANDLE && !xr_make_eye_targets(resolution))
+		{
+			/* A runtime can refuse a size it says it allows. SteamVR reports
+			   8192x8192 and makes 1.4 of the recommended size happily on a fresh
+			   start, but refuses a bigger size after a smaller one has been made
+			   in the same session - even the recommended one - which looks like
+			   a 32-bit process running out of room in one piece. So a refusal
+			   goes back to the last size that was made, or to the recommended
+			   one, before stereo is given up on; a vid_restart starts clean. */
+			float fallback = xr.eye_made > 0.0f ? xr.eye_made : 1.0f;
+
+			xr_destroy_target(&xr.eye[0]);
+			xr_destroy_target(&xr.eye[1]);
+			if (fallback != resolution && xr_make_eye_targets(fallback))
+			{
+				xr.eye_scale = resolution; /* not asked again until it changes */
+				vr_printf("VR: the runtime would not make eye buffers at vr_resolution %.2f just now - they "
+					"stay at %.2f; vid_restart makes them afresh at %.2f", resolution, fallback, resolution);
+			}
+			else
+			{
+				xr_destroy_target(&xr.eye[0]);
+				xr_destroy_target(&xr.eye[1]);
+				xr.stereo_failed = 1;
+				vr_printf("VR: stereo is not available - staying on the theatre screen");
+				return NULL;
+			}
 		}
 
 		if (!xr_begin_stereo(force_render))

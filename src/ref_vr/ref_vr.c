@@ -64,6 +64,7 @@ static cvar_t *vr_worldscale;
 static cvar_t *vr_hud_fov;
 static cvar_t *vr_hud_depth;
 static cvar_t *vr_crosshair;
+static cvar_t *vr_resolution;
 static cvar_t *vr_trace;
 static cvar_t *vr_force_render;
 static cvar_t *vr_recenter;
@@ -390,6 +391,7 @@ static void register_cvars(void)
 	vr_hud_fov = cvar_get("vr_hud_fov", "60", CVAR_ARCHIVE);
 	vr_hud_depth = cvar_get("vr_hud_depth", "6", CVAR_ARCHIVE);
 	vr_crosshair = cvar_get("vr_crosshair", "1", CVAR_ARCHIVE);
+	vr_resolution = cvar_get("vr_resolution", "1", CVAR_ARCHIVE);
 	vr_trace = cvar_get("vr_trace", "1", 0);
 	vr_force_render = cvar_get("vr_force_render", "0", 0);
 	vr_recenter = cvar_get("vr_recenter", "0", 0);
@@ -767,7 +769,8 @@ static void vr_BeginFrame(float camera_separation)
 		window_size(&width, &height);
 		if (width > 0 && height > 0)
 		{
-			g_eye = vr_xr_begin_eye(pass, width, height, force_render());
+			g_eye = vr_xr_begin_eye(pass, width, height, force_render(),
+				vr_resolution ? vr_resolution->value : 1.0f);
 			g_eye_index = pass;
 		}
 	}

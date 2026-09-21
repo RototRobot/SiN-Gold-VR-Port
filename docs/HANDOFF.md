@@ -406,8 +406,6 @@ Still to do, in the order it matters:
 
 - The theatre screen uses the window's resolution (640×480 by default). A higher `gl_mode` would sharpen it.
   The stereo path does not care: it renders at the runtime's recommended eye size regardless of `gl_mode`.
-- The eye buffers are the recommended 2444×2392. A `vr_resolution` scale would trade sharpness for frames
-  on weaker cards, and is easy to add: the swapchains are created in one place.
 - The level-start card (§8) is worth handling in VR: it is a non-world frame, so it lands on the theatre
   screen while the world behind it is not being drawn.
 

@@ -42,8 +42,13 @@ int vr_xr_stereo_possible(void);
  * eye to render with its target bound and ref_gl's GL calls redirected, or NULL
  * to let the pass draw into the window as usual - which is what an idle headset
  * gets, unless force_render says to render for it anyway.
+ *
+ * resolution scales the size each eye is rendered at, on each side, from the
+ * one the runtime recommends; 1 is that size. A new value takes effect at the
+ * next pass 0, where the eye buffers are made again.
  */
-const vr_eye_t *vr_xr_begin_eye(int pass, int window_width, int window_height, int force_render);
+const vr_eye_t *vr_xr_begin_eye(int pass, int window_width, int window_height, int force_render,
+	float resolution);
 
 /* Finishes the bound eye, if any. The left eye is mirrored to the window first. */
 void vr_xr_end_eye(void);

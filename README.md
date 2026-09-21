@@ -147,6 +147,7 @@ These console variables control the mod:
 |---|---|---|
 | `vr_enable` | 0 | Show the game in the headset. The launchers set it. |
 | `vr_stereo` | 1 | Render the world once per eye. With 0, everything stays on the virtual screen. |
+| `vr_resolution` | 1 | How big each eye is rendered, on each side, against the size the headset's runtime recommends. 1.2 is sharper and costs 44% more pixels; 0.8 is softer and faster. Takes effect straight away. |
 | `vr_worldscale` | 39.37 | Game units per metre, for head movement. Lower values make the world feel bigger. |
 | `vr_screen_distance` | 2.5 | Virtual screen distance, in metres. |
 | `vr_screen_width` | 2.4 | Virtual screen width, in metres. |
@@ -205,6 +206,10 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   put it down on a desk and the game stops hearing the controllers. For testing with the headset off your
   head, stop it sleeping: turn off SteamVR's option to pause VR when the headset is idle, or cover the
   proximity sensor between the lenses.
+- **Raising `vr_resolution` in the middle of a session can be refused** after it has been lowered in
+  the same session - SteamVR will not make the bigger buffers, even at 1. The picture stays at the last
+  size that worked, the console says so, and `vid_restart` makes them afresh at the size asked for.
+  Setting it once and restarting never runs into this.
 - Head poses are measured from where you were when you put the headset on. `vr_recenter 1` in the
   console does it again if you end up off-centre.
 

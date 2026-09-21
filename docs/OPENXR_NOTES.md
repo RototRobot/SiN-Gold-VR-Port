@@ -111,3 +111,27 @@ because every player with VIVE software installed would hit the same failure.
   in their tlog files. Build in short paths outside `%TEMP%`.
 - **`IUnknown`.** With `WIN32_LEAN_AND_MEAN` defined, include `<unknwn.h>` before `openxr_platform.h`, because its Win32 interop
   structs use `IUnknown`.
+
+## The eye resolution (2026-09-21)
+
+- **The runtime's recommended size is the "native" resolution in the sense that matters.**
+  `xrEnumerateViewConfigurationViews` gives each eye a `recommendedImageRectWidth/Height`: the size that
+  puts one rendered pixel on each display pixel at the middle of the lens, where the distortion
+  magnifies most. It is core OpenXR 1.0, so every runtime fills it - WMR's, Oculus's and the rest, not
+  only SteamVR's - and a runtime with a resolution setting of its own folds that setting in. There is no
+  portable query for the panel's own pixel count, and rendering at it would be softer in the middle.
+- **On SteamVR it moves.** The same Reverb G2 on the same machine was recommended 2444x2392, 2496x2444
+  and 2524x2468 in different sessions: SteamVR's own resolution setting is in it, and that is on its
+  automatic choice here. `vr_resolution` multiplies whatever SteamVR says, on each side; SteamVR's
+  per-application resolution setting, if it is set, is already in the number.
+- **The maximum it reports is not the maximum it will make.** SteamVR reports 8192x8192. On a fresh start
+  it made 1.4 of the recommended size (3494x3422) without complaint, and live changes up and down -
+  1 to 1.4, 1.2, 1.1 and back to 1 - all went through. But once a *smaller* size has been made in the
+  session, a bigger one is refused with `XR_ERROR_RUNTIME_FAILURE`: 1 to 0.5 to 1.4 failed every time
+  it was tried, and after that even 1 could not be made again. 3.0 was refused outright. It looks like
+  this 32-bit process running out of address space in one piece, though that is not confirmed.
+  `vid_restart` always made the size asked for.
+- So a refusal is not the end of stereo any more: the eye buffers go back to the last size that was
+  made (or the recommended one), the console says so and names `vid_restart`, and the frame carries on.
+- Creating the new swapchains before destroying the old ones might dodge the fragmentation, at the cost
+  of both sets for a frame. Untried.
