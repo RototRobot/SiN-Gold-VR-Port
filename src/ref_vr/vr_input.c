@@ -15,6 +15,7 @@
 #include "vr_joy.h"
 #include "vr_keys.h"
 #include "vr_poses.h"
+#include "vr_turn.h"
 #include "vr_view.h"
 #include "vr_weapon.h"
 #include "vr_xr.h"
@@ -231,6 +232,10 @@ static int said_polled;
 static int said_unpolled;
 static unsigned frames;
 static cvar_t *vr_recentre_double;
+static cvar_t *vr_snap_turn;
+static cvar_t *vr_snap_angle;
+static int snap_armed = 1;
+static int said_no_snap;
 static XrSpace hand_space[2]; /* where each controller points from, and which way */
 static XrSpace grip_space[2]; /* where the hand holds it */
 static int said_hands;
@@ -269,6 +274,8 @@ void vr_input_startup(void)
 	vr_fake_idle_press = vr_cvar("vr_fake_idle_press", "", 0);
 	vr_fake_swing = vr_cvar("vr_fake_swing", "", 0);
 	vr_recentre_double = vr_cvar("vr_recentre_double", "1", CVAR_ARCHIVE);
+	vr_snap_turn = vr_cvar("vr_snap_turn", "0", CVAR_ARCHIVE);
+	vr_snap_angle = vr_cvar("vr_snap_angle", "45", CVAR_ARCHIVE);
 
 	for (i = 0; i < ACT_COUNT; ++i)
 	{
@@ -885,6 +892,57 @@ static void navigate_menu(float forward, float side)
 	nav_direction(3, side > 0.5f, VR_KEY_RIGHT, now);
 }
 
+/*
+ * Snap turning (vr_snap_turn 1): pushing the turning stick well over turns the
+ * player vr_snap_angle degrees at once, and it has to come back near the
+ * middle before it turns again - one push, one turn. The joystick then turns
+ * nothing. Smooth turning is the engine's own, from the stick as it is.
+ * Returns what the joystick should turn by.
+ */
+static float snap_turn(float turn)
+{
+	float angle = vr_snap_angle ? vr_snap_angle->value : 45.0f;
+
+	if (!vr_snap_turn || vr_snap_turn->value == 0.0f)
+	{
+		snap_armed = 1;
+		return turn;
+	}
+
+	if (!vr_turn_available())
+	{
+		if (!said_no_snap)
+		{
+			said_no_snap = 1;
+			vr_printf("VR: snap turning cannot reach this sin.exe - the stick turns smoothly");
+		}
+		return turn;
+	}
+
+	if (angle < 1.0f)
+	{
+		angle = 1.0f;
+	}
+	else if (angle > 180.0f)
+	{
+		angle = 180.0f;
+	}
+
+	if (fabsf(turn) < 0.3f)
+	{
+		snap_armed = 1;
+	}
+	else if (snap_armed && fabsf(turn) > 0.7f)
+	{
+		/* the stick to the right turns right, which is the yaw going down */
+		snap_armed = 0;
+		vr_turn_by(turn > 0.0f ? -angle : angle);
+		vrlog("    input: snap turn %s by %.0f", turn > 0.0f ? "right" : "left", angle);
+	}
+
+	return 0.0f;
+}
+
 static void read_sticks(XrSession session, int menu)
 {
 	float move_x, move_y, turn_x, turn_y;
@@ -930,7 +988,7 @@ static void read_sticks(XrSession session, int menu)
 		turn = 0.0f;
 	}
 
-	vr_joy_set(forward, side, turn);
+	vr_joy_set(forward, side, snap_turn(turn));
 
 	/* Whether the engine is actually reading the stick answers most "why does
 	   this do nothing" questions, so it is said either way, once. */

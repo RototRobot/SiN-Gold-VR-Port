@@ -331,6 +331,17 @@ does the movement work itself. The console says `joystick detected` where it use
   not in play.
 - **The crosshair is a 2D pic**, `ch1_off` for the default one, drawn through `DrawPic`.
 
+## The client's view angle (2026-09-22)
+
+- **`cl.viewangles[YAW]` is at sin.exe +0x3CBAE0** (0x7CBAE0 at the preferred base). It is what every
+  movement command carries to the game, so changing it turns the player - view and movement both.
+  Found from the cvars that scale turning: `cl_yawspeed` is kept at +0x4BFC58 and `joy_yawsensitivity`
+  at +0x1D8B38, and the code that reads them is `IN_JoyMove`, which ends
+  `addss xmm0, [+0x3CBAE0]` / `movss [+0x3CBAE0], xmm0` at +0x9B8C8 / +0x9B8D0, and `CL_AdjustAngles`,
+  which stores to the same place at +0xE54C (after its `subss` for turning right) and +0xE58F (after its `addss` for left).
+  Pitch should be the float before it, as in Quake II's `vec3_t`, but that has not been checked.
+  Nothing wraps the yaw, and the game gets it as a short, which does.
+
 ## The client's view weapon and its effects (2026-09-19)
 
 All RVAs are for the Steam build of `sin.exe` (preferred base 0x400000, ASLR on).

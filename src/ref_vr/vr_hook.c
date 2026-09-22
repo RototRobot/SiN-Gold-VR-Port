@@ -143,3 +143,32 @@ void vr_unhook_calls(void)
 		write_displacement(g_calls[g_call_count].site, g_calls[g_call_count].displacement);
 	}
 }
+
+const void *vr_hook_data_address(HMODULE module, DWORD rva, const BYTE *opcode, int opcode_length)
+{
+	const BYTE *base = (const BYTE *)module;
+	const IMAGE_NT_HEADERS *nt;
+	const BYTE *at;
+	DWORD size, address;
+
+	if (!base)
+	{
+		return NULL;
+	}
+
+	nt = (const IMAGE_NT_HEADERS *)(base + ((const IMAGE_DOS_HEADER *)base)->e_lfanew);
+	size = nt->OptionalHeader.SizeOfImage;
+	at = base + rva;
+	if (rva + opcode_length + 4 > size || memcmp(at, opcode, opcode_length) != 0)
+	{
+		return NULL;
+	}
+
+	memcpy(&address, at + opcode_length, sizeof(address));
+	if (address < (DWORD)(DWORD_PTR)base || address + 12 > (DWORD)(DWORD_PTR)base + size)
+	{
+		return NULL;
+	}
+
+	return (const void *)(DWORD_PTR)address;
+}

@@ -25,6 +25,7 @@
 #include "vr_gl.h"
 #include "vr_input.h"
 #include "vr_math.h"
+#include "vr_turn.h"
 #include "vr_weapon.h"
 #include "vr_view.h"
 #include "vr_xr.h"
@@ -627,6 +628,7 @@ static int vr_Init(void *hinstance, void *wndproc)
 			g_last_draw_tick = GetTickCount();
 			start_idle_timer();
 			vr_weapon_install();
+			vr_turn_install();
 		}
 	}
 
@@ -1023,6 +1025,7 @@ static void vr_EndFrame(void)
 	g_pass = 0;
 	g_stereo_frame = 0;
 	vr_weapon_end_frame();
+	vr_turn_frame();
 	update_stereo();
 	end_frame_trace();
 	g_last_draw_tick = GetTickCount();

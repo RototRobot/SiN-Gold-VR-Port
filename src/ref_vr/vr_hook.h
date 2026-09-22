@@ -1,7 +1,8 @@
 /*
  * Patching another module, in this process only: its imports - ref_gl's GL
  * lookups (vr_gl.c) and sin.exe's joystick calls (vr_joy.c) - and, where there
- * is no import to catch, single direct calls inside sin.exe (vr_weapon.c).
+ * is no import to catch, single direct calls inside sin.exe (vr_weapon.c) and
+ * the data its code names (vr_weapon.c, vr_turn.c).
  */
 #ifndef VR_HOOK_H
 #define VR_HOOK_H
@@ -26,5 +27,14 @@ int vr_hook_call(HMODULE module, DWORD site_rva, DWORD target_rva, void *replace
 
 /* Puts back every call vr_hook_call changed. Before this DLL is unloaded. */
 void vr_unhook_calls(void);
+
+/*
+ * The absolute address the instruction at rva inside a module uses: it must
+ * begin with exactly opcode_length bytes of opcode, followed by a 32-bit
+ * address that lies within the module. NULL if not, so a different build is
+ * left alone. The loader has relocated the address already, so it is right
+ * whatever ASLR did.
+ */
+const void *vr_hook_data_address(HMODULE module, DWORD rva, const BYTE *opcode, int opcode_length);
 
 #endif /* VR_HOOK_H */

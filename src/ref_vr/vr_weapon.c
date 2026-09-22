@@ -968,27 +968,6 @@ static int wants_server_bullets(void)
 	return (!vr_aim || vr_aim->value != 0.0f) && (!vr_client_bullets || vr_client_bullets->value == 0.0f);
 }
 
-/* The absolute address an instruction at rva uses, after opcode_length bytes
-   that must be exactly opcode. */
-static const void *address_in(const BYTE *base, DWORD size, DWORD rva, const BYTE *opcode, int opcode_length)
-{
-	const BYTE *at = base + rva;
-	DWORD address;
-
-	if (rva + opcode_length + 4 > size || memcmp(at, opcode, opcode_length) != 0)
-	{
-		return NULL;
-	}
-
-	memcpy(&address, at + opcode_length, sizeof(address));
-	if (address < (DWORD)(DWORD_PTR)base || address + 12 > (DWORD)(DWORD_PTR)base + size)
-	{
-		return NULL;
-	}
-
-	return (const void *)(DWORD_PTR)address;
-}
-
 /* Where CL_AddViewWeapon hands its entity over. */
 static void __fastcall add_view_weapon(entity_t *gun)
 {
@@ -1065,21 +1044,15 @@ void vr_weapon_install(void)
 	static const BYTE addss_xmm1[] = { 0xF3, 0x0F, 0x58, 0x0D };
 	static const BYTE mov_to_memory[] = { 0xA3 };
 	HMODULE exe = GetModuleHandleA(NULL);
-	const BYTE *base = (const BYTE *)exe;
-	const IMAGE_NT_HEADERS *nt;
-	DWORD size;
 
 	if (patched || !exe)
 	{
 		return;
 	}
 
-	nt = (const IMAGE_NT_HEADERS *)(base + ((const IMAGE_DOS_HEADER *)base)->e_lfanew);
-	size = nt->OptionalHeader.SizeOfImage;
-
-	sin_vieworg = (const float *)address_in(base, size, SIN_USES_VIEWORG, addss_xmm1, sizeof(addss_xmm1));
-	sin_viewyaw = (const float *)address_in(base, size, SIN_USES_VIEWYAW, addss_xmm1, sizeof(addss_xmm1));
-	sin_command_entity = (entity_t *const *)address_in(base, size, SIN_SETS_COMMAND_ENTITY, mov_to_memory,
+	sin_vieworg = (const float *)vr_hook_data_address(exe, SIN_USES_VIEWORG, addss_xmm1, sizeof(addss_xmm1));
+	sin_viewyaw = (const float *)vr_hook_data_address(exe, SIN_USES_VIEWYAW, addss_xmm1, sizeof(addss_xmm1));
+	sin_command_entity = (entity_t *const *)vr_hook_data_address(exe, SIN_SETS_COMMAND_ENTITY, mov_to_memory,
 		sizeof(mov_to_memory));
 
 	if (!sin_vieworg || !sin_viewyaw || !sin_command_entity || sin_viewyaw != sin_vieworg + 4)

@@ -418,8 +418,10 @@ Still to do, in the order it matters:
 - The body does not follow the head yet. The head pose already reaches the game module
   (`VR_HeadPose`, §12), so walking in the room can become the player walking - the game moves the
   player by the head's change of position each frame, and recentres around it - without a new channel.
-- Snap turning, and a real crouch - the head going down past a threshold pressing crouch - are the
-  rest of roadmap milestone 7.
+- A real crouch - the head going down past a threshold pressing crouch - is the rest of roadmap
+  milestone 7, with the body following the head. Until then a turn pivots on the recentre point, not
+  on the head (`vr_view_apply` turns the head's offset with the body's yaw), so a snap taken half a
+  metre from it swings the view sideways too.
 
 **Content and release**
 
@@ -458,6 +460,17 @@ touches it: the controllers arrive the way a player's own binds and joystick wou
    - Signs, measured rather than assumed: forward on the stick walks the way the player faces; `side`
      positive strafes right; `turn` positive turns right, which means *negating* it for the engine, whose
      yaw grows to the left.
+   - **Snap turning** (`vr_snap_turn 1`, `vr_snap_angle`, 2026-09-22). Both of SiN's ways of turning - the
+     joystick in `IN_JoyMove` and the keys in `CL_AdjustAngles` - add a rate times the frame's length to
+     `cl.viewangles[YAW]`, so a one-frame shove on the stick would snap by a different amount every time.
+     `vr_turn.c` changes the angle itself instead: its address is read out of the joystick's own
+     `addss`/`movss` pair and believed only if both name it (ENGINE_NOTES). A push past 0.7 turns once,
+     the stick has to come back inside 0.3 before it turns again, and the joystick is told to turn
+     nothing; smooth turning is the engine's own, untouched. Measured at the desk with `vr_fake_axes`:
+     right, held, back, left gave -45, -45, 0; a 30 degree snap gave -29 by `viewpos`, which truncates.
+     `vr_fake_snap <degrees>` turns without controllers - even flatscreen, which is how the headset
+     being off one afternoon did not stop the angle being checked (45, 45, 90 and 30 exactly, and
+     walking afterwards went the new way: the game's movement follows, not just the view).
 4. **Focus.** `xrSyncActions` returns `XR_SESSION_NOT_FOCUSED` while the runtime is showing something of
    its own, and then everything held is released and the sticks centre. The same happens if a controller's
    action goes inactive while a button is held, or the session goes away.

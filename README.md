@@ -88,7 +88,7 @@ unaffected either way.
 | Control (Reverb G2) | Does |
 |---|---|
 | Left stick | Move and strafe |
-| Right stick, left/right | Turn |
+| Right stick, left/right | Turn - smoothly, or `vr_snap_angle` degrees a push with `vr_snap_turn 1` |
 | Right trigger | Fire |
 | Left trigger | Use |
 | Right **A** | Jump |
@@ -158,6 +158,8 @@ These console variables control the mod:
 | `vr_input` | 1 | Take input from the VR controllers. |
 | `vr_deadzone` | 0.15 | How far a stick must move before the game sees it. |
 | `vr_recentre_double` | 1 | Require two clicks of the left stick to recentre. 0 makes one do. |
+| `vr_snap_turn` | 0 | 1 turns in steps: each push of the turning stick turns you `vr_snap_angle` degrees at once, and the stick has to come back to the middle before it turns you again. 0 is smooth turning. |
+| `vr_snap_angle` | 45 | How far one snap turns you, in degrees. |
 | `vr_aim` | 1 | Shots come from the weapon in the hand rather than from the player's angles. |
 | `vr_weapon_hand` | 1 | Draw the weapon in the hand instead of in front of the camera. |
 | `vr_left_handed` | 0 | 1 puts the weapon in the left hand, mirrored, and swaps the two controllers' buttons and sticks. Read when the renderer starts, so `vid_restart` after changing it. |
@@ -211,7 +213,10 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   what carries its muzzle flash, tracers and shell cases along with it. Both are checked against the
   Steam build before anything is changed, so another build of `sin.exe` is left alone - the weapon then
   still goes to the hand, but its effects stay at the eye.
-- The body does not move with the headset yet: walking and turning are the sticks' job.
+- The body does not move with the headset yet: walking and turning are the sticks' job. That is also
+  why a turn - smooth or snap - swings you round the spot where you last recentred rather than round
+  your head: step half a metre away from it and a snap moves the view sideways as well. Recentring
+  puts the spot back under you.
 - **The controllers only work while the headset is awake.** OpenXR gives an application controller input
   only while it has the input focus, and SteamVR takes the focus away when the headset goes to sleep -
   put it down on a desk and the game stops hearing the controllers. For testing with the headset off your
@@ -234,7 +239,7 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 6. ✅ Tracked hands: the weapon is drawn in the hand, fires down its own barrel, and carries its
    effects with it; each weapon's grip can be set in the headset, and left-handed players get the
    mirror image of all of it
-7. Roomscale comfort: snap turning, crouching, and the body following the head
+7. Roomscale comfort: ✅ snap turning; crouching, and the body following the head
 8. Wages of Sin
 9. Release packaging
 
