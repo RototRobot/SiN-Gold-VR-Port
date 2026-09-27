@@ -363,7 +363,17 @@ does the movement work itself. The console says `joystick detected` where it use
   (46.6 35.8 -33.7), off to the side of the gun altogether.
 - **The barrel markers' y** (the `id 199`/`29`/`4` groups): magnum -37.1, shotgun -15.0, assault rifle
   -23.0, chaingun -29.1, rocket launcher -27.4, sniper rifle -15.9, pulse rifle -23.6, quantum
-  destabilizer -35.6, speargun -24.1 - each gun's middle across.
+  destabilizer -35.6, speargun -24.1. Against the middle of each body without its arm (5th to 95th
+  percentile of the vertices' y) they agree within a unit, except the chaingun (body -24.1) and the
+  rocket launcher (-23.5), whose marker is on one of several barrels.
+- **The idle animations' numbers** (alphabetical): fists idle1-3 = 5-7; magnum idle1-2 = 1-2,
+  silidle1-2 = 7-8; shotgun idle1-2 = 1-2; assault rifle idle1-3 = 2-4, silidle1-3 = 9-11; chaingun
+  primaryidle1-2 = 2-3, secondaryidle = 9; rocket launcher idle1 = 1, primaryidle1 = 3; sniper rifle
+  idle1 = 1; pulse rifle primaryidle = 2, secondaryidle = 8; quantum destabilizer idle = 1; speargun
+  idle1-4 = 1-4; mines and detonator idle1-2 = 1-2; mutant hands idle1 = 4. Each weapon's `setaimanim`
+  names the idle its muzzle is measured from: idle1, primaryidle1 or primaryidle.
+- **The pulse rifle carries a second sleeve and glove along its top** (vertices 44-147, not all
+  consecutive), besides the left arm at its fore-end.
 
 ## Saves and config.cfg (2026-09-27)
 

@@ -837,9 +837,33 @@ maths is what the owner's next headset test exercises.
    and magnum go from slivers to solid, textured guns; from the usual side the picture is unchanged
    except a few pixels along the magnum's top edge, less than the idle animation moves between two
    dumps. Which brings up:
-   - **The idle freeze leaks at the desk**: with `vr_freeze_idle 1` and the magnum out for 600 waits,
-     two eye dumps 30 waits apart still differed by 12,219 pixels. That is the owner's "not 100%
-     consistent", reproduced - the leads further down still stand.
+   - (A note written here first read two eye dumps 12,219 pixels apart as the idle freeze leaking. It
+     was mostly the console text and SiN's weapon wheel fading - see 17: compare dumps below the
+     console, and away from the HUD, or both will read as the weapon moving.)
+17. **The idle held still in the picture** (`vr_weapon_idle`, default 0), 2026-09-27, after the owner
+   saw the rebuilt side sway the opposite way to the gun - a reflection of a swaying model sways
+   mirrored. The game's own hold (`vr_freeze_idle`) could not be relied on, so the renderer holds it:
+   `hold_idle` swaps the weapon's idle animation for the first frame of that mode's main idle
+   (`idle_table`: idle1-3 to idle1, silidle1-3 to silidle1, the chaingun's primaryidle1-2 to
+   primaryidle1 and its secondaryidle to itself, and so on), on the copy handed to the scene only -
+   `add_view_weapon` puts the entity's own animation back before the client runs the model's
+   commands on it, so frame-timed sounds and effects go on as before. Desk: the magnum held for 600
+   waits and dumped twice, 60 waits apart, with `vr_freeze_idle 0` - no pixel of the gun changed.
+   Two more things from the same report:
+   - **Mirroring only where it fits** (`vr_fill_<weapon>`, and `fill`/`keep` in `weapon_table`). Each
+     gun drawn from the left, from the right as rebuilt, and from above with the copy in red
+     (`scratchpad/sides.py`): the chaingun has a box on its left side only, so it is not filled; the
+     magnum's own gun hand and forearm were being copied into a second forearm, and the pulse rifle's
+     sleeve and glove along its top likewise, so those vertices are kept out of the copy (`keep`,
+     checked per triangle in `fill_strip` against the vertex numbers the strip carries).
+   - **The fore-end on the gun's middle.** The owner found it "a little too far to the right" -
+     left-handed, so to the left in right-handed terms: the glove's middle is off to the side the
+     modelled hand came from. It now keeps the hand's place along and below the gun but takes the
+     gun's middle across. That middle is the barrel marker's y, except on the chaingun and rocket
+     launcher, whose marker sits on one of several barrels - 5 and 4 units off the body's middle - and
+     which use the body's middle instead (-24.1 and -23.5; ENGINE_NOTES). Desk: taking hold at the
+     computed point said 0 cm and left the rifle pointing straight ahead, and the same mirrored
+     left-handed.
 
 What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
 computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the
@@ -874,8 +898,10 @@ Still to do, and what is known about each:
   gesture only has to reach it: watching the off hand under the weapon in `vr_weapon.c` and running
   the bound command is the whole of it, with a small console command of our own in the game DLL if it
   should not also open doors.
-- **The idle freeze is not always consistent** (owner, in the headset, 2026-09-21: "works, but didn't
-  seem 100% consistent"; to revisit). Leads, none of them confirmed:
+- **The game module's idle freeze is not always consistent** (owner, in the headset, 2026-09-21: "works,
+  but didn't seem 100% consistent"). The picture no longer depends on it - the renderer holds the idle
+  still (§12 item 17) - so this matters only if `vr_freeze_idle` is wanted for its own sake. Leads,
+  none of them confirmed:
   - it only takes hold at the next `Weapon::ForceIdle`, so there is up to one idle cycle of breathing
     after the grip freezes the weapon or `vr_freeze_idle` goes on. Poking the weapon with
     `EV_Weapon_Idle` from the player's frame when the flag changes would make it immediate;

@@ -129,8 +129,9 @@ It is remembered for that weapon, and kept between sessions. `vr_weapon_reset 1`
 the weapon you are holding back to its first guess.
 
 **Two hands on a long weapon.** Put your other hand where you would hold the front of the gun - the
-fore-end, where SiN's own model had its left hand, or about 30 cm ahead of your gun hand along the
-barrel on the chaingun and the quantum destabilizer - and **squeeze that hand's grip**. The gun hand
+fore-end, under the middle of the gun where SiN's own model had its left hand, or about 30 cm ahead
+of your gun hand along the barrel on the chaingun and the quantum destabilizer - and **squeeze that
+hand's grip**. The gun hand
 stays where it is and the weapon swings to lie along the line from it to your other hand, so you aim
 with both; it keeps the gun hand's roll. While you hold it, the hand you see stays on the fore-end
 however your real hand moves. Let go of the grip and it follows the gun hand alone again. Squeezed anywhere else, that grip still runs, as before. It works on the shotgun, assault rifle,
@@ -186,11 +187,13 @@ These console variables control the mod:
 | `vr_punch` | 1 | Swinging a fist punches while the fists are out. 0 leaves punching to the trigger; 2 also says in the console what each punch hit. |
 | `vr_punch_speed` | 2 | How fast a fist has to be going to punch, in metres a second. |
 | `vr_punch_assist` | 35 | How far to either side of where you look - or where your fist was headed - a punch still finds someone within reach, in degrees. 0 lands punches only where the fist actually goes. |
-| `vr_freeze_idle` | 0 | 1 holds the weapon's idle animation still in play as well - no breathing, no swaying arm. It is always held while a weapon is being placed. |
+| `vr_freeze_idle` | 0 | 1 also stops the game module playing idle animations at all. Not needed for the picture any more - `vr_weapon_idle` holds that still - and the game's own hold only takes effect at the next idle. |
 | `vr_grip_<weapon>` | empty | Where that weapon sits in the hand: offset, angles and size. The grip button writes it; empty means the measured guess. |
 | `vr_two_hand` | 1 | The other hand's grip, squeezed at a long weapon's fore-end, holds it in both hands. 0 leaves that grip only running. |
 | `vr_other_hand` | 1 | Draw the hand without the weapon, as the fists' arm for that hand, placed the way the fists are. 0 leaves it out. |
 | `vr_weapon_fill` | 1 | Rebuild the side of each gun that SiN never made - its right side, which the original camera never saw - as its left side reflected. 0 shows the guns as they were built. |
+| `vr_fill_<weapon>` | 1, 0 for the chaingun | The same for one weapon, for any that look wrong mirrored. The chaingun is off: it has a box on its left side only. |
+| `vr_weapon_idle` | 0 | The weapon's idle animation - breathing and swaying - is held still, since the weapon already moves with your hand. 1 lets it play. Firing, reloading and switching still animate. |
 | `vr_weapon_arm` | 0 | 1 puts back the left arm SiN built into the long weapons' models; 0 leaves it out, since your own other hand is drawn instead. |
 | `vr_fore_<weapon>` | empty | Where that weapon's fore-end is, in the model's own units. Set by squeezing the other grip while adjusting; empty means about 30 cm ahead of the grip along the barrel. |
 | `vr_weapon_reset` | 0 | Set it to 1 to forget the setting for the weapon in hand. Clears itself. |
@@ -226,8 +229,10 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 - **The guns' right sides are rebuilt, not original.** SiN's view models were only ever meant to be seen
   from behind and to the left, so most of each gun's right side was never modelled - from the right a
   gun used to be a few floating slivers. The right side is now the left side reflected across the
-  barrel's line, texture and all. It is solid and looks right from a distance; up close, details that
-  are not symmetrical - an ejection port, a label - appear on both sides.
+  gun's middle, texture and all. It is solid and looks right from a distance; up close, details that
+  are not symmetrical - an ejection port, a label - appear on both sides. The chaingun is left as it
+  was, having a box on its left side only; `vr_fill_<weapon> 0` does the same for any other that looks
+  wrong. The magnum's own hand and a sleeve along the pulse rifle's top are not copied.
 - Most of SiN's two-handed weapons modelled a left arm reaching in to the fore-end, all one piece with
   the gun. That arm is left out now (`vr_weapon_arm 1` puts it back), and your other hand is drawn
   where it really is instead, as the fists' arm for that hand - a fist, since that is the only hand
@@ -235,9 +240,10 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   so settling the fists with the grip button settles it too. The quantum destabilizer never had a
   modelled hand; the magnum and the mines keep theirs, which is the gun hand.
 - The weapon's idle animation is what makes it breathe and sway. A weapon on a controller already
-  moves with the hand, so `vr_freeze_idle 1` holds that animation on its first frame. Only the idle is
-  held: firing, reloading and putting the weapon away animate as they always did, and the muzzle stays
-  where the model has it.
+  moves with the hand, so it is drawn held on the first frame of its main idle (`vr_weapon_idle 1` lets
+  it play). Only the idle is held: firing, reloading and putting the weapon away animate as they always
+  did, and the muzzle stays where the model has it. The rebuilt right side of a gun needs this - it is
+  a reflection, so a swaying gun's two sides would sway opposite ways.
 - A mirrored weapon - left-handed mode - is lit as its mirror image was: SiN shades a model from its
   own list of normals, which the mirror does not reach, so the light on the gun falls where it would
   have fallen in the right hand. Nothing else about it is out of place, and the fists, having an arm
