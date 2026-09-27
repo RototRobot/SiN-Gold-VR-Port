@@ -352,6 +352,19 @@ does the movement work itself. The console says `joystick detected` where it use
   rocket launcher 146-218, sniper rifle 249-306, pulse rifle 358-393, speargun 217-259. The quantum
   destabilizer has none; the magnum's 8-116 and the mines' 106-222 are the gun hand.
 
+- **The weapons' view models are open on the right.** With each strip's winding honoured (a strip
+  turns every other triangle round, a fan does not), the fists have 430 units of surface facing left
+  and 429 right; the magnum 2544 and 617, the assault rifle 2297 and 485, and every other weapon two to
+  five times more on the left. SiN's models are wound clockwise: a triangle facing +y has a normal, by
+  the right-hand rule on the order drawn, pointing -y. The bottoms and fronts are thin too, but less so.
+- **Where each modelled left hand held its gun** (glove middle, idle frame 0, model units): shotgun
+  (27.6 -13.3 -16.4), assault rifle (79.3 -18.5 -39.4), rocket launcher (49.8 -6.3 -33.3), sniper rifle
+  (30.5 -12.7 -13.3), pulse rifle (49.0 -19.0 -26.0), speargun (60.1 -21.3 -35.8). The chaingun's is at
+  (46.6 35.8 -33.7), off to the side of the gun altogether.
+- **The barrel markers' y** (the `id 199`/`29`/`4` groups): magnum -37.1, shotgun -15.0, assault rifle
+  -23.0, chaingun -29.1, rocket launcher -27.4, sniper rifle -15.9, pulse rifle -23.6, quantum
+  destabilizer -35.6, speargun -24.1 - each gun's middle across.
+
 ## Saves and config.cfg (2026-09-27)
 
 - **`config.cfg` holds only the cvars the engine has registered as archived.** A line `set vr_foo "1"`

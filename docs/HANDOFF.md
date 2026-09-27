@@ -815,6 +815,32 @@ maths is what the owner's next headset test exercises.
    The quantum destabilizer has no modelled hand; the magnum's and the mines' is the gun hand and stays.
    Desk: the rifle with `vr_weapon_arm 1` shows the sleeve and glove, with 0 it does not; the same for
    the others in turn.
+15. **The fore-end where the model's hand was, and the other hand locked to it**, 2026-09-27. The first
+   guess at each fore-end is now the middle of the modelled left hand's glove on the idle's first frame
+   (`hand` in `weapon_table`, from `scratchpad/handspot.py`): 30-38 cm ahead of the grip on the shotgun
+   and assault rifle, 21-27 on the pulse rifle and speargun, 14 on the sniper rifle, up and to the side
+   on the rocket launcher. The chaingun's modelled hand is off to the side, clear of the gun, so it keeps
+   the barrel-line guess, as does the quantum destabilizer, which has no hand. While the other hand
+   holds the weapon, its fist is drawn at the fore-end, turned as the real hand was when it took hold,
+   and moves with the weapon (`steady.hold`) - the owner saw it pull away from the gun before. Desk: the
+   real hand moved 12 units off after taking hold; the fist stayed on the rifle as the rifle turned.
+16. **The side the guns never had** (`vr_weapon_fill`), 2026-09-27. Measured over the models with the
+   strip winding honoured (`scratchpad/facing.py`): the fists have as much surface facing left as right,
+   every weapon two to five times more facing left - the side the original camera saw. So each strip of
+   a gun, after it is drawn, has its left-facing triangles (within 60 degrees of left, and on the left
+   of the barrel's line) drawn again reflected across that line and wound the other way (`fill_strip`
+   in `vr_gl.c`), with their own texture coordinates and shading. The line is each model's barrel
+   marker's y (`middle` in `weapon_table`), which is the model's own coordinates times the drawn size -
+   ref_gl's vertex array already carries the `.def`'s origin and scale and the entity's scale. The
+   first version took everything facing even slightly left and laid copies of the top faces over the
+   real top of the magnum; the 60 degree limit took that away. Desk: from the right the rifle, shotgun
+   and magnum go from slivers to solid, textured guns; from the usual side the picture is unchanged
+   except a few pixels along the magnum's top edge, less than the idle animation moves between two
+   dumps. Which brings up:
+   - **The idle freeze leaks at the desk**: with `vr_freeze_idle 1` and the magnum out for 600 waits,
+     two eye dumps 30 waits apart still differed by 12,219 pixels. That is the owner's "not 100%
+     consistent", reproduced - the leads further down still stand.
+
 What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
 computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the
 grip button freezing and re-attaching the weapon (frozen with the hand at yaw 0, released with it at yaw

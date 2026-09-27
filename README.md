@@ -129,10 +129,11 @@ It is remembered for that weapon, and kept between sessions. `vr_weapon_reset 1`
 the weapon you are holding back to its first guess.
 
 **Two hands on a long weapon.** Put your other hand where you would hold the front of the gun - the
-fore-end, about 30 cm ahead of your gun hand along the barrel - and **squeeze that hand's grip**. The
-gun hand stays where it is and the weapon swings to lie along the line from it to your other hand, so
-you aim with both; it keeps the gun hand's roll. Let go of the grip and it follows the gun hand alone
-again. Squeezed anywhere else, that grip still runs, as before. It works on the shotgun, assault rifle,
+fore-end, where SiN's own model had its left hand, or about 30 cm ahead of your gun hand along the
+barrel on the chaingun and the quantum destabilizer - and **squeeze that hand's grip**. The gun hand
+stays where it is and the weapon swings to lie along the line from it to your other hand, so you aim
+with both; it keeps the gun hand's roll. While you hold it, the hand you see stays on the fore-end
+however your real hand moves. Let go of the grip and it follows the gun hand alone again. Squeezed anywhere else, that grip still runs, as before. It works on the shotgun, assault rifle,
 chaingun, rocket launcher, sniper rifle, pulse rifle, quantum destabilizer and spear gun; the magnum,
 the fists and the mines stay one-handed. With `vr_show_hands 2` (or while adjusting) the fore-end
 shows as a small cyan cross, bright while it is held.
@@ -189,6 +190,7 @@ These console variables control the mod:
 | `vr_grip_<weapon>` | empty | Where that weapon sits in the hand: offset, angles and size. The grip button writes it; empty means the measured guess. |
 | `vr_two_hand` | 1 | The other hand's grip, squeezed at a long weapon's fore-end, holds it in both hands. 0 leaves that grip only running. |
 | `vr_other_hand` | 1 | Draw the hand without the weapon, as the fists' arm for that hand, placed the way the fists are. 0 leaves it out. |
+| `vr_weapon_fill` | 1 | Rebuild the side of each gun that SiN never made - its right side, which the original camera never saw - as its left side reflected. 0 shows the guns as they were built. |
 | `vr_weapon_arm` | 0 | 1 puts back the left arm SiN built into the long weapons' models; 0 leaves it out, since your own other hand is drawn instead. |
 | `vr_fore_<weapon>` | empty | Where that weapon's fore-end is, in the model's own units. Set by squeezing the other grip while adjusting; empty means about 30 cm ahead of the grip along the barrel. |
 | `vr_weapon_reset` | 0 | Set it to 1 to forget the setting for the weapon in hand. Clears itself. |
@@ -221,6 +223,11 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   where your fist was headed, if there is nothing solid in between; and failing that, on the wall your
   swing went into, or on nothing. A fist that has gone through a wall hits the wall where your arm went
   in. There is no buzz in the controller yet when a punch connects.
+- **The guns' right sides are rebuilt, not original.** SiN's view models were only ever meant to be seen
+  from behind and to the left, so most of each gun's right side was never modelled - from the right a
+  gun used to be a few floating slivers. The right side is now the left side reflected across the
+  barrel's line, texture and all. It is solid and looks right from a distance; up close, details that
+  are not symmetrical - an ejection port, a label - appear on both sides.
 - Most of SiN's two-handed weapons modelled a left arm reaching in to the fore-end, all one piece with
   the gun. That arm is left out now (`vr_weapon_arm 1` puts it back), and your other hand is drawn
   where it really is instead, as the fists' arm for that hand - a fist, since that is the only hand
