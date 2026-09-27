@@ -375,6 +375,15 @@ does the movement work itself. The console says `joystick detected` where it use
 - **The pulse rifle carries a second sleeve and glove along its top** (vertices 44-147, not all
   consecutive), besides the left arm at its fore-end.
 
+- **A view weapon's client effects are placed at 0.3 of its bones' offsets.** In
+  `CL_CMDS_ProcessCommands`, after the bone lookup (+0x89EB0, whose scale argument is the entity's
+  scale), `attach` tests the command entity's RF_WEAPONMODEL (+0x194CE) and, if set, multiplies the
+  offset by the float at +0x146DF0 (0.3) and, if `(int)hand->value` is 1, negates the right vector it
+  is laid out along (`hand` is the cvar whose pointer is at +0x3FEC04, registered at +0x123B8). The
+  same is done in `bonespawn` (+0x1B03B) and at +0x1AA04. The client runs the model's commands only
+  when the view weapon's animation or frame differs from the last it ran them for (+0x74D6), with the
+  entity it just handed to `V_AddEntity`.
+
 ## Saves and config.cfg (2026-09-27)
 
 - **`config.cfg` holds only the cvars the engine has registered as archived.** A line `set vr_foo "1"`

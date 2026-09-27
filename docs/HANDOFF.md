@@ -876,6 +876,22 @@ maths is what the owner's next headset test exercises.
    - The sleeve and glove on the pulse rifle's top were checked again, drawn on their own: an arm
      lying along the top, not a handle.
 
+19. **The muzzle flash and shell cases at the gun** (2026-09-27). The owner saw them "in their flat
+   position" rather than at the gun: they had never been checked, since the desk cannot fire. The
+   model's client commands place them off its bones in `CL_CMDS_ProcessCommands` (+0x191E0), and for an
+   entity with RF_WEAPONMODEL the `attach` (+0x194CE), `bonespawn` (+0x1B03B) and one more command
+   (+0x1AA04) multiply the bone's offset by 0.3 (at +0x146DF0) - SiN's view models are drawn about three
+   times life size - and mirror it when the `hand` cvar (pointer at +0x3FEC04) is 1. In the hand the
+   weapon is drawn at its true size, so the flash sat at 0.3 of the way from the model's origin, behind
+   the hand, to the barrel. After handing the weapon to the scene, `add_view_weapon` now divides the
+   entity's scale by that 0.3 for the commands that follow, and for a mirrored weapon sets `hand`'s
+   value to 1 until `vr_weapon_commands_done` at the start of RenderFrame, before ref_gl, which reads
+   the same cvar to flip a view weapon, draws anything. Both addresses are read out of the attach
+   code and the 0.3 checked. Desk: installs and runs every frame, left-handed too, with the weapon drawn
+   as before and `hand` still 0 in config.cfg; the flash itself is for the headset. Two more tries at
+   firing at the desk - holding the controller's fire for 200 frames, once straight after a weapon
+   change and once 1800 waits later with the weapon wheel long gone - left the ammunition at 270.
+
 What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
 computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the
 grip button freezing and re-attaching the weapon (frozen with the hand at yaw 0, released with it at yaw
