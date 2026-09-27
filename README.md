@@ -188,6 +188,8 @@ These console variables control the mod:
 | `vr_freeze_idle` | 0 | 1 holds the weapon's idle animation still in play as well - no breathing, no swaying arm. It is always held while a weapon is being placed. |
 | `vr_grip_<weapon>` | empty | Where that weapon sits in the hand: offset, angles and size. The grip button writes it; empty means the measured guess. |
 | `vr_two_hand` | 1 | The other hand's grip, squeezed at a long weapon's fore-end, holds it in both hands. 0 leaves that grip only running. |
+| `vr_other_hand` | 1 | Draw the hand without the weapon, as the fists' arm for that hand, placed the way the fists are. 0 leaves it out. |
+| `vr_weapon_arm` | 0 | 1 puts back the left arm SiN built into the long weapons' models; 0 leaves it out, since your own other hand is drawn instead. |
 | `vr_fore_<weapon>` | empty | Where that weapon's fore-end is, in the model's own units. Set by squeezing the other grip while adjusting; empty means about 30 cm ahead of the grip along the barrel. |
 | `vr_weapon_reset` | 0 | Set it to 1 to forget the setting for the weapon in hand. Clears itself. |
 | `vr_crosshair` | 1 | SiN's crosshair follows the gun while it is in the hand. 0 leaves it out; 2 leaves it in the middle of the view, where SiN draws it. |
@@ -219,10 +221,12 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   where your fist was headed, if there is nothing solid in between; and failing that, on the wall your
   swing went into, or on nothing. A fist that has gone through a wall hits the wall where your arm went
   in. There is no buzz in the controller yet when a punch connects.
-- Most of SiN's two-handed weapons only ever modelled the left hand, on the fore-end, so that is the
-  hand you see on them; the fists are the one weapon with two arms, and they get one each. The
-  modelled hand does not move to your real one when you hold the weapon in both hands - it stays
-  where the model has it, and your other hand is where the weapon is steered from.
+- Most of SiN's two-handed weapons modelled a left arm reaching in to the fore-end, all one piece with
+  the gun. That arm is left out now (`vr_weapon_arm 1` puts it back), and your other hand is drawn
+  where it really is instead, as the fists' arm for that hand - a fist, since that is the only hand
+  model the game has, which also means it holds the fore-end as a fist. It sits the way the fists do,
+  so settling the fists with the grip button settles it too. The quantum destabilizer never had a
+  modelled hand; the magnum and the mines keep theirs, which is the gun hand.
 - The weapon's idle animation is what makes it breathe and sway. A weapon on a controller already
   moves with the hand, so `vr_freeze_idle 1` holds that animation on its first frame. Only the idle is
   held: firing, reloading and putting the weapon away animate as they always did, and the muzzle stays

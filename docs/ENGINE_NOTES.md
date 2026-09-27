@@ -331,6 +331,27 @@ does the movement work itself. The console says `joystick detected` where it use
   not in play.
 - **The crosshair is a 2D pic**, `ch1_off` for the default one, drawn through `DrawPic`.
 
+## Drawing a model's parts, and adding entities of our own (2026-09-27)
+
+- **`entity_t.anim` numbers a model's animations alphabetically by name**, not in the `.def`'s order.
+  The fists came up as 9 (`ready1` - after fire1-5, idle1-3 and putaway1) and the magnum's ready,
+  putaway and reload as 4, 3 and 5; idle1 on the fists is 5.
+- **`V_AddEntity` (+0x25520) gives an entity whose id is `0x1E61` a fresh id** from a counter at
+  +0x14A110 (capped at 0x1F000000). An entity with a parent (+0x70 non-zero) is noted in the
+  attachment table, by parent and by its own id - which is how a muzzle flash stays on its gun. A copy
+  of the view weapon must not keep the weapon's id.
+- **SiN's model drawer sends every strip in immediate mode.** In ref_gl+0x18420 each glcmd strip or fan
+  is `glBegin(GL_TRIANGLE_STRIP/FAN)`, then for each vertex `glTexCoord2f`, `glColor4f` and
+  `glVertex3fv`, then `glEnd`; the pointer given to `glVertex3fv` is `array + 16 * index`, the array
+  named by the `lea eax, [edx + 0x100C6D00]` at ref_gl+0x18A58 and the index the model's own vertex
+  number from the `.sbm`'s glcmds. A few other passes (a second one for envmapped groups, some debug
+  lines) use the same calls.
+- **The weapons' modelled left arm is part of group 0**, the same mesh as the gun. In each model it is
+  one or two runs of consecutive vertex numbers (connected pieces are stored consecutively):
+  shotgun 30-95, assault rifle 276-308, chaingun 200-309 and 358-405 (a ring round the hand),
+  rocket launcher 146-218, sniper rifle 249-306, pulse rifle 358-393, speargun 217-259. The quantum
+  destabilizer has none; the magnum's 8-116 and the mines' 106-222 are the gun hand.
+
 ## Saves and config.cfg (2026-09-27)
 
 - **`config.cfg` holds only the cvars the engine has registered as archived.** A line `set vr_foo "1"`

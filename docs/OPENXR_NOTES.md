@@ -135,3 +135,11 @@ because every player with VIVE software installed would hit the same failure.
   made (or the recommended one), the console says so and names `vid_restart`, and the frame carries on.
 - Creating the new swapchains before destroying the old ones might dodge the fragmentation, at the cost
   of both sets for a frame. Untried.
+
+## Suggested bindings are all or nothing (2026-09-27)
+
+`xrSuggestInteractionProfileBindings` refuses a whole profile's table if any one path in it does not
+exist on that controller - SteamVR returns `XR_ERROR_PATH_UNSUPPORTED` (-22) and then uses a layout of
+its own for that controller, with no further word. The left-handed swap hit this: `/user/hand/right/input/x/click`
+does not exist on the HP Reverb G2 controller (or Touch), whose right hand has A and B. Check the log's
+`bindings suggested for` / `would not take bindings for` lines after changing a table.

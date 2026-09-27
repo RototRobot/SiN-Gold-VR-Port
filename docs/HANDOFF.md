@@ -483,6 +483,14 @@ touches it: the controllers arrive the way a player's own binds and joystick wou
      `vr_fake_snap <degrees>` turns without controllers - even flatscreen, which is how the headset
      being off one afternoon did not stop the angle being checked (45, 45, 90 and 30 exactly, and
      walking afterwards went the new way: the game's movement follows, not just the view).
+   - **Left-handed, the lettered buttons change letter as well as hand** (fixed 2026-09-27). The G2 and
+     Touch controllers have X and Y on the left and A and B on the right; moving the left's X to the
+     right hand asked for a right X, which does not exist, and SteamVR refused the whole G2 table with
+     `XR_ERROR_PATH_UNSUPPORTED` (-22) and fell back on a layout of its own - which is why, in the
+     owner's left-handed session, the right trigger fired. Now X becomes A and Y becomes B (and back) on
+     those profiles, and on Touch, whose menu button is on the left only, that one binding is left out
+     rather than sinking the rest. The log says `bindings suggested for <profile>` for each table taken;
+     a `would not take` line for a controller you are using is the thing to look for.
 4. **Focus.** `xrSyncActions` returns `XR_SESSION_NOT_FOCUSED` while the runtime is showing something of
    its own, and then everything held is released and the sticks centre. The same happens if a controller's
    action goes inactive while a button is held, or the session goes away.
@@ -774,6 +782,39 @@ maths is what the owner's next headset test exercises.
      same stored fore-end. `vr_fake_press "run 0 also"` holds a second button with the first, which is
      how the adjust-and-set step was driven.
 
+13. **The other hand, drawn** (`vr_other_hand`), 2026-09-27. With anything but the fists out, the hand
+   without the weapon had no model at all. It is now a copy of the weapon's entity with the fists' model
+   (`models/view_punch.def`, loaded by the renderer itself at the end of every registration, just
+   before ref_gl frees what nobody asked for - `vr_EndRegistration`), held on the first frame of its
+   idle, cut down to that hand's arm as the fists are, and placed from `vr_grip_punch_left` (or
+   `vr_grip_punch`, left-handed) - so it looks exactly like that fist when punching. Three things
+   learned on the way:
+   - **a model's animations are numbered alphabetically by name**, not in the `.def`'s order: idle1 is 5
+     on the fists (fire1-5 come first). The first try used 1 and drew the fist in fire2's pose, off at
+     the bottom of the view;
+   - **the copy has to have an id of its own.** `V_AddEntity` gives any entity whose id is `0x1E61` a
+     fresh one, and effects like the muzzle flash attach to the gun by its id, so the copy carries
+     `0x1E61`;
+   - **it carries the weapon's flags**, so the renderer's search for the view weapon found it as well and
+     flipped between the two every frame (the log said "the view weapon is now" dozens of times a
+     second). It is told apart by where it was put (`is_other_hand`).
+   Desk, 2026-09-27: the fist in the left hand with the rifle, pulse rifle, speargun, chaingun and
+   shotgun, the same as the fists' own left arm; left-handed, a right fist with the gun mirrored in the
+   left hand.
+14. **The arm built into the weapons, left out** (`vr_weapon_arm 0`), 2026-09-27. SiN's long weapons
+   carry a left arm - sleeve and glove - reaching in to the fore-end, but in the same mesh and group as
+   the gun, so neither the entity's group flags nor a clip plane can separate it. What can: SiN's model
+   drawer (ref_gl+0x18420) sends each strip as `glBegin`, then `glTexCoord2f`, `glColor4f` and
+   `glVertex3fv` per vertex, then `glEnd`, and the vertex it passes is a pointer into its own array
+   of the frame's vertices (named by the `lea eax, [edx + array]` at ref_gl+0x18A58, 16 bytes each), in
+   the model's own numbering. So `vr_gl.c` holds each strip of a marked model back until `glEnd` and
+   drops it if every vertex is in the arm's ranges; everything else is sent on exactly as it came. The
+   ranges are per weapon in `weapon_table`: found by splitting each model into connected pieces and
+   taking the ones painted in the sleeve's brown and the glove's blue (`scratchpad/armparts.py`,
+   `showarm.py`), then checked by eye - colour alone also picks out blue and brown parts of the guns.
+   The quantum destabilizer has no modelled hand; the magnum's and the mines' is the gun hand and stays.
+   Desk: the rifle with `vr_weapon_arm 1` shows the sleeve and glove, with 0 it does not; the same for
+   the others in turn.
 What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
 computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the
 grip button freezing and re-attaching the weapon (frozen with the hand at yaw 0, released with it at yaw
@@ -796,8 +837,12 @@ the server's impacts - is what the owner's headset test exercises.
 
 Still to do, and what is known about each:
 
-- **Two-handed holds, what is left**: the modelled left hand stays where the model has it rather than
-  going to the real one, and the fore-end distances are first guesses waiting on the headset.
+- **Two-handed holds, what is left**: the fore-end distances are first guesses waiting on the headset,
+  and the other hand is a fist - there is no open hand in SiN's models to hold a fore-end with.
+- **Mutant hands** (`view_mutanthands.def`) are not in the weapon table, so they are placed from the
+  general guess and treated as a gun held in one hand. The model very likely has two arms like the
+  fists and wants the fists' treatment (`two_arms`), and punching - the game already lets `MutantHands`
+  punch, as it derives from `Fists`.
 - **Manual reloading**: SiN already has clips, `reload`/`silreload` animations and
   `Weapon::ForceReload`, which `Player::DoUse` calls - the Use button doubles as a reload key. So a
   gesture only has to reach it: watching the off hand under the weapon in `vr_weapon.c` and running
