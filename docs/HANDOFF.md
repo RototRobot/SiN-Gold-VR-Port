@@ -856,14 +856,25 @@ maths is what the owner's next headset test exercises.
      magnum's own gun hand and forearm were being copied into a second forearm, and the pulse rifle's
      sleeve and glove along its top likewise, so those vertices are kept out of the copy (`keep`,
      checked per triangle in `fill_strip` against the vertex numbers the strip carries).
-   - **The fore-end on the gun's middle.** The owner found it "a little too far to the right" -
-     left-handed, so to the left in right-handed terms: the glove's middle is off to the side the
-     modelled hand came from. It now keeps the hand's place along and below the gun but takes the
-     gun's middle across. That middle is the barrel marker's y, except on the chaingun and rocket
-     launcher, whose marker sits on one of several barrels - 5 and 4 units off the body's middle - and
-     which use the body's middle instead (-24.1 and -23.5; ENGINE_NOTES). Desk: taking hold at the
-     computed point said 0 cm and left the rifle pointing straight ahead, and the same mirrored
-     left-handed.
+   - **The gun's middle** is the barrel marker's y, except on the chaingun and rocket launcher, whose
+     marker sits on one of several barrels - 5 and 4 units off the body's middle - and which use the
+     body's middle instead (-24.1 and -23.5; ENGINE_NOTES). For a while the fore-end was moved onto
+     it as well, after the owner found the grip "a little too far to the right"; on the next test
+     they found it too far the other way and put the first reading down to an off hand not yet tuned,
+     so the fore-end is the glove's middle again.
+18. **After the next headset test** (2026-09-27):
+   - **The rebuilt side only while idling or firing.** Switching weapons, the reflection animated too
+     and seemed to join up with the gun: the ready and putaway animations turn and roll the model, and
+     a reflection across a fixed plane turns the other way. `idle_table` now carries a mask per model
+     of the animations the weapon only tips up and down in - its idles and fire animations - and
+     `hide_modelled_arm` rebuilds the side only in those (the rifle's ready1 is 6, not in 0x0F1E).
+   - **Side handles.** The rocket launcher's modelled hand holds a handle out on its left side, which
+     the glove's middle already was; the chaingun's floating hand held nothing useful, but the gun
+     has a loop handle round its left side and underneath (vertices 310-357), and its fore-end is now
+     the outside of that loop, (36.9 -9.0 -36.6). Desk: taking hold at the computed points on the
+     rifle and the chaingun both said 0 cm.
+   - The sleeve and glove on the pulse rifle's top were checked again, drawn on their own: an arm
+     lying along the top, not a handle.
 
 What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
 computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the

@@ -129,9 +129,9 @@ It is remembered for that weapon, and kept between sessions. `vr_weapon_reset 1`
 the weapon you are holding back to its first guess.
 
 **Two hands on a long weapon.** Put your other hand where you would hold the front of the gun - the
-fore-end, under the middle of the gun where SiN's own model had its left hand, or about 30 cm ahead
-of your gun hand along the barrel on the chaingun and the quantum destabilizer - and **squeeze that
-hand's grip**. The gun hand
+fore-end, where SiN's own model had its left hand (on the rocket launcher, the handle out on its left
+side; on the chaingun, the outside of the loop handle round its left side), or about 30 cm ahead of
+your gun hand along the barrel on the quantum destabilizer - and **squeeze that hand's grip**. The gun hand
 stays where it is and the weapon swings to lie along the line from it to your other hand, so you aim
 with both; it keeps the gun hand's roll. While you hold it, the hand you see stays on the fore-end
 however your real hand moves. Let go of the grip and it follows the gun hand alone again. Squeezed anywhere else, that grip still runs, as before. It works on the shotgun, assault rifle,
@@ -232,7 +232,10 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   gun's middle, texture and all. It is solid and looks right from a distance; up close, details that
   are not symmetrical - an ejection port, a label - appear on both sides. The chaingun is left as it
   was, having a box on its left side only; `vr_fill_<weapon> 0` does the same for any other that looks
-  wrong. The magnum's own hand and a sleeve along the pulse rifle's top are not copied.
+  wrong. The magnum's own hand and a sleeve along the pulse rifle's top are not copied. The rebuilt side
+  is only there while the gun is idling or firing: raising, lowering, reloading and changing mode turn
+  the gun in ways a mirror image would follow the wrong way, so for those moments it is the gun as
+  built.
 - Most of SiN's two-handed weapons modelled a left arm reaching in to the fore-end, all one piece with
   the gun. That arm is left out now (`vr_weapon_arm 1` puts it back), and your other hand is drawn
   where it really is instead, as the fists' arm for that hand - a fist, since that is the only hand
