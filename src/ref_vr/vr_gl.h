@@ -99,9 +99,11 @@ void vr_gl_hide_model_parts_at(const float origin[3], const int (*ranges)[2], in
  * model was built to be seen from the left and above, and most of its right
  * side was never made. Each triangle facing left, on the left of the plane
  * y = middle (in the model's own frame, at the size it is drawn), is drawn a
- * second time reflected across that plane, turned to face right.
+ * second time reflected across that plane, turned to face right - except
+ * those with a vertex in keep, runs of first and last vertex as in
+ * vr_gl_hide_model_parts_at: a hand on the weapon, which is not symmetrical.
  */
-void vr_gl_fill_model_at(const float origin[3], float middle);
+void vr_gl_fill_model_at(const float origin[3], float middle, const int (*keep)[2], int keep_count);
 
 /* Whether ref_gl is the build whose vertices vr_gl_hide_model_parts_at can
    recognise - and whose strips vr_gl_fill_model_at can copy. */

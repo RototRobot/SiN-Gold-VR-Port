@@ -89,6 +89,8 @@ static struct
 	int hide_count[MAX_MODELS];
 	int fill[MAX_MODELS];
 	float middle[MAX_MODELS];
+	const int (*keep[MAX_MODELS])[2];
+	int keep_count[MAX_MODELS];
 	int on;        /* the clip plane is on */
 	int counting;  /* a mirrored model's rotations are being counted */
 	int rotates;
@@ -125,6 +127,7 @@ static struct
 	{
 		GLfloat st[2], colour[4], xyz[3];
 		int has_st, has_colour;
+		int index;      /* the model's vertex number, or -1 */
 	} v[STRIP_MAX];
 } strip;
 
@@ -202,7 +205,7 @@ void vr_gl_hide_model_parts_at(const float origin[3], const int (*ranges)[2], in
 	}
 }
 
-void vr_gl_fill_model_at(const float origin[3], float middle)
+void vr_gl_fill_model_at(const float origin[3], float middle, const int (*keep)[2], int keep_count)
 {
 	int at;
 
@@ -216,6 +219,8 @@ void vr_gl_fill_model_at(const float origin[3], float middle)
 	{
 		models.fill[at] = 1;
 		models.middle[at] = middle;
+		models.keep[at] = keep;
+		models.keep_count[at] = keep ? keep_count : 0;
 	}
 }
 
@@ -229,26 +234,28 @@ void vr_gl_clear_models(void)
 	models.count = 0;
 }
 
-/* Whether the vertex ref_gl points at is one of the model's parts left out. */
-static int vertex_hidden(const GLfloat *v)
+/* The model's own number for the vertex ref_gl points at, or -1. */
+static int vertex_index(const GLfloat *v)
 {
-	const int (*ranges)[2] = models.hide[models.hiding - 1];
-	int count = models.hide_count[models.hiding - 1];
 	DWORD_PTR offset;
-	int index, i;
 
-	if (!ranges || (const BYTE *)v < lerp_array)
+	if ((const BYTE *)v < lerp_array)
 	{
-		return 0;
+		return -1;
 	}
 	offset = (const BYTE *)v - lerp_array;
 	if (offset % LERP_STRIDE != 0 || offset / LERP_STRIDE >= LERP_VERTICES)
 	{
-		return 0;
+		return -1;
 	}
+	return (int)(offset / LERP_STRIDE);
+}
 
-	index = (int)(offset / LERP_STRIDE);
-	for (i = 0; i < count; ++i)
+static int in_ranges(int index, const int (*ranges)[2], int count)
+{
+	int i;
+
+	for (i = 0; ranges && index >= 0 && i < count; ++i)
 	{
 		if (index >= ranges[i][0] && index <= ranges[i][1])
 		{
@@ -312,6 +319,13 @@ static void fill_strip(float middle)
 		else
 		{
 			return;
+		}
+
+		if (in_ranges(strip.v[a].index, models.keep[models.hiding - 1], models.keep_count[models.hiding - 1]) ||
+			in_ranges(strip.v[b].index, models.keep[models.hiding - 1], models.keep_count[models.hiding - 1]) ||
+			in_ranges(strip.v[c].index, models.keep[models.hiding - 1], models.keep_count[models.hiding - 1]))
+		{
+			continue;
 		}
 
 		p = strip.v[a].xyz;
@@ -438,7 +452,8 @@ static void APIENTRY hook_glVertex3fv(const GLfloat *v)
 	strip.v[i].has_colour = strip.has_colour;
 	strip.has_st = 0;
 	strip.has_colour = 0;
-	strip.hidden += vertex_hidden(v);
+	strip.v[i].index = vertex_index(v);
+	strip.hidden += in_ranges(strip.v[i].index, models.hide[models.hiding - 1], models.hide_count[models.hiding - 1]);
 }
 
 static void APIENTRY hook_glEnd(void)
