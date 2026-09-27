@@ -604,11 +604,14 @@ static int vr_Init(void *hinstance, void *wndproc)
 		vr_cvar_set("cl_stereo", "0");
 	}
 
-	/* Before the engine's own input start-up, which comes after this. */
+	/* The settings whether or not the headset is used, so that a flatscreen
+	   game keeps them in config.cfg (vr_input.h); the controllers only with
+	   it, before the engine's own input start-up, which comes after this. */
+	vr_input_register();
+	vr_weapon_startup();
 	if (vr_enable->value != 0.0f)
 	{
 		vr_input_startup();
-		vr_weapon_startup();
 	}
 
 	result = ((re_init_t)g_real_slot[RE_INIT])(hinstance, wndproc);

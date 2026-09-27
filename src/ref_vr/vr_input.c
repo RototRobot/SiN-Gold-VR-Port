@@ -222,9 +222,10 @@ static cvar_t *vr_fake_hand_left;
 static cvar_t *vr_fake_idle_press;
 static cvar_t *vr_fake_swing;
 static DWORD last_fake_idle;
-static int fake_held = -1;
-static int fake_frames;
-static int fake_menu;
+#define FAKE_HOLDS 2
+static int fake_held[FAKE_HOLDS] = { -1, -1 }; /* a pretend press, and one more held with it */
+static int fake_frames[FAKE_HOLDS];
+static int fake_menu[FAKE_HOLDS];
 static int started;
 static int said_active;
 static int said_unfocused;
@@ -236,6 +237,7 @@ static cvar_t *vr_snap_turn;
 static cvar_t *vr_snap_angle;
 static int snap_armed = 1;
 static int said_no_snap;
+static int steadying; /* the other hand's grip button has hold of the weapon */
 static XrSpace hand_space[2]; /* where each controller points from, and which way */
 static XrSpace grip_space[2]; /* where the hand holds it */
 static int said_hands;
@@ -253,16 +255,17 @@ static struct
 /* Start-up                                                                   */
 /* ------------------------------------------------------------------------- */
 
-void vr_input_startup(void)
+void vr_input_register(void)
 {
+	static int registered;
 	char name[64];
 	int i;
 
-	if (started)
+	if (registered)
 	{
 		return;
 	}
-	started = 1;
+	registered = 1;
 
 	vr_input = vr_cvar("vr_input", "1", CVAR_ARCHIVE);
 	vr_deadzone = vr_cvar("vr_deadzone", "0.15", CVAR_ARCHIVE);
@@ -287,7 +290,17 @@ void vr_input_startup(void)
 		sprintf(name, "vr_bind_%s", actions[i].name);
 		actions[i].bind = vr_cvar(name, actions[i].command, CVAR_ARCHIVE);
 	}
+}
 
+void vr_input_startup(void)
+{
+	if (started)
+	{
+		return;
+	}
+	started = 1;
+
+	vr_input_register();
 	if (vr_input->value == 0.0f)
 	{
 		return;
@@ -596,38 +609,64 @@ static void dispatch(action_t *action, int down)
  * Desk testing: "vr_fake_press jump" presses that action, through the same path
  * a controller button takes, and lets go a few frames later; "vr_fake_press
  * adjust 200" holds it for 200 frames, "vr_fake_press adjust 0" until
- * "vr_fake_press release". The names are the ones in the vr_bind_* cvars.
+ * "vr_fake_press release". A new press lets go of the one before, unless it
+ * ends "also" - "vr_fake_press run 0 also" - when both are held. The names are
+ * the ones in the vr_bind_* cvars.
  */
-static void release_fake(void)
+static int is_fake(int action)
 {
-	actions[fake_held].down = 0;
-	press_action(fake_held, 0, fake_menu);
-	fake_held = -1;
+	int slot;
+
+	for (slot = 0; slot < FAKE_HOLDS; ++slot)
+	{
+		if (fake_held[slot] == action)
+		{
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static void release_fake(int slot)
+{
+	int action = fake_held[slot];
+
+	if (action < 0)
+	{
+		return;
+	}
+	fake_held[slot] = -1;
+	actions[action].down = 0;
+	press_action(action, 0, fake_menu[slot]);
 }
 
 static void do_fake_press(void)
 {
-	char name[32];
-	int i, hold = 12;
+	char name[32], also[8] = "";
+	int i, slot, hold = 12;
 
 	/* Held for a few frames: the engine samples its buttons when it builds a
 	   movement command, not when ours arrives. */
-	if (fake_held >= 0 && fake_frames > 0 && --fake_frames == 0)
+	for (slot = 0; slot < FAKE_HOLDS; ++slot)
 	{
-		release_fake();
+		if (fake_held[slot] >= 0 && fake_frames[slot] > 0 && --fake_frames[slot] == 0)
+		{
+			release_fake(slot);
+		}
 	}
 
 	if (!vr_fake_press || !vr_fake_press->string || !vr_fake_press->string[0] ||
-		sscanf(vr_fake_press->string, "%31s %d", name, &hold) < 1)
+		sscanf(vr_fake_press->string, "%31s %d %7s", name, &hold, also) < 1)
 	{
 		return;
 	}
 	vr_cvar_set("vr_fake_press", "");
 
-	/* A new press lets go of the one before; "release" does only that. */
-	if (fake_held >= 0)
+	/* "release" lets go of them all */
+	slot = strcmp(also, "also") == 0 ? 1 : 0;
+	for (i = FAKE_HOLDS - 1; i >= slot; --i)
 	{
-		release_fake();
+		release_fake(i);
 	}
 	if (strcmp(name, "release") == 0)
 	{
@@ -639,10 +678,10 @@ static void do_fake_press(void)
 		if (actions[i].kind == KIND_BUTTON && strcmp(actions[i].name, name) == 0)
 		{
 			actions[i].down = 1;
-			fake_menu = vr_in_menu();
-			press_action(i, 1, fake_menu);
-			fake_held = i;
-			fake_frames = hold > 0 ? hold : -1;
+			fake_menu[slot] = vr_in_menu();
+			press_action(i, 1, fake_menu[slot]);
+			fake_held[slot] = i;
+			fake_frames[slot] = hold > 0 ? hold : -1;
 			return;
 		}
 	}
@@ -726,6 +765,12 @@ static void stop_holding(int index)
 		vr_weapon_adjust_button(0);
 		return;
 	}
+	if (index == ACT_RUN && steadying)
+	{
+		steadying = 0;
+		vr_weapon_steady(0);
+		return;
+	}
 	dispatch(&actions[index], 0);
 }
 
@@ -755,6 +800,26 @@ static void press_action(int index, int down, int menu)
 			recentre_clicked();
 		}
 		return;
+	}
+
+	/* The other hand's grip: at the weapon's fore-end it takes hold of the
+	   weapon, and everywhere else it does what it is bound to. The release
+	   goes wherever the press went. */
+	if (index == ACT_RUN && !menu)
+	{
+		if (down && vr_weapon_steady(1))
+		{
+			vrlog("    input: %s pressed at the fore-end -> both hands", actions[index].name);
+			steadying = 1;
+			return;
+		}
+		if (!down && steadying)
+		{
+			vrlog("    input: %s let go -> one hand", actions[index].name);
+			steadying = 0;
+			vr_weapon_steady(0);
+			return;
+		}
 	}
 
 	if (menu)
@@ -791,7 +856,7 @@ static void read_buttons(XrSession session, int menu)
 		if (XR_FAILED(xrGetActionStateBoolean(session, &get_info, &state)) || !state.isActive)
 		{
 			/* The controller it is bound to has gone. */
-			if (actions[i].down && i != fake_held)
+			if (actions[i].down && !is_fake(i))
 			{
 				let_go(i);
 			}
@@ -1141,7 +1206,7 @@ void vr_input_idle(XrSession session)
 		   pretend press is left alone, as everywhere else - it lets go on its
 		   own count, and the idle pump runs between frames, in the middle of
 		   whatever a test is doing. */
-		if (actions[i].down && !down && i != fake_held)
+		if (actions[i].down && !down && !is_fake(i))
 		{
 			let_go(i);
 			continue;
@@ -1168,7 +1233,7 @@ static void release_buttons(void)
 
 	for (i = 0; i < ACT_COUNT; ++i)
 	{
-		if (i != fake_held && actions[i].kind == KIND_BUTTON && actions[i].down)
+		if (!is_fake(i) && actions[i].kind == KIND_BUTTON && actions[i].down)
 		{
 			stop_holding(i);
 		}
@@ -1351,8 +1416,13 @@ void vr_input_hands(XrSession session, XrSpace space, XrTime time, float units_p
 
 void vr_input_release(void)
 {
-	fake_held = -1;
-	fake_frames = 0;
+	int slot;
+
+	for (slot = 0; slot < FAKE_HOLDS; ++slot)
+	{
+		fake_held[slot] = -1;
+		fake_frames[slot] = 0;
+	}
 	release_buttons();
 	vr_joy_set(0.0f, 0.0f, 0.0f);
 }

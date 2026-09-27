@@ -22,6 +22,8 @@
 #define ADJUST_HOLD_MS 800 /* how long the grip is held before the weapon lets go */
 #define SCALE_MIN 0.05f
 #define SCALE_MAX 3.0f
+#define STEADY_REACH 0.25f /* metres: how near the fore-end the other hand takes hold */
+#define STEADY_SHORTEST 0.05f /* metres: hands nearer than this give no direction */
 
 /* ------------------------------------------------------------------------- */
 /* The weapons                                                                */
@@ -34,6 +36,12 @@
  * hand, on the fore-end, so their grip is where the missing right hand would
  * be, under the back of the receiver. The fists have both arms, one each side
  * of the model's middle, and the left fist is the right one's mirrored.
+ *
+ * fore is how far ahead of the grip, along the barrel, the other hand steadies
+ * the weapon, in metres - the palm-to-palm distance on a real rifle - and 0
+ * for the weapons held in one hand. A line along the barrel from the hand is
+ * what makes the weapon point where the two hands do; the player can move it
+ * in the headset.
  */
 typedef struct
 {
@@ -41,30 +49,32 @@ typedef struct
 	float grip[3];
 	float scale;
 	int two_arms;
+	float fore;
 } weapon_info_t;
 
 static const weapon_info_t weapon_table[] = {
-	{ "punch",     { 18.5f, -11.0f, -10.0f }, 0.50f, 1 },
-	{ "magnum",    { 53.0f, -36.0f, -31.0f }, 0.35f, 0 },
-	{ "shotgun",   {  8.0f, -14.0f, -15.0f }, 0.60f, 0 },
-	{ "asrifle",   { 37.0f, -21.0f, -30.0f }, 0.35f, 0 },
-	{ "hvgun",     { 30.0f, -25.0f, -38.0f }, 0.35f, 0 },
-	{ "rlaunch",   { 28.0f, -24.0f, -36.0f }, 0.35f, 0 },
-	{ "srifle",    { 15.0f, -13.0f, -14.0f }, 0.35f, 0 },
-	{ "pulse2",    { 25.0f, -18.0f, -30.0f }, 0.35f, 0 },
-	{ "quantum",   { 20.0f, -30.0f, -40.0f }, 0.30f, 0 },
-	{ "spgun",     { 30.0f, -15.0f, -30.0f }, 0.35f, 0 },
-	{ "mines",     { 36.0f, -22.0f, -18.0f }, 0.35f, 0 },
-	{ "detonator", { 15.0f,  -5.0f, -12.0f }, 0.40f, 0 }
+	{ "punch",     { 18.5f, -11.0f, -10.0f }, 0.50f, 1, 0.0f },
+	{ "magnum",    { 53.0f, -36.0f, -31.0f }, 0.35f, 0, 0.0f },
+	{ "shotgun",   {  8.0f, -14.0f, -15.0f }, 0.60f, 0, 0.30f },
+	{ "asrifle",   { 37.0f, -21.0f, -30.0f }, 0.35f, 0, 0.30f },
+	{ "hvgun",     { 30.0f, -25.0f, -38.0f }, 0.35f, 0, 0.30f },
+	{ "rlaunch",   { 28.0f, -24.0f, -36.0f }, 0.35f, 0, 0.30f },
+	{ "srifle",    { 15.0f, -13.0f, -14.0f }, 0.35f, 0, 0.35f },
+	{ "pulse2",    { 25.0f, -18.0f, -30.0f }, 0.35f, 0, 0.30f },
+	{ "quantum",   { 20.0f, -30.0f, -40.0f }, 0.30f, 0, 0.35f },
+	{ "spgun",     { 30.0f, -15.0f, -30.0f }, 0.35f, 0, 0.30f },
+	{ "mines",     { 36.0f, -22.0f, -18.0f }, 0.35f, 0, 0.0f },
+	{ "detonator", { 15.0f,  -5.0f, -12.0f }, 0.40f, 0, 0.0f }
 };
 
-static const weapon_info_t weapon_other = { NULL, { 30.0f, -20.0f, -25.0f }, 0.35f, 0 };
+static const weapon_info_t weapon_other = { NULL, { 30.0f, -20.0f, -25.0f }, 0.35f, 0, 0.30f };
 
 typedef struct
 {
 	char key[40];                /* "asrifle", from models/view_asrifle.def */
 	const weapon_info_t *info;
 	cvar_t *grip[2];             /* vr_grip_<key>, and vr_grip_<key>_left for two arms */
+	cvar_t *fore;                /* vr_fore_<key>: the fore-end, in the model's own units */
 } weapon_t;
 
 static weapon_t weapons[48];
@@ -80,6 +90,7 @@ static cvar_t *vr_show_hands;
 static cvar_t *vr_freeze_idle;
 static cvar_t *vr_punch;
 static cvar_t *vr_punch_speed;
+static cvar_t *vr_two_hand;
 static cvar_t *vr_aim;
 
 /* Read once, at start-up: the buttons are attached to the session with the
@@ -156,6 +167,11 @@ static weapon_t *find_weapon(const char *key)
 		sprintf(name, "vr_grip_%.40s_left", key);
 		weapons[weapon_count].grip[LEFT] = vr_cvar(name, "", CVAR_ARCHIVE);
 	}
+	else if (weapons[weapon_count].info->fore > 0.0f)
+	{
+		sprintf(name, "vr_fore_%.40s", key);
+		weapons[weapon_count].fore = vr_cvar(name, "", CVAR_ARCHIVE);
+	}
 
 	return &weapons[weapon_count++];
 }
@@ -219,6 +235,7 @@ void vr_weapon_startup(void)
 	vr_freeze_idle = vr_cvar("vr_freeze_idle", "0", CVAR_ARCHIVE);
 	vr_punch = vr_cvar("vr_punch", "1", CVAR_ARCHIVE);
 	vr_punch_speed = vr_cvar("vr_punch_speed", "2", CVAR_ARCHIVE);
+	vr_two_hand = vr_cvar("vr_two_hand", "1", CVAR_ARCHIVE);
 	vr_aim = vr_cvar("vr_aim", "1", 0);
 	lefty = vr_left_handed->value != 0.0f;
 	if (lefty)
@@ -261,6 +278,15 @@ static int placing;            /* between a publish and the end of that frame */
 static int said_hands_drawn;
 static int placed_this_frame;  /* the weapon was put in the hand this frame */
 static int said_placed;
+static float fore_at[3];       /* the fore-end, as placed this frame, in the recentred frame */
+static int fore_valid;
+
+static struct
+{
+	int active;                /* the other hand has hold of the weapon */
+	int said;                  /* where it pointed, logged once a hold */
+	unsigned count;
+} steady;
 
 static struct
 {
@@ -437,6 +463,7 @@ static void run_adjust(void)
 
 		adjust.active = 1;
 		adjust.last_tick = now;
+		steady.active = 0;
 		for (hand = 0; hand < 2; ++hand)
 		{
 			adjust.frozen[hand] = placed[hand];
@@ -492,6 +519,255 @@ static void run_adjust(void)
 	}
 }
 
+/* ------------------------------------------------------------------------- */
+/* Two hands                                                                  */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * The fore-end, in the model's own units as the right hand holds it: from
+ * vr_fore_<weapon> if that holds a setting, or else the table's distance ahead
+ * of the grip along the model's forward - which, with the grip as it comes,
+ * is straight ahead of the hand. Returns 0 for a weapon held in one hand.
+ */
+static int fore_in_model(const weapon_t *w, float out[3])
+{
+	vr_pose_t relative, hand, origin;
+	float scale, units = vr_worldscale_units();
+	static const float zero[3] = { 0.0f, 0.0f, 0.0f };
+
+	if (!w || w->info->two_arms || w->info->fore <= 0.0f || !w->fore)
+	{
+		return 0;
+	}
+
+	if (w->fore->string && sscanf(w->fore->string, "%f %f %f", &out[0], &out[1], &out[2]) == 3)
+	{
+		return 1;
+	}
+
+	/* where the hand is on the model: the model's pose in the hand, undone */
+	grip_setting(w, RIGHT, &relative, &scale);
+	vr_pose_set(&origin, zero, zero);
+	vr_pose_relative(&relative, &origin, &hand);
+	out[0] = (hand.origin[0] + w->info->fore * units) / scale;
+	out[1] = hand.origin[1] / scale;
+	out[2] = hand.origin[2] / scale;
+	return 1;
+}
+
+/* The fore-end of the weapon placed at p, in the frame p is given in. A
+   mirrored model has it on the other side of its middle. */
+static int fore_point(const weapon_t *w, const placement_t *p, float out[3])
+{
+	float local[3];
+	int i;
+
+	if (!p->valid || !fore_in_model(w, local))
+	{
+		return 0;
+	}
+
+	if (grip_mirrored(w, gun_hand()))
+	{
+		local[1] = -local[1];
+	}
+	for (i = 0; i < 3; ++i)
+	{
+		local[i] *= p->scale;
+	}
+	vr_pose_point(&p->pose, local, out);
+	return 1;
+}
+
+static float distance(const float a[3], const float b[3])
+{
+	float d[3] = { a[0] - b[0], a[1] - b[1], a[2] - b[2] };
+
+	return sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+}
+
+static float dot(const float a[3], const float b[3])
+{
+	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+static int normalise(float v[3])
+{
+	float length = sqrtf(dot(v, v));
+
+	if (length < 1e-6f)
+	{
+		return 0;
+	}
+	v[0] /= length;
+	v[1] /= length;
+	v[2] /= length;
+	return 1;
+}
+
+/*
+ * Rows forward, left and up, forward along f, and rolled so that row `which`
+ * (1 left, 2 up) is as near to ref as it can be. Returns 0 if ref lies along f.
+ */
+static int frame_along(const float f[3], const float ref[3], int which, float out[3][3])
+{
+	float along = dot(ref, f);
+	int i;
+
+	memcpy(out[0], f, sizeof(out[0]));
+	for (i = 0; i < 3; ++i)
+	{
+		out[which][i] = ref[i] - along * f[i];
+	}
+	if (!normalise(out[which]))
+	{
+		return 0;
+	}
+
+	if (which == 2)
+	{
+		/* left = up x forward */
+		out[1][0] = out[2][1] * f[2] - out[2][2] * f[1];
+		out[1][1] = out[2][2] * f[0] - out[2][0] * f[2];
+		out[1][2] = out[2][0] * f[1] - out[2][1] * f[0];
+	}
+	else
+	{
+		/* up = forward x left */
+		out[2][0] = f[1] * out[1][2] - f[2] * out[1][1];
+		out[2][1] = f[2] * out[1][0] - f[0] * out[1][2];
+		out[2][2] = f[0] * out[1][1] - f[1] * out[1][0];
+	}
+	return 1;
+}
+
+/*
+ * Both hands on it: the gun hand stays where it is, and the weapon turns about
+ * it until the fore-end lies on the line to the other hand. Only the line is
+ * the other hand's; the roll about it is the gun hand's, as near as the line
+ * allows - its up stays as near its real up as it can, or, with the weapon
+ * pointing straight up or down, its left. Returns 0 if the hands are too
+ * close together to say which way that is.
+ */
+static int pivot_weapon(placement_t *p, const vr_pose_t *hand, const float fore[3], const float other[3])
+{
+	float shortest = STEADY_SHORTEST * vr_worldscale_units();
+	float to_fore[3], to_other[3], local[3];
+	float in_hand[3][3], in_world[3][3];
+	static const float hand_ref[2][3] = { { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } };
+	vr_pose_t turned, relative;
+	int i, j, which;
+
+	if (distance(fore, hand->origin) < shortest || distance(other, hand->origin) < shortest)
+	{
+		return 0;
+	}
+
+	for (i = 0; i < 3; ++i)
+	{
+		to_fore[i] = fore[i] - hand->origin[i];
+		to_other[i] = other[i] - hand->origin[i];
+	}
+	normalise(to_other);
+
+	/* the way to the fore-end, as the hand sees it */
+	for (i = 0; i < 3; ++i)
+	{
+		local[i] = dot(to_fore, hand->axis[i]);
+	}
+	normalise(local);
+
+	/* roll by the hand's up, unless the line is nearly along it */
+	which = fabsf(dot(to_other, hand->axis[2])) < 0.95f && fabsf(local[2]) < 0.95f ? 2 : 1;
+	if (!frame_along(local, hand_ref[which - 1], which, in_hand) ||
+		!frame_along(to_other, hand->axis[which], which, in_world))
+	{
+		return 0;
+	}
+
+	/* the turn that takes one frame to the other, applied to the hand */
+	turned = *hand;
+	for (j = 0; j < 3; ++j)
+	{
+		for (i = 0; i < 3; ++i)
+		{
+			turned.axis[j][i] = in_world[0][i] * in_hand[0][j] + in_world[1][i] * in_hand[1][j] +
+				in_world[2][i] * in_hand[2][j];
+		}
+	}
+
+	vr_pose_relative(hand, &p->pose, &relative);
+	vr_pose_compose(&turned, &relative, &p->pose);
+	return 1;
+}
+
+/* Where the fore-end is while the weapon is being adjusted: where the other
+   hand is now, on the model as it is frozen. */
+static void set_fore(void)
+{
+	const placement_t *p = &adjust.frozen[gun_hand()];
+	vr_pose_t at, local;
+	float model[3];
+	static const float zero[3] = { 0.0f, 0.0f, 0.0f };
+	char value[80];
+
+	vr_pose_set(&at, hands[other_hand()].frame.origin, zero);
+	vr_pose_relative(&p->pose, &at, &local);
+	model[0] = local.origin[0] / p->scale;
+	model[1] = local.origin[1] / p->scale;
+	model[2] = local.origin[2] / p->scale;
+	if (grip_mirrored(current, gun_hand()))
+	{
+		/* kept as the right-handed model has it */
+		model[1] = -model[1];
+	}
+
+	sprintf(value, "%.1f %.1f %.1f", model[0], model[1], model[2]);
+	vr_cvar_set(current->fore->name, value);
+	vr_printf("VR: the %s's fore-end is there from now on: %s \"%s\"", current->key, current->fore->name,
+		value);
+}
+
+int vr_weapon_steady(int down)
+{
+	float at[3];
+	float reach = STEADY_REACH * vr_worldscale_units();
+
+	if (!down)
+	{
+		if (steady.active)
+		{
+			steady.active = 0;
+			vrlog("VR: the other hand has let go of the %s", current ? current->key : "weapon");
+		}
+		return 0;
+	}
+
+	if ((vr_two_hand && vr_two_hand->value == 0.0f) || !current || !hands[other_hand()].valid ||
+		!fore_in_model(current, at))
+	{
+		return 0;
+	}
+
+	if (adjust.active)
+	{
+		set_fore();
+		return 1;
+	}
+
+	if (!fore_point(current, &placed[gun_hand()], at) || distance(at, hands[other_hand()].frame.origin) > reach)
+	{
+		return 0;
+	}
+
+	steady.active = 1;
+	steady.said = 0;
+	steady.count++;
+	vrlog("VR: the %s is held in both hands (%.0f cm from the fore-end)", current->key,
+		distance(at, hands[other_hand()].frame.origin) * 100.0f / vr_worldscale_units());
+	return 1;
+}
+
 static void reset_requested(void)
 {
 	if (!vr_weapon_reset || vr_weapon_reset->value == 0.0f)
@@ -518,6 +794,10 @@ static void reset_requested(void)
 	if (current->grip[LEFT])
 	{
 		vr_cvar_set(current->grip[LEFT]->name, "");
+	}
+	if (current->fore)
+	{
+		vr_cvar_set(current->fore->name, "");
 	}
 	vr_printf("VR: the %s is back to its first guess", current->key);
 }
@@ -671,6 +951,7 @@ void vr_weapon_publish(void)
 
 	placed[LEFT].valid = placed[RIGHT].valid = 0;
 	placing = 0;
+	fore_valid = 0;
 
 	check_mode();
 	reset_requested();
@@ -702,6 +983,16 @@ void vr_weapon_publish(void)
 		placed[LEFT] = adjust.frozen[LEFT];
 		placed[RIGHT] = adjust.frozen[RIGHT];
 	}
+	else if (steady.active && hands[other_hand()].valid && fore_point(current, &placed[gun], fore_at))
+	{
+		if (pivot_weapon(&placed[gun], &hands[gun].frame, fore_at, hands[other_hand()].frame.origin) &&
+			!steady.said)
+		{
+			steady.said = 1;
+			log_pose("both hands: weapon", &placed[gun].pose);
+		}
+	}
+	fore_valid = fore_point(current, &placed[gun], fore_at);
 
 	placing = 1;
 
@@ -736,6 +1027,7 @@ void vr_weapon_end_frame(void)
 	placed_this_frame = 0;
 	world_aim_valid = 0;
 	base_valid = 0;
+	fore_valid = 0;
 	vr_gl_clear_models();
 }
 
@@ -772,6 +1064,23 @@ static void draw_hand_marker(const vr_pose_t *pose, float units, int bright)
 	glEnd();
 }
 
+/* The fore-end: a small cross, cyan, brighter while the other hand has hold. */
+static void draw_fore_marker(const float at[3], float units)
+{
+	const float cross = 0.03f * units;
+	float shade = steady.active ? 1.0f : 0.6f;
+	int axis;
+
+	glBegin(GL_LINES);
+	glColor3f(0.0f, shade, shade);
+	for (axis = 0; axis < 3; ++axis)
+	{
+		glVertex3f(at[0] - (axis == 0) * cross, at[1] - (axis == 1) * cross, at[2] - (axis == 2) * cross);
+		glVertex3f(at[0] + (axis == 0) * cross, at[1] + (axis == 1) * cross, at[2] + (axis == 2) * cross);
+	}
+	glEnd();
+}
+
 void vr_weapon_draw_hands(const refdef_t *fd)
 {
 	int mode = vr_show_hands ? (int)vr_show_hands->value : 1;
@@ -805,6 +1114,16 @@ void vr_weapon_draw_hands(const refdef_t *fd)
 		vr_pose_to_world(&hands[hand].frame, base_origin, base_yaw, &world);
 		draw_hand_marker(&world, units, hand == gun_hand());
 		drawn++;
+	}
+
+	if (fore_valid)
+	{
+		vr_pose_t at, world;
+		static const float zero[3] = { 0.0f, 0.0f, 0.0f };
+
+		vr_pose_set(&at, fore_at, zero);
+		vr_pose_to_world(&at, base_origin, base_yaw, &world);
+		draw_fore_marker(world.origin, units);
 	}
 
 	vr_gl_world_end();
@@ -894,6 +1213,7 @@ static void see_weapon(const entity_t *e)
 	if (w && w != current)
 	{
 		current = w;
+		steady.active = 0;
 		vrlog("VR: the view weapon is now %s (%s)", (const char *)e->model,
 			w->info == &weapon_other ? "no measurements - a general guess" : "measured");
 	}
@@ -1090,7 +1410,8 @@ void vr_weapon_uninstall(void)
 	vr_unhook_calls();
 	patched = 0;
 	vrlog("VR: the view weapon was placed by the client %u times; %u of its bullet impacts were left "
-		"to the server; %u punches were thrown", client_placements, bullets_left_out, punches_thrown);
+		"to the server; %u punches were thrown; the other hand took hold %u times", client_placements,
+		bullets_left_out, punches_thrown, steady.count);
 }
 
 /* ------------------------------------------------------------------------- */

@@ -22,6 +22,14 @@
  */
 void vr_input_startup(void);
 
+/*
+ * Only the cvars, for a flatscreen session as well: SiN writes config.cfg from
+ * the cvars it knows, and a setting it has only read from the file, never had
+ * registered, is not written back - so a flatscreen game would otherwise drop
+ * every controller and weapon setting the player had made.
+ */
+void vr_input_register(void);
+
 /* The extension that gives the Reverb G2's controllers their A/B/X/Y buttons,
    to enable at instance creation when the runtime has it. */
 const char *vr_input_extension(void);

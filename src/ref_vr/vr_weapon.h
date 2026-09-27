@@ -15,7 +15,12 @@
  *     button lets go of the weapon, and letting go of the button takes it
  *     back the way the hand is then holding it;
  *   - the fists are one model with both arms in it, so it is drawn twice,
- *     once in each hand, with the other arm cut away down the middle.
+ *     once in each hand, with the other arm cut away down the middle;
+ *   - a long weapon has a fore-end, where the other hand steadies it. That
+ *     hand's grip button, pressed there, takes hold: the gun hand stays where
+ *     it is and the weapon turns about it to lie along the line to the other
+ *     hand, rolled as the gun hand is. Pressed anywhere else, the button does
+ *     what it is bound to, as before.
  *
  * The placement is worked out once a frame, in the recentred frame of
  * sinvr_poses.h, and handed to the game module, which fires from the barrel it
@@ -42,7 +47,8 @@
 #include "refapi.h"
 
 /* Registers the cvars: vr_weapon_hand, vr_left_handed, vr_show_hands,
-   vr_freeze_idle, vr_punch, vr_punch_speed, vr_grip_<weapon>, vr_weapon_reset. */
+   vr_freeze_idle, vr_punch, vr_punch_speed, vr_two_hand, vr_grip_<weapon>,
+   vr_fore_<weapon>, vr_weapon_reset. */
 void vr_weapon_startup(void);
 
 /*
@@ -106,5 +112,14 @@ int vr_weapon_world_aim(float origin[3], float forward[3]);
 void vr_weapon_adjust_button(int down);
 void vr_weapon_adjust_stick(float y);
 int vr_weapon_adjusting(void);
+
+/*
+ * The grip button of the other hand. Pressed with that hand at the weapon's
+ * fore-end, it takes hold of the weapon with both hands until it is let go;
+ * pressed while the weapon is being adjusted, it puts the fore-end where the
+ * hand is. Returns whether the press was taken for either - if not, it is the
+ * button's ordinary press. A release always returns 0.
+ */
+int vr_weapon_steady(int down);
 
 #endif /* VR_WEAPON_H */
