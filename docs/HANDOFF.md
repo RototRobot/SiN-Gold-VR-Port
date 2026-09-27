@@ -891,6 +891,17 @@ maths is what the owner's next headset test exercises.
    as before and `hand` still 0 in config.cfg; the flash itself is for the headset. Two more tries at
    firing at the desk - holding the controller's fire for 200 frames, once straight after a weapon
    change and once 1800 waits later with the weapon wheel long gone - left the ammunition at 270.
+   - **The owner's screenshot** (magnum, left-handed) showed the flash at the right depth but beside the
+     gun. Not the axes: `00418E40` lays the offset out along the entity's own axis rows, so the flash
+     follows the gun. It is `view_magnum.def`'s `attach ... origin 10 0 -10`: the effect option parser
+     (+0x1793C) adds `origin` along those axes in flat view-model units, unscaled - tuned for the flat
+     camera. The shotgun (`10 0 0`), rocket launcher (`20 0 0`) and chaingun (`30 0 20`) have one too.
+     The view weapon's commands all pass through one call in `CL_AddViewWeapon` (+0x7580), which now
+     goes through `process_view_commands`: while the weapon is in the hand, an `attach` command has its
+     `origin` option left out, so the flash sits on the barrel bone. The call passes the word count and
+     words on the stack (the caller pops them) with register arguments in ecx and edx, which the thunk
+     keeps. Desk: installed, commands pass through it on weapon changes, clean shutdown; the firing is
+     for the headset.
 
 What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
 computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the

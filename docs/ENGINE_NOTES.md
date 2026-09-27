@@ -383,6 +383,12 @@ does the movement work itself. The console says `joystick detected` where it use
   same is done in `bonespawn` (+0x1B03B) and at +0x1AA04. The client runs the model's commands only
   when the view weapon's animation or frame differs from the last it ran them for (+0x74D6), with the
   entity it just handed to `V_AddEntity`.
+- **The effect options** (`time`, `scale`, `origin`, `alphafade`, `randomroll` ...) are parsed by
+  +0x1793C, shared by the commands that spawn things. `origin x y z` adds `x*forward - y*right + z*up`
+  to the position, using the axes `00418E40` copied from the command entity's axis rows - unscaled,
+  so in the flat view model's units. `CL_CMDS_ProcessCommands` (+0x191E0) takes the word count and the
+  words on the stack, popped by the caller, plus two register arguments in ecx and edx; the view
+  weapon's are called from +0x7580.
 
 ## Saves and config.cfg (2026-09-27)
 
