@@ -63,9 +63,18 @@ static struct
 typedef void(APIENTRY *gl_translate_t)(GLfloat x, GLfloat y, GLfloat z);
 typedef void(APIENTRY *gl_rotate_t)(GLfloat angle, GLfloat x, GLfloat y, GLfloat z);
 typedef void(APIENTRY *gl_void_t)(void);
+typedef void(APIENTRY *gl_enum_t)(GLenum mode);
+typedef void(APIENTRY *gl_vertex_t)(const GLfloat *v);
+typedef void(APIENTRY *gl_texcoord_t)(GLfloat s, GLfloat t);
+typedef void(APIENTRY *gl_color4_t)(GLfloat r, GLfloat g, GLfloat b, GLfloat a);
 static gl_translate_t real_glTranslatef;
 static gl_rotate_t real_glRotatef;
 static gl_void_t real_glPopMatrix;
+static gl_enum_t real_glBegin;
+static gl_void_t real_glEnd;
+static gl_vertex_t real_glVertex3fv;
+static gl_texcoord_t real_glTexCoord2f;
+static gl_color4_t real_glColor4f;
 
 #define MAX_MODELS 4
 
@@ -76,11 +85,46 @@ static struct
 	GLdouble plane[MAX_MODELS][4];
 	int has_plane[MAX_MODELS];
 	int mirror[MAX_MODELS];
+	const int (*hide[MAX_MODELS])[2];
+	int hide_count[MAX_MODELS];
 	int on;        /* the clip plane is on */
 	int counting;  /* a mirrored model's rotations are being counted */
 	int rotates;
 	int mirrored;  /* the mirror is in the matrix and the winding swapped */
+	int hiding;    /* the model being drawn has parts left out: its entry, plus one */
 } models;
+
+/*
+ * Leaving parts of a model out. SiN's model drawer (ref_gl+0x18420) sends each
+ * strip or fan of triangles as glBegin, then per vertex glTexCoord2f, glColor4f
+ * and glVertex3fv, then glEnd - and the vertex it passes is a pointer into its
+ * own array of the frame's vertices, 16 bytes each, in the model's numbering:
+ * the lea at ref_gl+0x18A58 names the array. So while a model with parts to
+ * hide is drawn, each strip is held back until its glEnd, and sent on only if
+ * one of its vertices is not among them.
+ */
+#define LERP_ARRAY_RVA 0x18A58 /* lea eax, [edx + the array] */
+#define LERP_STRIDE 16
+#define LERP_VERTICES 4096
+#define STRIP_MAX 512
+
+static const BYTE *lerp_array;
+
+static struct
+{
+	GLenum mode;
+	int open;       /* between a held-back glBegin and its glEnd */
+	int passing;    /* too long to hold: the rest goes straight through */
+	int count;
+	int hidden;     /* how many of them are among the parts left out */
+	int has_st, has_colour;
+	GLfloat st[2], colour[4];
+	struct
+	{
+		GLfloat st[2], colour[4], xyz[3];
+		int has_st, has_colour;
+	} v[STRIP_MAX];
+} strip;
 
 /* The entry for the model at origin, adding one if it is new. -1 if there is
    no room left this frame. */
@@ -106,6 +150,8 @@ static int model_at(const float origin[3])
 	memcpy(models.origin[models.count], origin, sizeof(models.origin[0]));
 	models.has_plane[models.count] = 0;
 	models.mirror[models.count] = 0;
+	models.hide[models.count] = NULL;
+	models.hide_count[models.count] = 0;
 	return models.count++;
 }
 
@@ -136,16 +182,195 @@ void vr_gl_mirror_model_at(const float origin[3])
 	}
 }
 
+void vr_gl_hide_model_parts_at(const float origin[3], const int (*ranges)[2], int count)
+{
+	int at;
+
+	if (!lerp_array || !ranges || count <= 0)
+	{
+		return;
+	}
+
+	at = model_at(origin);
+	if (at >= 0)
+	{
+		models.hide[at] = ranges;
+		models.hide_count[at] = count;
+	}
+}
+
+int vr_gl_can_hide_parts(void)
+{
+	return lerp_array && real_glBegin && real_glEnd && real_glVertex3fv && real_glTexCoord2f && real_glColor4f;
+}
+
 void vr_gl_clear_models(void)
 {
 	models.count = 0;
+}
+
+/* Whether the vertex ref_gl points at is one of the model's parts left out. */
+static int vertex_hidden(const GLfloat *v)
+{
+	const int (*ranges)[2] = models.hide[models.hiding - 1];
+	int count = models.hide_count[models.hiding - 1];
+	DWORD_PTR offset;
+	int index, i;
+
+	if ((const BYTE *)v < lerp_array)
+	{
+		return 0;
+	}
+	offset = (const BYTE *)v - lerp_array;
+	if (offset % LERP_STRIDE != 0 || offset / LERP_STRIDE >= LERP_VERTICES)
+	{
+		return 0;
+	}
+
+	index = (int)(offset / LERP_STRIDE);
+	for (i = 0; i < count; ++i)
+	{
+		if (index >= ranges[i][0] && index <= ranges[i][1])
+		{
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/* The strip held back so far, sent on as ref_gl sent it. */
+static void send_strip(void)
+{
+	int i;
+
+	real_glBegin(strip.mode);
+	for (i = 0; i < strip.count; ++i)
+	{
+		if (strip.v[i].has_st)
+		{
+			real_glTexCoord2f(strip.v[i].st[0], strip.v[i].st[1]);
+		}
+		if (strip.v[i].has_colour)
+		{
+			real_glColor4f(strip.v[i].colour[0], strip.v[i].colour[1], strip.v[i].colour[2],
+				strip.v[i].colour[3]);
+		}
+		real_glVertex3fv(strip.v[i].xyz);
+	}
+}
+
+static void APIENTRY hook_glBegin(GLenum mode)
+{
+	if (!models.hiding)
+	{
+		real_glBegin(mode);
+		return;
+	}
+
+	strip.mode = mode;
+	strip.open = 1;
+	strip.passing = 0;
+	strip.count = 0;
+	strip.hidden = 0;
+	strip.has_st = 0;
+	strip.has_colour = 0;
+}
+
+static void APIENTRY hook_glTexCoord2f(GLfloat s, GLfloat t)
+{
+	if (!strip.open || strip.passing)
+	{
+		real_glTexCoord2f(s, t);
+		return;
+	}
+
+	strip.st[0] = s;
+	strip.st[1] = t;
+	strip.has_st = 1;
+}
+
+static void APIENTRY hook_glColor4f(GLfloat r, GLfloat g, GLfloat b, GLfloat a)
+{
+	if (!strip.open || strip.passing)
+	{
+		real_glColor4f(r, g, b, a);
+		return;
+	}
+
+	strip.colour[0] = r;
+	strip.colour[1] = g;
+	strip.colour[2] = b;
+	strip.colour[3] = a;
+	strip.has_colour = 1;
+}
+
+static void APIENTRY hook_glVertex3fv(const GLfloat *v)
+{
+	int i;
+
+	if (!strip.open || strip.passing)
+	{
+		real_glVertex3fv(v);
+		return;
+	}
+
+	if (strip.count >= STRIP_MAX)
+	{
+		/* Longer than any model's: whatever it is, it is drawn. */
+		send_strip();
+		strip.passing = 1;
+		real_glVertex3fv(v);
+		return;
+	}
+
+	i = strip.count++;
+	memcpy(strip.v[i].st, strip.st, sizeof(strip.st));
+	memcpy(strip.v[i].colour, strip.colour, sizeof(strip.colour));
+	memcpy(strip.v[i].xyz, v, sizeof(strip.v[i].xyz));
+	strip.v[i].has_st = strip.has_st;
+	strip.v[i].has_colour = strip.has_colour;
+	strip.has_st = 0;
+	strip.has_colour = 0;
+	strip.hidden += vertex_hidden(v);
+}
+
+static void APIENTRY hook_glEnd(void)
+{
+	if (!strip.open)
+	{
+		real_glEnd();
+		return;
+	}
+
+	strip.open = 0;
+	if (strip.passing)
+	{
+		real_glEnd();
+		return;
+	}
+
+	/* Every vertex among the parts left out: the whole strip is. The colour
+	   and texture coordinate it would have left set go on regardless. */
+	if (strip.count > 0 && strip.hidden == strip.count)
+	{
+		if (strip.count && strip.v[strip.count - 1].has_colour)
+		{
+			const GLfloat *c = strip.v[strip.count - 1].colour;
+
+			real_glColor4f(c[0], c[1], c[2], c[3]);
+		}
+		return;
+	}
+
+	send_strip();
+	real_glEnd();
 }
 
 static void APIENTRY hook_glTranslatef(GLfloat x, GLfloat y, GLfloat z)
 {
 	int i;
 
-	if (eye.active && !models.on && !models.counting && !models.mirrored)
+	if (eye.active && !models.on && !models.counting && !models.mirrored && !models.hiding)
 	{
 		for (i = 0; i < models.count; ++i)
 		{
@@ -162,6 +387,10 @@ static void APIENTRY hook_glTranslatef(GLfloat x, GLfloat y, GLfloat z)
 				{
 					models.counting = 1;
 					models.rotates = 0;
+				}
+				if (models.hide[i] && vr_gl_can_hide_parts())
+				{
+					models.hiding = i + 1;
 				}
 				break;
 			}
@@ -199,6 +428,17 @@ static void end_model(void)
 		models.mirrored = 0;
 	}
 	models.counting = 0;
+	models.hiding = 0;
+	if (strip.open)
+	{
+		/* not expected: a model ends inside a strip */
+		strip.open = 0;
+		if (!strip.passing)
+		{
+			send_strip();
+		}
+		real_glEnd();
+	}
 }
 
 static void APIENTRY hook_glPopMatrix(void)
@@ -496,6 +736,31 @@ static FARPROC WINAPI hook_GetProcAddress(HMODULE module, LPCSTR name)
 		real_glPopMatrix = (gl_void_t)proc;
 		return (FARPROC)hook_glPopMatrix;
 	}
+	if (strcmp(name, "glBegin") == 0)
+	{
+		real_glBegin = (gl_enum_t)proc;
+		return (FARPROC)hook_glBegin;
+	}
+	if (strcmp(name, "glEnd") == 0)
+	{
+		real_glEnd = (gl_void_t)proc;
+		return (FARPROC)hook_glEnd;
+	}
+	if (strcmp(name, "glVertex3fv") == 0)
+	{
+		real_glVertex3fv = (gl_vertex_t)proc;
+		return (FARPROC)hook_glVertex3fv;
+	}
+	if (strcmp(name, "glTexCoord2f") == 0)
+	{
+		real_glTexCoord2f = (gl_texcoord_t)proc;
+		return (FARPROC)hook_glTexCoord2f;
+	}
+	if (strcmp(name, "glColor4f") == 0)
+	{
+		real_glColor4f = (gl_color4_t)proc;
+		return (FARPROC)hook_glColor4f;
+	}
 	if (strcmp(name, "glOrtho") == 0)
 	{
 		real_glOrtho = (gl_frustum_t)proc;
@@ -517,10 +782,19 @@ static FARPROC WINAPI hook_GetProcAddress(HMODULE module, LPCSTR name)
 
 int vr_gl_hook_refgl(HMODULE refgl)
 {
+	static const BYTE lea_eax_edx[] = { 0x8D, 0x82 };
+
 	if (!vr_hook_import(refgl, "KERNEL32.dll", "GetProcAddress", (void *)hook_GetProcAddress, NULL))
 	{
 		vr_printf("could not hook ref_gl.dll's GL lookups - stereo will not work");
 		return 0;
+	}
+
+	lerp_array = (const BYTE *)vr_hook_data_address(refgl, LERP_ARRAY_RVA, lea_eax_edx, sizeof(lea_eax_edx));
+	if (!lerp_array)
+	{
+		vr_printf("this ref_gl.dll is not the build the weapon code knows - the arm modelled on a "
+			"weapon will stay on it");
 	}
 
 	return 1;

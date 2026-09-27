@@ -42,6 +42,14 @@
  * for the weapons held in one hand. A line along the barrel from the hand is
  * what makes the weapon point where the two hands do; the player can move it
  * in the headset.
+ *
+ * arm is the left arm and hand SiN built into the model - sleeve and glove,
+ * reaching in from the side to the fore-end - as runs of the model's vertices,
+ * first and last. They are all one mesh with the weapon, so they are left out
+ * as ref_gl draws them (vr_gl.c); the player's own other hand is drawn instead.
+ * Found by splitting each model into its connected pieces and picking the ones
+ * in the sleeve's and glove's colours, each checked by eye (docs/ENGINE_NOTES.md).
+ * The magnum's and the mines' modelled hand is the gun hand, and stays.
  */
 typedef struct
 {
@@ -50,24 +58,45 @@ typedef struct
 	float scale;
 	int two_arms;
 	float fore;
+	int arm_count;
+	int arm[2][2];
 } weapon_info_t;
 
 static const weapon_info_t weapon_table[] = {
 	{ "punch",     { 18.5f, -11.0f, -10.0f }, 0.50f, 1, 0.0f },
 	{ "magnum",    { 53.0f, -36.0f, -31.0f }, 0.35f, 0, 0.0f },
-	{ "shotgun",   {  8.0f, -14.0f, -15.0f }, 0.60f, 0, 0.30f },
-	{ "asrifle",   { 37.0f, -21.0f, -30.0f }, 0.35f, 0, 0.30f },
-	{ "hvgun",     { 30.0f, -25.0f, -38.0f }, 0.35f, 0, 0.30f },
-	{ "rlaunch",   { 28.0f, -24.0f, -36.0f }, 0.35f, 0, 0.30f },
-	{ "srifle",    { 15.0f, -13.0f, -14.0f }, 0.35f, 0, 0.35f },
-	{ "pulse2",    { 25.0f, -18.0f, -30.0f }, 0.35f, 0, 0.30f },
+	{ "shotgun",   {  8.0f, -14.0f, -15.0f }, 0.60f, 0, 0.30f, 1, { { 30, 95 } } },
+	{ "asrifle",   { 37.0f, -21.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 276, 308 } } },
+	{ "hvgun",     { 30.0f, -25.0f, -38.0f }, 0.35f, 0, 0.30f, 2, { { 200, 309 }, { 358, 405 } } },
+	{ "rlaunch",   { 28.0f, -24.0f, -36.0f }, 0.35f, 0, 0.30f, 1, { { 146, 218 } } },
+	{ "srifle",    { 15.0f, -13.0f, -14.0f }, 0.35f, 0, 0.35f, 1, { { 249, 306 } } },
+	{ "pulse2",    { 25.0f, -18.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 358, 393 } } },
 	{ "quantum",   { 20.0f, -30.0f, -40.0f }, 0.30f, 0, 0.35f },
-	{ "spgun",     { 30.0f, -15.0f, -30.0f }, 0.35f, 0, 0.30f },
+	{ "spgun",     { 30.0f, -15.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 217, 259 } } },
 	{ "mines",     { 36.0f, -22.0f, -18.0f }, 0.35f, 0, 0.0f },
 	{ "detonator", { 15.0f,  -5.0f, -12.0f }, 0.40f, 0, 0.0f }
 };
 
 static const weapon_info_t weapon_other = { NULL, { 30.0f, -20.0f, -25.0f }, 0.35f, 0, 0.30f };
+
+/*
+ * The other hand is drawn with the fists' model, the arm for that hand only,
+ * held still on the first frame of its idle - a model's animations are
+ * numbered in alphabetical order of their names, not the order the .def gives
+ * them, so view_punch.def's fire1-fire5 are 0-4 and idle1 is 5 (the fists came
+ * up as 9, ready1, and the magnum's ready, putaway and reload as 4, 3 and 5,
+ * which only that order explains) - and placed the way
+ * vr_grip_punch or vr_grip_punch_left has it, so a fist settled for punching
+ * looks the same holding a rifle.
+ */
+#define FIST_MODEL "models/view_punch.def"
+#define FIST_IDLE_ANIM 5
+#define NEW_ENTITY_ID 0x1E61 /* V_AddEntity gives an entity with this id a fresh one of its own */
+
+static void *fist_model;
+static int said_other_hand;
+static float fist_origin[3];   /* where the other hand's fist was put this frame */
+static int fist_placed;
 
 typedef struct
 {
@@ -91,6 +120,8 @@ static cvar_t *vr_freeze_idle;
 static cvar_t *vr_punch;
 static cvar_t *vr_punch_speed;
 static cvar_t *vr_two_hand;
+static cvar_t *vr_other_hand;
+static cvar_t *vr_weapon_arm;
 static cvar_t *vr_aim;
 
 /* Read once, at start-up: the buttons are attached to the session with the
@@ -222,6 +253,15 @@ static int weapon_key(const entity_t *e, char *key, size_t size)
 	return 1;
 }
 
+void vr_weapon_register_models(void *(*register_model)(const char *name))
+{
+	fist_model = register_model ? register_model(FIST_MODEL) : NULL;
+	if (!fist_model)
+	{
+		vrlog("VR: %s would not load - the other hand will not be drawn", FIST_MODEL);
+	}
+}
+
 void vr_weapon_startup(void)
 {
 	int i;
@@ -236,6 +276,8 @@ void vr_weapon_startup(void)
 	vr_punch = vr_cvar("vr_punch", "1", CVAR_ARCHIVE);
 	vr_punch_speed = vr_cvar("vr_punch_speed", "2", CVAR_ARCHIVE);
 	vr_two_hand = vr_cvar("vr_two_hand", "1", CVAR_ARCHIVE);
+	vr_other_hand = vr_cvar("vr_other_hand", "1", CVAR_ARCHIVE);
+	vr_weapon_arm = vr_cvar("vr_weapon_arm", "0", CVAR_ARCHIVE);
 	vr_aim = vr_cvar("vr_aim", "1", 0);
 	lefty = vr_left_handed->value != 0.0f;
 	if (lefty)
@@ -1028,6 +1070,7 @@ void vr_weapon_end_frame(void)
 	world_aim_valid = 0;
 	base_valid = 0;
 	fore_valid = 0;
+	fist_placed = 0;
 	vr_gl_clear_models();
 }
 
@@ -1193,6 +1236,76 @@ static void keep_one_arm(const entity_t *e, int hand)
 	vr_gl_clip_model_at(e->origin, plane);
 }
 
+/* The arm built into the weapon's model, left out unless vr_weapon_arm says
+   otherwise. */
+static void hide_modelled_arm(const entity_t *gun)
+{
+	if (current && current->info->arm_count > 0 && (!vr_weapon_arm || vr_weapon_arm->value == 0.0f))
+	{
+		vr_gl_hide_model_parts_at(gun->origin, current->info->arm, current->info->arm_count);
+	}
+}
+
+/*
+ * The hand that is not holding the weapon, as the fists' arm for it: out is
+ * filled from the weapon's entity, with the fists' model, and placed. Returns 0
+ * when there is nothing to draw - no fists model, the fists themselves out
+ * (they have both arms), or that hand not tracked.
+ */
+static int dress_other_hand(entity_t *out, const entity_t *gun, const float vieworg[3], float yaw)
+{
+	int hand = other_hand();
+	weapon_t *fists;
+	placement_t p;
+	vr_pose_t relative;
+
+	if (!fist_model || (vr_other_hand && vr_other_hand->value == 0.0f) || !current || two_arms() ||
+		!hands[hand].valid)
+	{
+		return 0;
+	}
+
+	fists = find_weapon("punch");
+	if (!fists)
+	{
+		return 0;
+	}
+	grip_setting(fists, hand, &relative, &p.scale);
+	vr_pose_compose(&hands[hand].frame, &relative, &p.pose);
+	p.valid = 1;
+
+	*out = *gun;
+	out->model = fist_model;
+	out->anim = FIST_IDLE_ANIM;
+	out->frame = 0;
+	out->oldframe = 0;
+	out->backlerp = 0.0f;
+	out->skinnum = 0;
+	out->skin = NULL;
+	out->id = NEW_ENTITY_ID;
+	memset(out->unknown_70, 0, sizeof(out->unknown_70));
+	memset(out->groups, 0, sizeof(out->groups));
+	put_in_hand(out, &p, vieworg, yaw);
+	keep_one_arm(out, hand);
+	memcpy(fist_origin, out->origin, sizeof(fist_origin));
+	fist_placed = 1;
+	if (!said_other_hand)
+	{
+		said_other_hand = 1;
+		vrlog("VR: the other hand is drawn as %s at (%.1f %.1f %.1f), size %.2f, flags 0x%x",
+			(const char *)fist_model, out->origin[0], out->origin[1], out->origin[2], out->scale, out->flags);
+	}
+	return 1;
+}
+
+/* The other hand's fist carries the weapon's flags, so it is told apart by
+   where it was put. */
+static int is_other_hand(const entity_t *e)
+{
+	return fist_placed && e->model == fist_model && fabsf(e->origin[0] - fist_origin[0]) < 0.01f &&
+		fabsf(e->origin[1] - fist_origin[1]) < 0.01f && fabsf(e->origin[2] - fist_origin[2]) < 0.01f;
+}
+
 /* Notes which weapon this is, and says so when it changes. */
 static void see_weapon(const entity_t *e)
 {
@@ -1214,8 +1327,8 @@ static void see_weapon(const entity_t *e)
 	{
 		current = w;
 		steady.active = 0;
-		vrlog("VR: the view weapon is now %s (%s)", (const char *)e->model,
-			w->info == &weapon_other ? "no measurements - a general guess" : "measured");
+		vrlog("VR: the view weapon is now %s (%s), animation %d frame %d", (const char *)e->model,
+			w->info == &weapon_other ? "no measurements - a general guess" : "measured", e->anim, e->frame);
 	}
 }
 
@@ -1327,7 +1440,17 @@ static void __fastcall add_view_weapon(entity_t *gun)
 	{
 		vr_gl_mirror_model_at(gun->origin);
 	}
+	hide_modelled_arm(gun);
 	real_add_entity(gun);
+
+	{
+		entity_t fist;
+
+		if (dress_other_hand(&fist, gun, sin_vieworg, yaw))
+		{
+			real_add_entity(&fist);
+		}
+	}
 
 	/* The entity goes on to the model's client commands from here. */
 	keep_client_bullets = !wants_server_bullets();
@@ -1448,7 +1571,7 @@ void vr_weapon_to_hand(refdef_t *fd)
 
 	for (i = 0; i < fd->num_entities; ++i)
 	{
-		if (fd->entities[i].flags & RF_WEAPONMODEL)
+		if ((fd->entities[i].flags & RF_WEAPONMODEL) && !is_other_hand(&fd->entities[i]))
 		{
 			gun = &fd->entities[i];
 			see_weapon(gun);
@@ -1464,20 +1587,41 @@ void vr_weapon_to_hand(refdef_t *fd)
 
 	count = fd->num_entities;
 	vr_gl_clear_models();
-	if (two_arms() && placed[other_hand()].valid && count < MAX_FRAME_ENTITIES)
+	if (count < MAX_FRAME_ENTITIES)
 	{
 		/* The engine's list is its own, and full size is not known, so the
-		   second arm goes into a copy of it, for this eye only. */
-		memcpy(frame_entities, fd->entities, count * sizeof(entity_t));
-		gun = &frame_entities[gun - fd->entities];
-		frame_entities[count] = *gun;
-		put_in_hand(&frame_entities[count], &placed[other_hand()], fd->vieworg, fd->viewangles[YAW]);
-		keep_one_arm(&frame_entities[count], other_hand());
+		   other hand goes into a copy of it, for this eye only: the fists'
+		   second arm, or the fist of the hand without the weapon. */
+		entity_t other;
+		int extra = 0;
 
-		engine_entities = fd->entities;
-		engine_entity_count = fd->num_entities;
-		fd->entities = frame_entities;
-		fd->num_entities = count + 1;
+		if (two_arms() && placed[other_hand()].valid)
+		{
+			other = *gun;
+			put_in_hand(&other, &placed[other_hand()], fd->vieworg, fd->viewangles[YAW]);
+			keep_one_arm(&other, other_hand());
+			extra = 1;
+		}
+		else
+		{
+			entity_t placed_gun = *gun;
+
+			put_in_hand(&placed_gun, &placed[gun_hand()], fd->vieworg, fd->viewangles[YAW]);
+			extra = dress_other_hand(&other, &placed_gun, fd->vieworg, fd->viewangles[YAW]);
+			other.id = 0x1F000001; /* nothing is attached to it: an id nothing else has */
+		}
+
+		if (extra)
+		{
+			memcpy(frame_entities, fd->entities, count * sizeof(entity_t));
+			gun = &frame_entities[gun - fd->entities];
+			frame_entities[count] = other;
+
+			engine_entities = fd->entities;
+			engine_entity_count = fd->num_entities;
+			fd->entities = frame_entities;
+			fd->num_entities = count + 1;
+		}
 	}
 
 	put_in_hand(gun, &placed[gun_hand()], fd->vieworg, fd->viewangles[YAW]);
@@ -1489,6 +1633,7 @@ void vr_weapon_to_hand(refdef_t *fd)
 	{
 		vr_gl_mirror_model_at(gun->origin);
 	}
+	hide_modelled_arm(gun);
 	placed_this_frame = 1;
 	say_placed("moved in the renderer");
 }

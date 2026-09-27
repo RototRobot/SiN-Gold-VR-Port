@@ -47,9 +47,16 @@
 #include "refapi.h"
 
 /* Registers the cvars: vr_weapon_hand, vr_left_handed, vr_show_hands,
-   vr_freeze_idle, vr_punch, vr_punch_speed, vr_two_hand, vr_grip_<weapon>,
-   vr_fore_<weapon>, vr_weapon_reset. */
+   vr_freeze_idle, vr_punch, vr_punch_speed, vr_two_hand, vr_other_hand,
+   vr_weapon_arm, vr_grip_<weapon>, vr_fore_<weapon>, vr_weapon_reset. */
 void vr_weapon_startup(void);
+
+/*
+ * At the end of each registration - a level loading, or vid_restart - before
+ * ref_gl frees what was not asked for: the fists' model, which the hand without
+ * the weapon is drawn with. register_model is ref_gl's own RegisterModel.
+ */
+void vr_weapon_register_models(void *(*register_model)(const char *name));
 
 /*
  * Whether the player is left-handed, as vr_left_handed said when the renderer

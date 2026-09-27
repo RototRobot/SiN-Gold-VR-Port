@@ -43,6 +43,7 @@ typedef void (*re_render_frame_t)(refdef_t *fd);
 typedef void (*re_draw_fade_screen_t)(float red, float green, float blue, float alpha);
 typedef void (*re_draw_pic_t)(int x, int y, const char *name);
 typedef void (*re_draw_stretch_pic_t)(int x, int y, int width, int height, const char *name);
+typedef void *(*re_register_model_t)(const char *name);
 typedef void (*con_printf_t)(int print_level, const char *fmt, ...);
 typedef cvar_t *(*cvar_get_t)(const char *name, const char *value, int flags);
 typedef cvar_t *(*cvar_set_t)(const char *name, const char *value);
@@ -1001,6 +1002,19 @@ static void vr_DrawFadeScreen(float red, float green, float blue, float alpha)
 	vr_gl_full_screen_2d(0);
 }
 
+/* Everything the level asked for is in; the fists go in too, for the hand
+   without the weapon, before ref_gl lets go of whatever was not asked for. */
+static void vr_EndRegistration(void)
+{
+	record_call(RE_END_REGISTRATION);
+
+	if (vr_enable && vr_enable->value != 0.0f)
+	{
+		vr_weapon_register_models((re_register_model_t)g_real_slot[RE_REGISTER_MODEL]);
+	}
+	((re_void_t)g_real_slot[RE_END_REGISTRATION])();
+}
+
 static void vr_EndFrame(void)
 {
 	record_call(RE_END_FRAME);
@@ -1126,6 +1140,7 @@ refexport_t GetRefAPI(refimport_t imports)
 	g_ours.slot[RE_BEGIN_FRAME] = (void *)vr_BeginFrame;
 	g_ours.slot[RE_RENDER_FRAME] = (void *)vr_RenderFrame;
 	g_ours.slot[RE_END_FRAME] = (void *)vr_EndFrame;
+	g_ours.slot[RE_END_REGISTRATION] = (void *)vr_EndRegistration;
 	g_ours.slot[RE_DRAW_FADE_SCREEN] = (void *)vr_DrawFadeScreen;
 	g_ours.slot[RE_DRAW_PIC] = (void *)vr_DrawPic;
 	g_ours.slot[RE_DRAW_STRETCH_PIC] = (void *)vr_DrawStretchPic;

@@ -85,6 +85,19 @@ void vr_gl_clip_model_at(const float origin[3], const float plane[4]);
  */
 void vr_gl_mirror_model_at(const float origin[3]);
 
+/*
+ * Draws the model placed at origin without the parts made only of the given
+ * vertices: count pairs of the first and last vertex of a run, numbered as the
+ * model's own files number them, which is how ref_gl draws them. That is how
+ * the arm SiN built into a weapon's model, all one mesh with the weapon, is
+ * left out. The ranges must stay valid until the frame is over.
+ */
+void vr_gl_hide_model_parts_at(const float origin[3], const int (*ranges)[2], int count);
+
+/* Whether ref_gl is the build whose vertices vr_gl_hide_model_parts_at can
+   recognise. */
+int vr_gl_can_hide_parts(void);
+
 /* Up to four models a frame between them; this forgets them all. */
 void vr_gl_clear_models(void);
 
