@@ -193,19 +193,33 @@ static const binding_t bindings_simple[] = {
 	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" }
 };
 
+/*
+ * What a left-handed swap has to know about a controller's two halves: the
+ * lettered buttons, X and Y on the left and A and B on the right, are not the
+ * same buttons under another name on the other hand - asking for a right X
+ * gets the whole table refused (XR_ERROR_PATH_UNSUPPORTED), and SteamVR then
+ * falls back on a layout of its own, trigger and all. So swapped, X becomes A
+ * and Y becomes B, and back. Some controllers have a menu button on the left
+ * only; swapped onto the right, that binding is left out.
+ */
+#define SWAP_LETTERS   0x1
+#define MENU_LEFT_ONLY 0x2
+
 typedef struct
 {
 	const char *profile;
 	const binding_t *bindings;
 	int count;
+	int halves;
 } profile_t;
 
 static const profile_t profiles[] = {
-	{ "/interaction_profiles/hp/mixed_reality_controller", bindings_hp, ARRAY_COUNT(bindings_hp) },
-	{ "/interaction_profiles/microsoft/motion_controller", bindings_wmr, ARRAY_COUNT(bindings_wmr) },
-	{ "/interaction_profiles/oculus/touch_controller", bindings_touch, ARRAY_COUNT(bindings_touch) },
-	{ "/interaction_profiles/valve/index_controller", bindings_index, ARRAY_COUNT(bindings_index) },
-	{ "/interaction_profiles/khr/simple_controller", bindings_simple, ARRAY_COUNT(bindings_simple) }
+	{ "/interaction_profiles/hp/mixed_reality_controller", bindings_hp, ARRAY_COUNT(bindings_hp), SWAP_LETTERS },
+	{ "/interaction_profiles/microsoft/motion_controller", bindings_wmr, ARRAY_COUNT(bindings_wmr), 0 },
+	{ "/interaction_profiles/oculus/touch_controller", bindings_touch, ARRAY_COUNT(bindings_touch),
+		SWAP_LETTERS | MENU_LEFT_ONLY },
+	{ "/interaction_profiles/valve/index_controller", bindings_index, ARRAY_COUNT(bindings_index), 0 },
+	{ "/interaction_profiles/khr/simple_controller", bindings_simple, ARRAY_COUNT(bindings_simple), 0 }
 };
 
 static const char *const key_names[VR_KEY_COUNT] = { "up", "down", "left", "right", "enter", "escape", "space" };
@@ -361,11 +375,14 @@ static XrPath string_to_path(XrInstance instance, const char *string)
  * right hand did, the left does. The poses keep their own hands, and anything
  * that is not on a hand at all is left alone.
  */
-static const char *for_hand(const char *path, action_kind_t kind, char *buffer, size_t size)
+/* The same button on the other hand, or NULL if that hand has none. */
+static const char *for_hand(const char *path, action_kind_t kind, int halves, char *buffer, size_t size)
 {
 	static const char left[] = "/user/hand/left/";
 	static const char right[] = "/user/hand/right/";
+	static const char *const letters[][2] = { { "input/x/", "input/a/" }, { "input/y/", "input/b/" } };
 	const char *head, *tail;
+	int i;
 
 	if (kind == KIND_POSE || !vr_weapon_left_handed())
 	{
@@ -394,6 +411,30 @@ static const char *for_hand(const char *path, action_kind_t kind, char *buffer, 
 
 	strcpy(buffer, head);
 	strcat(buffer, tail);
+
+	if (halves & SWAP_LETTERS)
+	{
+		/* left X is right A, left Y right B */
+		int to_right = head == right;
+
+		for (i = 0; i < ARRAY_COUNT(letters); ++i)
+		{
+			const char *from = letters[i][to_right ? 0 : 1];
+			const char *to = letters[i][to_right ? 1 : 0];
+
+			if (strncmp(tail, from, strlen(from)) == 0)
+			{
+				strcpy(buffer, head);
+				strcat(buffer, to);
+				strcat(buffer, tail + strlen(from));
+			}
+		}
+	}
+
+	if ((halves & MENU_LEFT_ONLY) && strcmp(buffer, "/user/hand/right/input/menu/click") == 0)
+	{
+		return NULL;
+	}
 	return buffer;
 }
 
@@ -409,8 +450,8 @@ static void suggest_profile(XrInstance instance, const profile_t *profile)
 	{
 		char swapped[96];
 		const char *string = for_hand(profile->bindings[i].path,
-			actions[profile->bindings[i].action].kind, swapped, sizeof(swapped));
-		XrPath path = string_to_path(instance, string);
+			actions[profile->bindings[i].action].kind, profile->halves, swapped, sizeof(swapped));
+		XrPath path = string ? string_to_path(instance, string) : XR_NULL_PATH;
 
 		if (path == XR_NULL_PATH)
 		{
@@ -436,6 +477,10 @@ static void suggest_profile(XrInstance instance, const profile_t *profile)
 	if (XR_FAILED(result))
 	{
 		vrlog("VR: the runtime would not take bindings for %s (%d)", profile->profile, (int)result);
+	}
+	else
+	{
+		vrlog("VR: bindings suggested for %s", profile->profile);
 	}
 }
 
