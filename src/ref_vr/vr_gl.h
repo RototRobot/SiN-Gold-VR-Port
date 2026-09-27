@@ -94,8 +94,17 @@ void vr_gl_mirror_model_at(const float origin[3]);
  */
 void vr_gl_hide_model_parts_at(const float origin[3], const int (*ranges)[2], int count);
 
+/*
+ * Draws the model placed at origin with its missing side filled in: a view
+ * model was built to be seen from the left and above, and most of its right
+ * side was never made. Each triangle facing left, on the left of the plane
+ * y = middle (in the model's own frame, at the size it is drawn), is drawn a
+ * second time reflected across that plane, turned to face right.
+ */
+void vr_gl_fill_model_at(const float origin[3], float middle);
+
 /* Whether ref_gl is the build whose vertices vr_gl_hide_model_parts_at can
-   recognise. */
+   recognise - and whose strips vr_gl_fill_model_at can copy. */
 int vr_gl_can_hide_parts(void);
 
 /* Up to four models a frame between them; this forgets them all. */

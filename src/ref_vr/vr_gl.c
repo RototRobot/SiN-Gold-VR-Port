@@ -87,6 +87,8 @@ static struct
 	int mirror[MAX_MODELS];
 	const int (*hide[MAX_MODELS])[2];
 	int hide_count[MAX_MODELS];
+	int fill[MAX_MODELS];
+	float middle[MAX_MODELS];
 	int on;        /* the clip plane is on */
 	int counting;  /* a mirrored model's rotations are being counted */
 	int rotates;
@@ -152,6 +154,7 @@ static int model_at(const float origin[3])
 	models.mirror[models.count] = 0;
 	models.hide[models.count] = NULL;
 	models.hide_count[models.count] = 0;
+	models.fill[models.count] = 0;
 	return models.count++;
 }
 
@@ -199,6 +202,23 @@ void vr_gl_hide_model_parts_at(const float origin[3], const int (*ranges)[2], in
 	}
 }
 
+void vr_gl_fill_model_at(const float origin[3], float middle)
+{
+	int at;
+
+	if (!lerp_array)
+	{
+		return;
+	}
+
+	at = model_at(origin);
+	if (at >= 0)
+	{
+		models.fill[at] = 1;
+		models.middle[at] = middle;
+	}
+}
+
 int vr_gl_can_hide_parts(void)
 {
 	return lerp_array && real_glBegin && real_glEnd && real_glVertex3fv && real_glTexCoord2f && real_glColor4f;
@@ -217,7 +237,7 @@ static int vertex_hidden(const GLfloat *v)
 	DWORD_PTR offset;
 	int index, i;
 
-	if ((const BYTE *)v < lerp_array)
+	if (!ranges || (const BYTE *)v < lerp_array)
 	{
 		return 0;
 	}
@@ -256,6 +276,93 @@ static void send_strip(void)
 				strip.v[i].colour[3]);
 		}
 		real_glVertex3fv(strip.v[i].xyz);
+	}
+}
+
+/*
+ * The strip just sent, its left-facing triangles again, reflected across the
+ * model's middle. The strip's triangles are taken the way GL takes them - a
+ * fan about its first vertex, a strip turning every other one round - and a
+ * reflection turns a triangle inside out, so each is sent in the reverse
+ * order to face the other way. Which way is left: SiN's models are wound
+ * clockwise, so a triangle facing +y has a normal, by the right-hand rule,
+ * pointing -y; measured over the models, the fists come out even and every
+ * weapon several times over on that side (docs/ENGINE_NOTES.md).
+ */
+static void fill_strip(float middle)
+{
+	int k, sent = 0;
+
+	for (k = 2; k < strip.count; ++k)
+	{
+		int a, b, c, j;
+		const GLfloat *p, *q, *r;
+		float n_x, n_y, n_z, centre_y;
+
+		if (strip.mode == GL_TRIANGLE_FAN)
+		{
+			a = 0, b = k - 1, c = k;
+		}
+		else if (strip.mode == GL_TRIANGLE_STRIP)
+		{
+			a = (k & 1) ? k - 1 : k - 2;
+			b = (k & 1) ? k - 2 : k - 1;
+			c = k;
+		}
+		else
+		{
+			return;
+		}
+
+		p = strip.v[a].xyz;
+		q = strip.v[b].xyz;
+		r = strip.v[c].xyz;
+		n_x = (q[1] - p[1]) * (r[2] - p[2]) - (q[2] - p[2]) * (r[1] - p[1]);
+		n_y = (q[2] - p[2]) * (r[0] - p[0]) - (q[0] - p[0]) * (r[2] - p[2]);
+		n_z = (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+		centre_y = (p[1] + q[1] + r[1]) / 3.0f;
+
+		/* Facing left - within 60 degrees of it: the top and the underside
+		   were built across the middle already, and a copy of them only lies
+		   on top of the real thing - and on the left of the middle. */
+		if (n_y >= 0.0f || n_y * n_y < 0.25f * (n_x * n_x + n_y * n_y + n_z * n_z) || centre_y <= middle)
+		{
+			continue;
+		}
+
+		if (!sent)
+		{
+			real_glBegin(GL_TRIANGLES);
+			sent = 1;
+		}
+		{
+			const int order[3] = { a, c, b };
+
+			for (j = 0; j < 3; ++j)
+			{
+				const int i = order[j];
+				GLfloat xyz[3];
+
+				if (strip.v[i].has_st)
+				{
+					real_glTexCoord2f(strip.v[i].st[0], strip.v[i].st[1]);
+				}
+				if (strip.v[i].has_colour)
+				{
+					real_glColor4f(strip.v[i].colour[0], strip.v[i].colour[1], strip.v[i].colour[2],
+						strip.v[i].colour[3]);
+				}
+				xyz[0] = strip.v[i].xyz[0];
+				xyz[1] = 2.0f * middle - strip.v[i].xyz[1];
+				xyz[2] = strip.v[i].xyz[2];
+				real_glVertex3fv(xyz);
+			}
+		}
+	}
+
+	if (sent)
+	{
+		real_glEnd();
 	}
 }
 
@@ -364,6 +471,11 @@ static void APIENTRY hook_glEnd(void)
 
 	send_strip();
 	real_glEnd();
+
+	if (models.fill[models.hiding - 1])
+	{
+		fill_strip(models.middle[models.hiding - 1]);
+	}
 }
 
 static void APIENTRY hook_glTranslatef(GLfloat x, GLfloat y, GLfloat z)
@@ -388,7 +500,7 @@ static void APIENTRY hook_glTranslatef(GLfloat x, GLfloat y, GLfloat z)
 					models.counting = 1;
 					models.rotates = 0;
 				}
-				if (models.hide[i] && vr_gl_can_hide_parts())
+				if ((models.hide[i] || models.fill[i]) && vr_gl_can_hide_parts())
 				{
 					models.hiding = i + 1;
 				}

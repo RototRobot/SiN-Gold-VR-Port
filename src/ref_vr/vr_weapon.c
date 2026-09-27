@@ -50,6 +50,17 @@
  * Found by splitting each model into its connected pieces and picking the ones
  * in the sleeve's and glove's colours, each checked by eye (docs/ENGINE_NOTES.md).
  * The magnum's and the mines' modelled hand is the gun hand, and stays.
+ *
+ * hand, where there is one, is where that modelled hand held the weapon: the
+ * middle of its glove on the first frame of the idle the muzzle is measured
+ * from, in the model's units. It is the first guess at the fore-end, in place
+ * of fore - the other hand goes where the model had it. The chaingun's is left
+ * out: its modelled hand is off to the side, well clear of the gun.
+ *
+ * middle is the model's own middle across - the barrel's line, from the
+ * barrel marker each model carries - which its missing right side is rebuilt
+ * across, as the left side reflected (vr_gl_fill_model_at). 0 leaves a model
+ * as it is: the fists are whole, and the mines and detonator are mostly hand.
  */
 typedef struct
 {
@@ -60,19 +71,22 @@ typedef struct
 	float fore;
 	int arm_count;
 	int arm[2][2];
+	int has_hand;
+	float hand[3];
+	float middle;
 } weapon_info_t;
 
 static const weapon_info_t weapon_table[] = {
 	{ "punch",     { 18.5f, -11.0f, -10.0f }, 0.50f, 1, 0.0f },
-	{ "magnum",    { 53.0f, -36.0f, -31.0f }, 0.35f, 0, 0.0f },
-	{ "shotgun",   {  8.0f, -14.0f, -15.0f }, 0.60f, 0, 0.30f, 1, { { 30, 95 } } },
-	{ "asrifle",   { 37.0f, -21.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 276, 308 } } },
-	{ "hvgun",     { 30.0f, -25.0f, -38.0f }, 0.35f, 0, 0.30f, 2, { { 200, 309 }, { 358, 405 } } },
-	{ "rlaunch",   { 28.0f, -24.0f, -36.0f }, 0.35f, 0, 0.30f, 1, { { 146, 218 } } },
-	{ "srifle",    { 15.0f, -13.0f, -14.0f }, 0.35f, 0, 0.35f, 1, { { 249, 306 } } },
-	{ "pulse2",    { 25.0f, -18.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 358, 393 } } },
-	{ "quantum",   { 20.0f, -30.0f, -40.0f }, 0.30f, 0, 0.35f },
-	{ "spgun",     { 30.0f, -15.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 217, 259 } } },
+	{ "magnum",    { 53.0f, -36.0f, -31.0f }, 0.35f, 0, 0.0f, 0, { { 0 } }, 0, { 0 }, -37.1f },
+	{ "shotgun",   {  8.0f, -14.0f, -15.0f }, 0.60f, 0, 0.30f, 1, { { 30, 95 } }, 1, { 27.6f, -13.3f, -16.4f }, -15.0f },
+	{ "asrifle",   { 37.0f, -21.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 276, 308 } }, 1, { 79.3f, -18.5f, -39.4f }, -23.0f },
+	{ "hvgun",     { 30.0f, -25.0f, -38.0f }, 0.35f, 0, 0.30f, 2, { { 200, 309 }, { 358, 405 } }, 0, { 0 }, -29.1f },
+	{ "rlaunch",   { 28.0f, -24.0f, -36.0f }, 0.35f, 0, 0.30f, 1, { { 146, 218 } }, 1, { 49.8f, -6.3f, -33.3f }, -27.4f },
+	{ "srifle",    { 15.0f, -13.0f, -14.0f }, 0.35f, 0, 0.35f, 1, { { 249, 306 } }, 1, { 30.5f, -12.7f, -13.3f }, -15.9f },
+	{ "pulse2",    { 25.0f, -18.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 358, 393 } }, 1, { 49.0f, -19.0f, -26.0f }, -23.6f },
+	{ "quantum",   { 20.0f, -30.0f, -40.0f }, 0.30f, 0, 0.35f, 0, { { 0 } }, 0, { 0 }, -35.6f },
+	{ "spgun",     { 30.0f, -15.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 217, 259 } }, 1, { 60.1f, -21.3f, -35.8f }, -24.1f },
 	{ "mines",     { 36.0f, -22.0f, -18.0f }, 0.35f, 0, 0.0f },
 	{ "detonator", { 15.0f,  -5.0f, -12.0f }, 0.40f, 0, 0.0f }
 };
@@ -122,6 +136,7 @@ static cvar_t *vr_punch_speed;
 static cvar_t *vr_two_hand;
 static cvar_t *vr_other_hand;
 static cvar_t *vr_weapon_arm;
+static cvar_t *vr_weapon_fill;
 static cvar_t *vr_aim;
 
 /* Read once, at start-up: the buttons are attached to the session with the
@@ -278,6 +293,7 @@ void vr_weapon_startup(void)
 	vr_two_hand = vr_cvar("vr_two_hand", "1", CVAR_ARCHIVE);
 	vr_other_hand = vr_cvar("vr_other_hand", "1", CVAR_ARCHIVE);
 	vr_weapon_arm = vr_cvar("vr_weapon_arm", "0", CVAR_ARCHIVE);
+	vr_weapon_fill = vr_cvar("vr_weapon_fill", "1", CVAR_ARCHIVE);
 	vr_aim = vr_cvar("vr_aim", "1", 0);
 	lefty = vr_left_handed->value != 0.0f;
 	if (lefty)
@@ -328,6 +344,7 @@ static struct
 	int active;                /* the other hand has hold of the weapon */
 	int said;                  /* where it pointed, logged once a hold */
 	unsigned count;
+	vr_pose_t hold;            /* the other hand on the weapon: turned as it took hold, at the fore-end */
 } steady;
 
 static struct
@@ -567,9 +584,10 @@ static void run_adjust(void)
 
 /*
  * The fore-end, in the model's own units as the right hand holds it: from
- * vr_fore_<weapon> if that holds a setting, or else the table's distance ahead
- * of the grip along the model's forward - which, with the grip as it comes,
- * is straight ahead of the hand. Returns 0 for a weapon held in one hand.
+ * vr_fore_<weapon> if that holds a setting, or else where the model's own left
+ * hand was, or else the table's distance ahead of the grip along the model's
+ * forward - which, with the grip as it comes, is straight ahead of the hand.
+ * Returns 0 for a weapon held in one hand.
  */
 static int fore_in_model(const weapon_t *w, float out[3])
 {
@@ -587,6 +605,12 @@ static int fore_in_model(const weapon_t *w, float out[3])
 		return 1;
 	}
 
+	if (w->info->has_hand)
+	{
+		memcpy(out, w->info->hand, sizeof(w->info->hand));
+		return 1;
+	}
+
 	/* where the hand is on the model: the model's pose in the hand, undone */
 	grip_setting(w, RIGHT, &relative, &scale);
 	vr_pose_set(&origin, zero, zero);
@@ -597,11 +621,10 @@ static int fore_in_model(const weapon_t *w, float out[3])
 	return 1;
 }
 
-/* The fore-end of the weapon placed at p, in the frame p is given in. A
+/* The fore-end of the weapon placed at p, in p's own frame, at its size. A
    mirrored model has it on the other side of its middle. */
-static int fore_point(const weapon_t *w, const placement_t *p, float out[3])
+static int fore_local(const weapon_t *w, const placement_t *p, float local[3])
 {
-	float local[3];
 	int i;
 
 	if (!p->valid || !fore_in_model(w, local))
@@ -616,6 +639,18 @@ static int fore_point(const weapon_t *w, const placement_t *p, float out[3])
 	for (i = 0; i < 3; ++i)
 	{
 		local[i] *= p->scale;
+	}
+	return 1;
+}
+
+/* The same, in the frame p is given in. */
+static int fore_point(const weapon_t *w, const placement_t *p, float out[3])
+{
+	float local[3];
+
+	if (!fore_local(w, p, local))
+	{
+		return 0;
 	}
 	vr_pose_point(&p->pose, local, out);
 	return 1;
@@ -805,6 +840,11 @@ int vr_weapon_steady(int down)
 	steady.active = 1;
 	steady.said = 0;
 	steady.count++;
+
+	/* From here the other hand is drawn on the weapon, not where it is: at the
+	   fore-end, turned as it was when it took hold. */
+	vr_pose_relative(&placed[gun_hand()].pose, &hands[other_hand()].frame, &steady.hold);
+	fore_local(current, &placed[gun_hand()], steady.hold.origin);
 	vrlog("VR: the %s is held in both hands (%.0f cm from the fore-end)", current->key,
 		distance(at, hands[other_hand()].frame.origin) * 100.0f / vr_worldscale_units());
 	return 1;
@@ -1237,12 +1277,17 @@ static void keep_one_arm(const entity_t *e, int hand)
 }
 
 /* The arm built into the weapon's model, left out unless vr_weapon_arm says
-   otherwise. */
+   otherwise; and the side of it that was never made, filled in unless
+   vr_weapon_fill says otherwise. */
 static void hide_modelled_arm(const entity_t *gun)
 {
 	if (current && current->info->arm_count > 0 && (!vr_weapon_arm || vr_weapon_arm->value == 0.0f))
 	{
 		vr_gl_hide_model_parts_at(gun->origin, current->info->arm, current->info->arm_count);
+	}
+	if (current && current->info->middle != 0.0f && (!vr_weapon_fill || vr_weapon_fill->value != 0.0f))
+	{
+		vr_gl_fill_model_at(gun->origin, current->info->middle * gun->scale);
 	}
 }
 
@@ -1271,7 +1316,18 @@ static int dress_other_hand(entity_t *out, const entity_t *gun, const float view
 		return 0;
 	}
 	grip_setting(fists, hand, &relative, &p.scale);
-	vr_pose_compose(&hands[hand].frame, &relative, &p.pose);
+	if (steady.active && placed[gun_hand()].valid)
+	{
+		/* holding the weapon: the hand goes with it */
+		vr_pose_t on_weapon;
+
+		vr_pose_compose(&placed[gun_hand()].pose, &steady.hold, &on_weapon);
+		vr_pose_compose(&on_weapon, &relative, &p.pose);
+	}
+	else
+	{
+		vr_pose_compose(&hands[hand].frame, &relative, &p.pose);
+	}
 	p.valid = 1;
 
 	*out = *gun;
