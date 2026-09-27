@@ -1559,6 +1559,28 @@ static float hand_value;
 static int hand_forced;
 static unsigned effects_placed;
 
+/*
+ * And some weapons' muzzle flash is moved off the barrel on purpose:
+ * view_magnum.def's is "attach barrel sprites/gunblast.spr ... origin 10 0 -10",
+ * and the shotgun, rocket launcher and chaingun have one along the barrel. The
+ * option parser (+0x1793C) adds that offset along the weapon's axes, in the
+ * flat view model's units and unscaled - it was tuned to look right from the
+ * flat camera, and in the hand it puts the magnum's flash beside the gun. The
+ * view weapon's commands all go through one call in CL_AddViewWeapon
+ * (+0x7580), so there, while the weapon is in the hand, an attach command has
+ * its origin option left out and the flash sits on the barrel itself. The
+ * call passes the count of words and the words on the stack, and the caller
+ * pops them.
+ */
+#define SIN_VIEW_COMMANDS_CALL 0x7580
+#define SIN_PROCESS_COMMANDS 0x191E0
+#define MAX_COMMAND_WORDS 64
+
+static void *real_process_commands;
+static char *command_words[MAX_COMMAND_WORDS];
+static unsigned view_commands;
+static unsigned flash_offsets_dropped;
+
 typedef void(__fastcall *add_entity_t)(entity_t *entity);
 
 static add_entity_t real_add_entity;
@@ -1570,6 +1592,62 @@ static int patched;
 static int keep_client_bullets = 1; /* read by the thunk: 0 leaves the view weapon's out */
 static unsigned bullets_left_out;
 static unsigned client_placements;
+
+/* The words of one of the view weapon's commands, as they are to be run. */
+static char **__cdecl filter_view_command(int *argc, char **argv)
+{
+	int i, n = 0, attach = 0;
+
+	view_commands++;
+	if (!placed_this_frame || !argv || *argc < 1 || *argc > MAX_COMMAND_WORDS)
+	{
+		return argv;
+	}
+
+	for (i = 0; i < *argc; ++i)
+	{
+		if (!argv[i])
+		{
+			return argv;
+		}
+		if (_stricmp(argv[i], "attach") == 0)
+		{
+			attach = 1;
+		}
+		else if (attach && _stricmp(argv[i], "origin") == 0 && i + 3 < *argc)
+		{
+			i += 3;
+			continue;
+		}
+		command_words[n++] = argv[i];
+	}
+
+	if (n == *argc)
+	{
+		return argv;
+	}
+	*argc = n;
+	flash_offsets_dropped++;
+	return command_words;
+}
+
+static __declspec(naked) void process_view_commands(void)
+{
+	__asm {
+		push ecx
+		push edx
+		mov eax, [esp + 16]  /* the words */
+		lea ecx, [esp + 12]  /* the count, which may come down */
+		push eax
+		push ecx
+		call filter_view_command
+		add esp, 8
+		pop edx
+		pop ecx
+		mov [esp + 8], eax   /* the caller pushed them and pops them itself */
+		jmp real_process_commands
+	}
+}
 
 static int sin_patched(void)
 {
@@ -1748,6 +1826,13 @@ void vr_weapon_install(void)
 		return;
 	}
 
+	if (!vr_hook_call(exe, SIN_VIEW_COMMANDS_CALL, SIN_PROCESS_COMMANDS, (void *)process_view_commands,
+			&real_process_commands))
+	{
+		vr_printf("VR: could not reach the view weapon's commands - a muzzle flash SiN moves off the barrel "
+			"will stay moved");
+	}
+
 	patched = 1;
 	vrlog("VR: the client's view weapon and bullet impacts go through the weapon code%s",
 		sin_hand && sin_bone_scale ? ", and its flash and shell cases are placed at its true size" : "");
@@ -1765,8 +1850,9 @@ void vr_weapon_uninstall(void)
 	patched = 0;
 	vrlog("VR: the view weapon was placed by the client %u times; %u of its bullet impacts were left "
 		"to the server; %u punches were thrown; the other hand took hold %u times; its effects were placed "
-		"at its true size %u times", client_placements, bullets_left_out, punches_thrown, steady.count,
-		effects_placed);
+		"at its true size %u times; of its %u commands, %u flashes were put back on the barrel",
+		client_placements, bullets_left_out, punches_thrown, steady.count, effects_placed, view_commands,
+		flash_offsets_dropped);
 }
 
 /* ------------------------------------------------------------------------- */
