@@ -54,14 +54,17 @@
  * hand, where there is one, is where that modelled hand held the weapon: the
  * middle of its glove on the first frame of the idle the muzzle is measured
  * from, in the model's units. It is the first guess at the fore-end, in place
- * of fore - the other hand goes where the model had it. The chaingun's is left
- * out: its modelled hand is off to the side, well clear of the gun.
+ * of fore - the other hand goes where the model had it, which on the rocket
+ * launcher is the handle out on its left side. The chaingun's modelled hand
+ * floats clear of the gun, so its hand is the outside of the loop handle round
+ * its left side instead (vertices 310-357, those more than 12 units left of
+ * the body's middle).
  *
  * middle is the model's own middle across - the barrel marker each model
  * carries, which is the middle of its body within a unit or so, except on the
  * chaingun and rocket launcher, whose marker is on one barrel of several and
- * whose body's middle is used instead. The fore-end is put on it, and the
- * missing right side is rebuilt across it, as the left side reflected
+ * whose body's middle is used instead. The missing right side is rebuilt
+ * across it, as the left side reflected
  * (vr_gl_fill_model_at). fill says whether the weapon is near enough
  * symmetrical for that - the chaingun, with a box on its left side only, is
  * not - and vr_fill_<weapon> can say otherwise; keep is a hand on the weapon
@@ -91,7 +94,7 @@ static const weapon_info_t weapon_table[] = {
 	{ "magnum",    { 53.0f, -36.0f, -31.0f }, 0.35f, 0, 0.0f, 0, { { 0 } }, 0, { 0 }, -37.1f, 1, 1, { { 8, 116 } } },
 	{ "shotgun",   {  8.0f, -14.0f, -15.0f }, 0.60f, 0, 0.30f, 1, { { 30, 95 } }, 1, { 27.6f, -13.3f, -16.4f }, -15.0f, 1 },
 	{ "asrifle",   { 37.0f, -21.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 276, 308 } }, 1, { 79.3f, -18.5f, -39.4f }, -23.0f, 1 },
-	{ "hvgun",     { 30.0f, -25.0f, -38.0f }, 0.35f, 0, 0.30f, 2, { { 200, 309 }, { 358, 405 } }, 0, { 0 }, -24.1f, 0 },
+	{ "hvgun",     { 30.0f, -25.0f, -38.0f }, 0.35f, 0, 0.30f, 2, { { 200, 309 }, { 358, 405 } }, 1, { 36.9f, -9.0f, -36.6f }, -24.1f, 0 },
 	{ "rlaunch",   { 28.0f, -24.0f, -36.0f }, 0.35f, 0, 0.30f, 1, { { 146, 218 } }, 1, { 49.8f, -6.3f, -33.3f }, -23.5f, 1 },
 	{ "srifle",    { 15.0f, -13.0f, -14.0f }, 0.35f, 0, 0.35f, 1, { { 249, 306 } }, 1, { 30.5f, -12.7f, -13.3f }, -15.9f, 1 },
 	{ "pulse2",    { 25.0f, -18.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 358, 393 } }, 1, { 49.0f, -19.0f, -26.0f }, -23.6f, 1, 1, { { 44, 147 } } },
@@ -125,28 +128,52 @@ static const weapon_info_t weapon_other = { NULL, { 30.0f, -20.0f, -25.0f }, 0.3
  * numbered alphabetically by name (docs/ENGINE_NOTES.md); the pairs are
  * from, to.
  */
+/*
+ * steady is the animations - one bit each - in which the weapon only tips up
+ * and down about its own middle, which is what a reflection across that
+ * middle can follow: the idles and the firing. Raising and lowering it,
+ * reloading and changing mode turn and roll it as well, and a reflected side
+ * goes the opposite way and pulls apart from the gun - the owner saw it as
+ * the two halves joining up on every switch - so the side is not rebuilt
+ * during those.
+ */
 typedef struct
 {
 	const char *name; /* models/view_<name>.def */
 	int count;
 	int map[6][2];
+	unsigned steady;
 } idle_info_t;
 
 static const idle_info_t idle_table[] = {
-	{ "punch",       3, { { 5, 5 }, { 6, 5 }, { 7, 5 } } },
-	{ "magnum",      4, { { 1, 1 }, { 2, 1 }, { 7, 7 }, { 8, 7 } } },
-	{ "shotgun",     2, { { 1, 1 }, { 2, 1 } } },
-	{ "asrifle",     6, { { 2, 2 }, { 3, 2 }, { 4, 2 }, { 9, 9 }, { 10, 9 }, { 11, 9 } } },
-	{ "hvgun",       3, { { 2, 2 }, { 3, 2 }, { 9, 9 } } },
-	{ "rlaunch",     2, { { 1, 1 }, { 3, 3 } } },
-	{ "srifle",      1, { { 1, 1 } } },
-	{ "pulse2",      2, { { 2, 2 }, { 8, 8 } } },
-	{ "quantum",     1, { { 1, 1 } } },
-	{ "spgun",       4, { { 1, 1 }, { 2, 1 }, { 3, 1 }, { 4, 1 } } },
-	{ "mines",       2, { { 1, 1 }, { 2, 1 } } },
-	{ "detonator",   2, { { 1, 1 }, { 2, 1 } } },
-	{ "mutanthands", 1, { { 4, 4 } } }
+	{ "punch",       3, { { 5, 5 }, { 6, 5 }, { 7, 5 } }, 0x00FF },
+	{ "magnum",      4, { { 1, 1 }, { 2, 1 }, { 7, 7 }, { 8, 7 } }, 0x01C7 },
+	{ "shotgun",     2, { { 1, 1 }, { 2, 1 } }, 0x0007 },
+	{ "asrifle",     6, { { 2, 2 }, { 3, 2 }, { 4, 2 }, { 9, 9 }, { 10, 9 }, { 11, 9 } }, 0x0F1E },
+	{ "hvgun",       3, { { 2, 2 }, { 3, 2 }, { 9, 9 } }, 0x030E },
+	{ "rlaunch",     2, { { 1, 1 }, { 3, 3 } }, 0x004F },
+	{ "srifle",      1, { { 1, 1 } }, 0x0003 },
+	{ "pulse2",      2, { { 2, 2 }, { 8, 8 } }, 0x0186 },
+	{ "quantum",     1, { { 1, 1 } }, 0x0013 },
+	{ "spgun",       4, { { 1, 1 }, { 2, 1 }, { 3, 1 }, { 4, 1 } }, 0x001F },
+	{ "mines",       2, { { 1, 1 }, { 2, 1 } }, 0x0007 },
+	{ "detonator",   2, { { 1, 1 }, { 2, 1 } }, 0x0007 },
+	{ "mutanthands", 1, { { 4, 4 } }, 0x001F }
 };
+
+static const idle_info_t *idle_info(const char *key)
+{
+	int i;
+
+	for (i = 0; key && i < (int)(sizeof(idle_table) / sizeof(idle_table[0])); ++i)
+	{
+		if (strcmp(idle_table[i].name, key) == 0)
+		{
+			return &idle_table[i];
+		}
+	}
+	return NULL;
+}
 
 #define FIST_MODEL "models/view_punch.def"
 #define FIST_IDLE_ANIM 5
@@ -658,12 +685,9 @@ static int fore_in_model(const weapon_t *w, float out[3])
 		return 1;
 	}
 
-	/* on the weapon's middle across, not off to the side where the modelled
-	   hand's glove was */
 	if (w->info->has_hand)
 	{
 		memcpy(out, w->info->hand, sizeof(w->info->hand));
-		out[1] = w->info->middle;
 		return 1;
 	}
 
@@ -672,7 +696,7 @@ static int fore_in_model(const weapon_t *w, float out[3])
 	vr_pose_set(&origin, zero, zero);
 	vr_pose_relative(&relative, &origin, &hand);
 	out[0] = (hand.origin[0] + w->info->fore * units) / scale;
-	out[1] = w->info->middle != 0.0f ? w->info->middle : hand.origin[1] / scale;
+	out[1] = hand.origin[1] / scale;
 	out[2] = hand.origin[2] / scale;
 	return 1;
 }
@@ -1337,12 +1361,15 @@ static void keep_one_arm(const entity_t *e, int hand)
    vr_weapon_fill says otherwise. */
 static void hide_modelled_arm(const entity_t *gun)
 {
+	const idle_info_t *anims = idle_info(current ? current->key : NULL);
+
 	if (current && current->info->arm_count > 0 && (!vr_weapon_arm || vr_weapon_arm->value == 0.0f))
 	{
 		vr_gl_hide_model_parts_at(gun->origin, current->info->arm, current->info->arm_count);
 	}
 	if (current && current->fill && current->fill->value != 0.0f &&
-		(!vr_weapon_fill || vr_weapon_fill->value != 0.0f))
+		(!vr_weapon_fill || vr_weapon_fill->value != 0.0f) &&
+		anims && gun->anim >= 0 && gun->anim < 32 && (anims->steady >> gun->anim & 1))
 	{
 		vr_gl_fill_model_at(gun->origin, current->info->middle * gun->scale, current->info->keep,
 			current->info->keep_count);
@@ -1424,31 +1451,24 @@ static int is_other_hand(const entity_t *e)
    frame - unless vr_weapon_idle 1 lets it play. */
 static void hold_idle(entity_t *e)
 {
-	int i, j;
+	const idle_info_t *anims = idle_info(current ? current->key : NULL);
+	int j;
 
-	if (!current || (vr_weapon_idle && vr_weapon_idle->value != 0.0f))
+	if (!anims || (vr_weapon_idle && vr_weapon_idle->value != 0.0f))
 	{
 		return;
 	}
 
-	for (i = 0; i < (int)(sizeof(idle_table) / sizeof(idle_table[0])); ++i)
+	for (j = 0; j < anims->count; ++j)
 	{
-		if (strcmp(idle_table[i].name, current->key) != 0)
+		if (e->anim == anims->map[j][0])
 		{
-			continue;
+			e->anim = anims->map[j][1];
+			e->frame = 0;
+			e->oldframe = 0;
+			e->backlerp = 0.0f;
+			return;
 		}
-		for (j = 0; j < idle_table[i].count; ++j)
-		{
-			if (e->anim == idle_table[i].map[j][0])
-			{
-				e->anim = idle_table[i].map[j][1];
-				e->frame = 0;
-				e->oldframe = 0;
-				e->backlerp = 0.0f;
-				return;
-			}
-		}
-		return;
 	}
 }
 
