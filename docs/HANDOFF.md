@@ -155,7 +155,9 @@ are parameters. What to expect:
 - **Input can be tested without controllers**, all through the real path:
   `vr_fake_axes "<forward> <side> <turn> [<turning stick up>]"` holds the sticks somewhere;
   `vr_fake_press jump` presses a button for a few frames, `vr_fake_press "adjust 200"` for 200 rendered
-  frames, and `vr_fake_press "adjust 0"` until `vr_fake_press release` - and a `wait` is not a frame, so
+  frames, and `vr_fake_press "adjust 0"` until `vr_fake_press release`; a press ending `also`
+  (`vr_fake_press "run 0 also"`) is held together with the one already held, and `release` lets go of
+  both - and a `wait` is not a frame, so
   the 0.8 s the grip has to be held is nearer 400 `wait`s than 120; `vr_fake_hand "<x> <y> <z>
   <pitch> <yaw> <roll>"` and `vr_fake_hand_left` put the hands somewhere in the game's own units and
   senses. `viewpos` prints the player's position and yaw, which is how the axes were checked.
@@ -194,6 +196,17 @@ are parameters. What to expect:
   levels open on a cinematic that holds the player still, and a player who is still falling from a spawn
   point has almost no control in the air.
 - A VR run adds about 12 s while SteamVR starts, and SteamVR stays running afterwards.
+- **A save made on a deathmatch map does not load**: `sindm6` saves, and `load` then stops with
+  `ERROR: CM_InlineModel: bad number`, while the same on `bank` or `training` loads. The owner's test
+  save `vrtest` (every weapon, `wuss` plus a `give` of each ammunition) is therefore on `training`,
+  SiN's own training course, in `sinvr\players\blade\save\vrtest`.
+- **Saves live in `sinvr\players\blade\save\`**, and `save0` there is SiN's own, rewritten when a
+  level starts - every desk run writes it. Move a test's saves out afterwards, not delete them (§7).
+- **Back up the owner's `config.cfg` before a test and compare it after** (sorted: SiN writes it in
+  reverse order each time). Until 2026-09-27 a flatscreen run (`vr_enable 0`) dropped every controller
+  and weapon setting from it, because SiN writes back only the cvars something has registered, and
+  those were registered only with the headset on; they are registered either way now
+  (`vr_input_register`).
 - `-Vr` passes `vr_force_render 1`. Without it the runtime reports `shouldRender = false` for a headset lying
   on the desk and nothing at all is drawn for the headset.
 - Screenshots land in `sinvr\players\blade\scrnshot\sinNNN.tga`, 24-bit bottom-up TGA, which the script
@@ -401,7 +414,6 @@ Still to do, in the order it matters:
 
 - **The body does not follow the head.** Pitch and yaw are the head's, but movement, turning and the
   player's collision position still come from the keyboard and mouse.
-- **The view weapon** follows the engine's angles, not the head, and will move to the hand in milestone 7.
 - **Screen-copy effects** (screenshots, and anything that reads the window) still assume window coordinates.
 
 ## 10. Open questions and backlog
@@ -730,6 +742,37 @@ maths is what the owner's next headset test exercises.
      units off landed by the fist; an uppercut that went nowhere near him landed by aim assist.
    - Not done: a buzz in the controller when a punch lands (OpenXR haptics want an output action and
      the game to say "hit" back), punches that hit harder the faster they go, and swinging a gun.
+12. **Two-handed holds** (`vr_two_hand`, `vr_fore_<weapon>`), 2026-09-27. All in `vr_weapon.c`; nothing
+   in the engine or the game module changes, because the game already fires down whatever pose it is
+   given.
+   - **The fore-end** is a point on the model, kept in the model's own units as the right hand holds it
+     (mirrored in use, like the grip), so moving or resizing the grip later carries it along. The first
+     guess is the table's `fore` distance - 0.30 m, 0.35 for the sniper rifle and the quantum
+     destabilizer, 0 for the magnum, mines, detonator and fists - straight ahead of the grip point along
+     the model's x. That is deliberate: the modelled left hands are all fused into one mesh with the
+     gun, and finding them by connectivity (`scratchpad/findhand.py`, research only) gave points too
+     scattered to trust, whereas a point on the barrel line makes the gun point exactly where the two
+     palms do - the palm-to-palm line on a real rifle is near enough parallel to the bore.
+   - **Taking hold**: the other hand's grip button is the `run` action, which is already on the off
+     hand in both handednesses (the tables are swapped by `for_hand`). `press_action` asks
+     `vr_weapon_steady(1)` first; if the hand is within 25 cm of the fore-end the press is the weapon's
+     and no `+speed` is sent, and its release goes the same way. Anywhere else it runs. While adjusting,
+     the same press moves the fore-end to the hand instead. Changing weapon, or starting to adjust,
+     drops the hold.
+   - **The pivot** (`pivot_weapon`): the gun hand's frame is turned about its own origin so that the
+     direction to the fore-end, as the hand sees it, lies along the direction to the other hand; the
+     roll is the one that keeps the hand's up as near its real up as the line allows (its left instead
+     when the line is within about 18 degrees of straight up or down). The weapon is then recomposed
+     from the turned hand with the grip as before, so everything downstream - the model, the crosshair,
+     the muzzle the game fires from - follows without knowing.
+   - Desk, 2026-09-27, `sindm6`, assault rifle, `vr_fake_hand "20 -6 -8 0 0 0"` and the other hand at
+     (31 0 -2): taking hold 22 cm from the fore-end turned the rifle to (-25.6 28.6 0.0), exactly the
+     direction between the hands; letting go returned it; a press with the hand 30-odd cm away sent
+     `+speed`/`-speed` as before; adjusting and pressing the other grip wrote `vr_fore_asrifle
+     "59.9 -15.3 -18.6"` - the hand's offset divided by the model's scale, to the digit - and a hold taken
+     there turned nothing, as it should. Left-handed, every number mirrored: (-25.6 -28.6 0.0) and the
+     same stored fore-end. `vr_fake_press "run 0 also"` holds a second button with the first, which is
+     how the adjust-and-set step was driven.
 
 What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
 computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the
@@ -753,11 +796,8 @@ the server's impacts - is what the owner's headset test exercises.
 
 Still to do, and what is known about each:
 
-- **Two-handed holds**: a rifle steadied by the off hand near its fore-end, which is also where SiN's
-  models already draw a hand. Nothing in the engine is in the way - the weapon's pose is this mod's to
-  compute - so it is a matter of a second point per weapon, a way to say the off hand has taken hold
-  (its grip button, or simply its being near that point), and orientation from the line between the
-  hands with the roll still coming from the gun hand. It wants the same in-headset tuning the grip has.
+- **Two-handed holds, what is left**: the modelled left hand stays where the model has it rather than
+  going to the real one, and the fore-end distances are first guesses waiting on the headset.
 - **Manual reloading**: SiN already has clips, `reload`/`silreload` animations and
   `Weapon::ForceReload`, which `Player::DoUse` calls - the Use button doubles as a reload key. So a
   gesture only has to reach it: watching the off hand under the weapon in `vr_weapon.c` and running
@@ -774,5 +814,5 @@ Still to do, and what is known about each:
   - `Weapon::SecondaryUse` starts `primaryidle`/`secondaryidle` itself for the dual-mode weapons, which
     then play through once before the freeze sees them.
   Nothing else in the game overrides `Idle` or `ForceIdle`.
-- **Comfort and roomscale:** snap turning, crouching, and the body following the head.
+- **Comfort and roomscale:** crouching, and the body following the head (snap turning is done, §11).
 - **Hand tracking** (`XR_EXT_hand_tracking`) is the same channel with a different source.

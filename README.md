@@ -95,7 +95,7 @@ unaffected either way.
 | Left **X** | Crouch |
 | Right **B** | Next weapon |
 | Left **Y** | Previous weapon |
-| Left grip | Run |
+| Left grip | Run - or, with your left hand at a rifle's fore-end, hold it in both hands (see below) |
 | Right stick, click | Opens and closes the game menu (Escape) |
 | Right stick, up/down, while adjusting a weapon | Makes it bigger or smaller |
 | Right grip, held | Lets go of the weapon so you can take it another way - see below |
@@ -127,6 +127,24 @@ only thing moving is your hand. Move your hand to hold it the way you want - and
 stick up or down to make it bigger or smaller - then let go of the grip.
 It is remembered for that weapon, and kept between sessions. `vr_weapon_reset 1` in the console puts
 the weapon you are holding back to its first guess.
+
+**Two hands on a long weapon.** Put your other hand where you would hold the front of the gun - the
+fore-end, about 30 cm ahead of your gun hand along the barrel - and **squeeze that hand's grip**. The
+gun hand stays where it is and the weapon swings to lie along the line from it to your other hand, so
+you aim with both; it keeps the gun hand's roll. Let go of the grip and it follows the gun hand alone
+again. Squeezed anywhere else, that grip still runs, as before. It works on the shotgun, assault rifle,
+chaingun, rocket launcher, sniper rifle, pulse rifle, quantum destabilizer and spear gun; the magnum,
+the fists and the mines stay one-handed. With `vr_show_hands 2` (or while adjusting) the fore-end
+shows as a small cyan cross, bright while it is held.
+
+To move the fore-end, adjust the weapon as above - squeeze and hold the gun hand's grip until it
+hangs in the air - then put your other hand where the fore-end should be and squeeze *its* grip: the
+fore-end moves there. Let go of both. It is kept on the model, so it stays put if you move or resize
+the grip afterwards, and `vr_weapon_reset 1` forgets it along with the grip.
+
+**Every weapon, for testing.** A save called `vrtest` is on SiN's training level with every weapon and
+plenty of ammunition: open the console and type `load vrtest`. In any single-player game, the console
+command `wuss` gives every weapon too.
 
 In a menu, on the loading screen or with the console up, the controllers turn into a keyboard instead:
 the sticks are the arrow keys, the trigger is Enter, and anything else is Escape. The mod knows which
@@ -169,6 +187,8 @@ These console variables control the mod:
 | `vr_punch_assist` | 35 | How far to either side of where you look - or where your fist was headed - a punch still finds someone within reach, in degrees. 0 lands punches only where the fist actually goes. |
 | `vr_freeze_idle` | 0 | 1 holds the weapon's idle animation still in play as well - no breathing, no swaying arm. It is always held while a weapon is being placed. |
 | `vr_grip_<weapon>` | empty | Where that weapon sits in the hand: offset, angles and size. The grip button writes it; empty means the measured guess. |
+| `vr_two_hand` | 1 | The other hand's grip, squeezed at a long weapon's fore-end, holds it in both hands. 0 leaves that grip only running. |
+| `vr_fore_<weapon>` | empty | Where that weapon's fore-end is, in the model's own units. Set by squeezing the other grip while adjusting; empty means about 30 cm ahead of the grip along the barrel. |
 | `vr_weapon_reset` | 0 | Set it to 1 to forget the setting for the weapon in hand. Clears itself. |
 | `vr_crosshair` | 1 | SiN's crosshair follows the gun while it is in the hand. 0 leaves it out; 2 leaves it in the middle of the view, where SiN draws it. |
 | `vr_client_bullets` | 0 | 1 puts back the client's own bullet impacts, which are drawn from the eye rather than from the barrel. |
@@ -200,7 +220,9 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   swing went into, or on nothing. A fist that has gone through a wall hits the wall where your arm went
   in. There is no buzz in the controller yet when a punch connects.
 - Most of SiN's two-handed weapons only ever modelled the left hand, on the fore-end, so that is the
-  hand you see on them; the fists are the one weapon with two arms, and they get one each.
+  hand you see on them; the fists are the one weapon with two arms, and they get one each. The
+  modelled hand does not move to your real one when you hold the weapon in both hands - it stays
+  where the model has it, and your other hand is where the weapon is steered from.
 - The weapon's idle animation is what makes it breathe and sway. A weapon on a controller already
   moves with the hand, so `vr_freeze_idle 1` holds that animation on its first frame. Only the idle is
   held: firing, reloading and putting the weapon away animate as they always did, and the muzzle stays
@@ -237,8 +259,8 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 4. ✅ HUD, crosshair and console in a panel at a comfortable distance
 5. ✅ Motion controller input: sticks to move and turn, buttons bound to commands
 6. ✅ Tracked hands: the weapon is drawn in the hand, fires down its own barrel, and carries its
-   effects with it; each weapon's grip can be set in the headset, and left-handed players get the
-   mirror image of all of it
+   effects with it; each weapon's grip can be set in the headset, long weapons can be held in both
+   hands, and left-handed players get the mirror image of all of it
 7. Roomscale comfort: ✅ snap turning; crouching, and the body following the head
 8. Wages of Sin
 9. Release packaging

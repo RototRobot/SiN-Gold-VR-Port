@@ -331,6 +331,23 @@ does the movement work itself. The console says `joystick detected` where it use
   not in play.
 - **The crosshair is a 2D pic**, `ch1_off` for the default one, drawn through `DrawPic`.
 
+## Saves and config.cfg (2026-09-27)
+
+- **`config.cfg` holds only the cvars the engine has registered as archived.** A line `set vr_foo "1"`
+  read from it makes a cvar without the archive flag, so if nothing registers `vr_foo` with
+  `CVAR_ARCHIVE` in that session it is simply not written back, and the setting is gone. Found when a
+  flatscreen desk run (the VR renderer loaded, `vr_enable 0`) rewrote the owner's config without a
+  single controller or weapon setting. The file is also written in the reverse order each time.
+- **Single-player saves go to `<game>\players\<player>\save\<name>\`** (`game.ssv`, `server.ssv`,
+  and `<map>.sav`/`.sv2`), with `current` and `save0` written by the engine itself as levels start.
+- **A save made on a deathmatch map loaded in single player does not load back**: `load` fails with
+  `ERROR: CM_InlineModel: bad number` on `sindm6`, where `bank` and `training` load cleanly (and print
+  `Loading nodes...`, the AI path nodes, which the deathmatch map has none of). Not chased further:
+  `training` does the job.
+- **The campaign opens on `intro`**, whose first minutes are the helicopter ride and turret, not
+  walking. `bank` leads to `abandon` (its `trigger_changelevel`); `intro`'s own exit is not in its
+  entity lump, so it is presumably scripted.
+
 ## The client's view angle (2026-09-22)
 
 - **`cl.viewangles[YAW]` is at sin.exe +0x3CBAE0** (0x7CBAE0 at the preferred base). It is what every
