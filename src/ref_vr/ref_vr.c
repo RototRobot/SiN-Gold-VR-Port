@@ -789,6 +789,7 @@ static void vr_RenderFrame(refdef_t *fd)
 	vr_view_saved_t saved;
 
 	record_call(RE_RENDER_FRAME);
+	vr_weapon_commands_done();
 
 	if (fd)
 	{
