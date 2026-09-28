@@ -19,6 +19,7 @@
 #include "misc.h"
 #include "specialfx.h"
 #include "surface.h"
+#include "game_vr/vr_link.h"
 
 CLASS_DECLARATION(Weapon, Fists, NULL);
 
@@ -55,7 +56,20 @@ void Fists::Shoot(Event * ev)
    NextAttack(1);
 
    GetMuzzlePosition(&start, &dir);
-   Strike(start, start + dir * strike_reach);
+   VRFeelHit(Strike(start, start + dir * strike_reach), VR_HAND_WEAPON);
+}
+
+// SiN Gold VR: a punch that lands is felt in the hand that threw it - hard on
+// something that can be hurt, lighter on a wall.
+void Fists::VRFeelHit(trace_t trace, int hand)
+{
+   if(!owner || !owner->isClient() || trace.fraction >= 1.0f || !trace.ent || !trace.ent->entity)
+   {
+      return;
+   }
+
+   VR_Feedback(VR_FEEDBACK_HIT, hand,
+               (trace.ent->entity != world && trace.ent->entity->takedamage) ? 1.0f : 0.4f);
 }
 
 //

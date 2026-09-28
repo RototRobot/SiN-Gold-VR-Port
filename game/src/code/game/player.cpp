@@ -6582,6 +6582,7 @@ void Player::VRPunches(void)
       }
 
       trace = ((Fists *)currentWeapon)->VRPunch(fist, way, look, &how);
+      ((Fists *)currentWeapon)->VRFeelHit(trace, hand);
 
       if(vr_punch->value >= 2)
       {

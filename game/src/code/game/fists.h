@@ -34,6 +34,7 @@ public:
    virtual void      Shoot(Event *ev);
    trace_t           Strike(Vector start, Vector end);
    trace_t           VRPunch(Vector fist, Vector dir, Vector look, const char **how);
+   void              VRFeelHit(trace_t trace, int hand);
    virtual void      Archive(Archiver &arc)   override;
    virtual void      Unarchive(Archiver &arc) override;
 };

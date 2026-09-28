@@ -26,6 +26,7 @@
 #include "specialfx.h"
 #include "chaingun.h"
 #include "assaultrifle.h"
+#include "game_vr/vr_link.h"
 #include "player.h"
 
 #ifdef SIN_ARCADE
@@ -893,6 +894,12 @@ void Weapon::Fire(void)
       UseAmmo(ammorequired);
    else
       UseAmmo(secondary_ammorequired);
+
+   // SiN Gold VR: the hand holding it feels the shot; a punch is felt when it lands
+   if(owner && owner->isClient() && !inheritsFrom("Fists"))
+   {
+      VR_Feedback(VR_FEEDBACK_SHOT, VR_HAND_WEAPON, 1.0f);
+   }
 
    weaponstate = WEAPON_FIRING;
 
