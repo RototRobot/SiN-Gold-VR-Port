@@ -1185,7 +1185,6 @@ void vr_weapon_publish(void)
 
 void vr_weapon_end_frame(void)
 {
-	vr_weapon_commands_done();
 	placing = 0;
 	placed_this_frame = 0;
 	world_aim_valid = 0;
@@ -1537,27 +1536,36 @@ static void say_placed(const char *how)
 #define SIN_USES_VIEWORG 0x718C          /* addss xmm1, [cl.refdef.vieworg] */
 #define SIN_USES_VIEWYAW 0x726E          /* addss xmm1, [cl.refdef.viewangles + 4] */
 #define SIN_SETS_COMMAND_ENTITY 0x7572   /* mov [the entity running commands], eax */
-#define SIN_READS_HAND 0x194D8           /* mov eax, [the "hand" cvar], in the attach command */
-#define SIN_READS_BONE_SCALE 0x194DD     /* movss xmm0, [0.3], the next instruction */
+#define SIN_READS_BONE_SCALE 0x194DD     /* movss xmm0, [0.3], in the attach command */
 
 /*
  * The model's client commands - the muzzle flash (attach), tracers and shell
  * cases (bonespawn) - put what they make at the weapon's bones, and for a view
  * weapon (RF_WEAPONMODEL) CL_CMDS_ProcessCommands (+0x191E0) first shrinks the
  * bone's offset from the model's origin to 0.3 of itself, because SiN draws its
- * view models about three times life size, and mirrors it when the "hand" cvar
- * is 1. In the hand the weapon is drawn at its true size, so the commands are
- * given the weapon at its size over 0.3, which puts the bones back where the
- * drawn model has them; and a weapon drawn mirrored has "hand" read as 1 while
- * they run, so SiN's own left-handed mirror turns them to match. The cvar's
- * value goes back before anything is drawn (vr_weapon_commands_done): ref_gl
- * reads the same cvar to flip the view weapon.
+ * view models about three times life size. In the hand the weapon is drawn at
+ * its true size, so the commands are given the weapon at its size over 0.3,
+ * which puts the bones back where the drawn model has them.
+ *
+ * Both they and the client's upkeep of an attached effect afterwards - which
+ * finds the weapon in the scene by its id and places the flash off its bone
+ * every frame, with no 0.3 and no regard for the "hand" cvar (the first half
+ * of +0x18E40) - lay the bone's offset out along the entity's axis rows, not
+ * its angles. ref_gl draws the weapon from its angles. So a weapon drawn
+ * mirrored has its left row turned round in both the scene's copy and the
+ * commands' (mirror_axis): the effects follow the mirror, the picture is
+ * unchanged, and the only other reader in ref_gl, the bounding box it culls
+ * by (+0x19685), gets the mirrored model's box, which is the right one.
  */
-static cvar_t *const *sin_hand;
 static const float *sin_bone_scale;
-static float hand_value;
-static int hand_forced;
 static unsigned effects_placed;
+
+static void mirror_axis(entity_t *e)
+{
+	e->axis[1][0] = -e->axis[1][0];
+	e->axis[1][1] = -e->axis[1][1];
+	e->axis[1][2] = -e->axis[1][2];
+}
 
 /*
  * And some weapons' muzzle flash is moved off the barrel on purpose:
@@ -1706,6 +1714,7 @@ static void __fastcall add_view_weapon(entity_t *gun)
 	else if (mirror_weapon())
 	{
 		vr_gl_mirror_model_at(gun->origin);
+		mirror_axis(gun);
 	}
 	hide_modelled_arm(gun);
 
@@ -1733,17 +1742,12 @@ static void __fastcall add_view_weapon(entity_t *gun)
 	}
 
 	/* The entity goes on to the model's client commands from here: at the size
-	   that puts their bones where the drawn ones are, mirrored if it is. */
+	   that puts their bones where the drawn ones are - and mirrored, if it is,
+	   by its axis. */
 	if (sin_bone_scale)
 	{
 		gun->scale /= *sin_bone_scale;
 		effects_placed++;
-	}
-	if (sin_hand && *sin_hand && mirror_weapon() && !hand_forced)
-	{
-		hand_value = (*sin_hand)->value;
-		(*sin_hand)->value = 1.0f;
-		hand_forced = 1;
 	}
 	keep_client_bullets = !wants_server_bullets();
 	placed_this_frame = 1;
@@ -1778,7 +1782,6 @@ void vr_weapon_install(void)
 {
 	static const BYTE addss_xmm1[] = { 0xF3, 0x0F, 0x58, 0x0D };
 	static const BYTE mov_to_memory[] = { 0xA3 };
-	static const BYTE mov_from_memory[] = { 0xA1 };
 	static const BYTE movss_xmm0[] = { 0xF3, 0x0F, 0x10, 0x05 };
 	HMODULE exe = GetModuleHandleA(NULL);
 
@@ -1791,15 +1794,13 @@ void vr_weapon_install(void)
 	sin_viewyaw = (const float *)vr_hook_data_address(exe, SIN_USES_VIEWYAW, addss_xmm1, sizeof(addss_xmm1));
 	sin_command_entity = (entity_t *const *)vr_hook_data_address(exe, SIN_SETS_COMMAND_ENTITY, mov_to_memory,
 		sizeof(mov_to_memory));
-	sin_hand = (cvar_t *const *)vr_hook_data_address(exe, SIN_READS_HAND, mov_from_memory,
-		sizeof(mov_from_memory));
 	sin_bone_scale = (const float *)vr_hook_data_address(exe, SIN_READS_BONE_SCALE, movss_xmm0,
 		sizeof(movss_xmm0));
 	if (sin_bone_scale && fabsf(*sin_bone_scale - 0.3f) > 0.001f)
 	{
 		sin_bone_scale = NULL;
 	}
-	if (!sin_hand || !sin_bone_scale)
+	if (!sin_bone_scale)
 	{
 		vr_printf("VR: this sin.exe is not the build the weapon code knows - the muzzle flash and shell "
 			"cases will not follow a weapon in the hand exactly");
@@ -1835,7 +1836,7 @@ void vr_weapon_install(void)
 
 	patched = 1;
 	vrlog("VR: the client's view weapon and bullet impacts go through the weapon code%s",
-		sin_hand && sin_bone_scale ? ", and its flash and shell cases are placed at its true size" : "");
+		sin_bone_scale ? ", and its flash and shell cases are placed at its true size" : "");
 }
 
 void vr_weapon_uninstall(void)
@@ -1845,7 +1846,6 @@ void vr_weapon_uninstall(void)
 		return;
 	}
 
-	vr_weapon_commands_done();
 	vr_unhook_calls();
 	patched = 0;
 	vrlog("VR: the view weapon was placed by the client %u times; %u of its bullet impacts were left "
@@ -1956,18 +1956,6 @@ void vr_weapon_to_hand(refdef_t *fd)
 	hold_idle(gun);
 	placed_this_frame = 1;
 	say_placed("moved in the renderer");
-}
-
-void vr_weapon_commands_done(void)
-{
-	if (hand_forced)
-	{
-		if (sin_hand && *sin_hand)
-		{
-			(*sin_hand)->value = hand_value;
-		}
-		hand_forced = 0;
-	}
 }
 
 void vr_weapon_after_eye(refdef_t *fd)

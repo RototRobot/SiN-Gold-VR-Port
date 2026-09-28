@@ -106,10 +106,6 @@ void vr_weapon_draw_hands(const refdef_t *fd);
 void vr_weapon_to_hand(refdef_t *fd);
 void vr_weapon_after_eye(refdef_t *fd);
 
-/* At the start of RenderFrame: the model's client commands have run, and the
-   "hand" cvar they were shown for a mirrored weapon goes back to its value. */
-void vr_weapon_commands_done(void);
-
 /* Whether this frame's weapon is in the hand - when a crosshair drawn where the
    head looks would only mislead. */
 int vr_weapon_in_hand(void);
