@@ -902,6 +902,16 @@ maths is what the owner's next headset test exercises.
      words on the stack (the caller pops them) with register arguments in ecx and edx, which the thunk
      keeps. Desk: installed, commands pass through it on weapon changes, clean shutdown; the firing is
      for the headset.
+   - **The next screenshot** (left-handed again, all 13 flashes with their offset dropped, per the log)
+     had the flash on the right of the gun - at the barrel of the gun *unmirrored*. Forcing `hand` to 1
+     only mirrored the flash's first frame: an attached effect is placed again every frame by the
+     other half of `00418E40`, which finds its parent in the scene list by id and lays the bone out
+     along that entity's axis rows, with no 0.3 and no `hand`. So the `hand` trick is gone; instead a
+     mirrored weapon's axis has its left row turned round (`mirror_axis`), in the scene's copy and the
+     commands' alike. ref_gl draws the weapon from its angles, computed before, so the picture is
+     unchanged; its only reader of the rows for a model is the cull box (+0x19685), which then fits the
+     mirrored model. Desk: the mirrored magnum drawn in four poses, two half out of view, with nothing
+     culled.
 
 What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
 computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the
