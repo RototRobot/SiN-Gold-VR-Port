@@ -508,6 +508,19 @@ touches it: the controllers arrive the way a player's own binds and joystick wou
      still taken. The commands themselves queue behind a test cfg's `wait`s, as every mod-queued
      command does (§5), so the weapon changes are for the headset. The Y and B buttons keep the weapon
      cycling for now, as a fallback, until the owner gives them something else.
+   - **The top buttons off, and something to feel** (2026-09-28). `vr_weapon_buttons` (default 0) lets the
+     weapon-cycling buttons through only when set; otherwise they are ignored outside menus, with a
+     hint the first time. Shots and punches are felt through a second export, `SinVrFeedback(kind, hand,
+     strength)` beside `SinVrPoses` (sinvr_poses.h), which the game calls through `VR_Feedback`: a
+     shot from `Weapon::Fire` once it has taken the ammunition - every weapon's fire animation has one
+     `shoot` on its first frame, so that is one call a shot, automatics included - for anything but
+     the fists (`inheritsFrom("Fists")`, which takes in the mutant hands); a hit from
+     `Fists::VRFeelHit`, after the button's punch in `Fists::Shoot` and the swung one in
+     `Player::VRPunches`, 1 for something that takes damage and 0.4 for a wall. The renderer buzzes
+     the hand (the weapon's, for `SINVR_HAND_WEAPON`), longer and harder for the shotgun, rocket
+     launcher, sniper rifle, quantum destabilizer and speargun, and the other hand as well while it
+     steadies the weapon. `vr_haptics 0` silences everything. Desk: the button off, then on; two
+     swung punches into a grunt, both felt; the shots are for the headset.
 4. **Focus.** `xrSyncActions` returns `XR_SESSION_NOT_FOCUSED` while the runtime is showing something of
    its own, and then everything held is released and the sticks centre. The same happens if a controller's
    action goes inactive while a button is held, or the session goes away.

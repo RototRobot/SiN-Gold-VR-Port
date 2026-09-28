@@ -93,8 +93,8 @@ unaffected either way.
 | Left trigger | Use |
 | Right **A** | Jump |
 | Left **X** | Crouch |
-| Right **B** | Next weapon (the shoulders do this too) |
-| Left **Y** | Previous weapon (the shoulders do this too) |
+| Right **B** | Next weapon, with `vr_weapon_buttons 1` (off by default: the shoulders do it) |
+| Left **Y** | Previous weapon, with `vr_weapon_buttons 1` |
 | Left grip | Run - or, with your left hand at a rifle's fore-end, hold it in both hands (see below) |
 | Right stick, click | Opens and closes the game menu (Escape) |
 | Right stick, up/down, while adjusting a weapon | Makes it bigger or smaller |
@@ -192,6 +192,8 @@ These console variables control the mod:
 | `vr_recentre_double` | 1 | Require two clicks of the left stick to recentre. 0 makes one do. |
 | `vr_snap_turn` | 0 | 1 turns in steps: each push of the turning stick turns you `vr_snap_angle` degrees at once, and the stick has to come back to the middle before it turns you again. 0 is smooth turning. |
 | `vr_snap_angle` | 45 | How far one snap turns you, in degrees. |
+| `vr_weapon_buttons` | 0 | 1 lets the top buttons (B and Y) cycle weapons as well as the shoulders. |
+| `vr_haptics` | 1 | The controllers buzz: as a hand reaches a shoulder or hip, as a gesture fires, when a weapon goes off (harder for the heavy ones, and in both hands while steadying a rifle) and when a punch lands (harder on an enemy than a wall). 0 turns every buzz off. |
 | `vr_gestures` | 1 | The grips at the shoulders and hip change weapon, as in the controls above. 0 leaves the grips doing only what they do elsewhere. |
 | `vr_aim` | 1 | Shots come from the weapon in the hand rather than from the player's angles. |
 | `vr_weapon_hand` | 1 | Draw the weapon in the hand instead of in front of the camera. |
