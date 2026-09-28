@@ -73,7 +73,8 @@ void vr_gl_full_screen_2d(int on);
 /*
  * Draws the model placed at origin - to within a hundredth of a unit - with
  * everything on the far side of a plane cut away: the plane is a, b, c, d in
- * the world, and what is kept is where a x + b y + c z + d >= 0.
+ * the world, and what is kept is where a x + b y + c z + d >= 0. Called again
+ * for the same model, it adds a second plane; a third is ignored.
  */
 void vr_gl_clip_model_at(const float origin[3], const float plane[4]);
 

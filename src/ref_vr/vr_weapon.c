@@ -215,6 +215,7 @@ static cvar_t *vr_other_hand;
 static cvar_t *vr_weapon_arm;
 static cvar_t *vr_weapon_fill;
 static cvar_t *vr_weapon_idle;
+static cvar_t *vr_upper_arm;
 static cvar_t *vr_aim;
 
 /* Read once, at start-up: the buttons are attached to the session with the
@@ -378,6 +379,7 @@ void vr_weapon_startup(void)
 	vr_weapon_arm = vr_cvar("vr_weapon_arm", "0", CVAR_ARCHIVE);
 	vr_weapon_fill = vr_cvar("vr_weapon_fill", "1", CVAR_ARCHIVE);
 	vr_weapon_idle = vr_cvar("vr_weapon_idle", "0", CVAR_ARCHIVE);
+	vr_upper_arm = vr_cvar("vr_upper_arm", "0", CVAR_ARCHIVE);
 	vr_aim = vr_cvar("vr_aim", "1", 0);
 	lefty = vr_left_handed->value != 0.0f;
 	if (lefty)
@@ -1406,17 +1408,50 @@ int vr_weapon_world_aim(float origin[3], float forward[3])
  * the plane of its own forward and up. The entity's group flags cannot do it -
  * they only reach the groups a model's .def names, and the fists' arms are not
  * among them - so it is done where ref_gl draws it (vr_gl.c).
+ *
+ * The arm is cut short as well, unless vr_upper_arm says otherwise: the fists'
+ * model has the whole arm, down the forearm from the wrist to the elbow and
+ * back up again, built for a camera it hung down from, and in the hand the
+ * upper arm sticks out where no arm is. Measured off view_punch.def's idle,
+ * in its own units (x forward, z up; both arms alike), the wrist is at
+ * (13.5, -13) and the elbow at (0.5, -26.5); the cut goes through the forearm
+ * 80% of the way from the wrist to the elbow - about as much arm as the
+ * magnum's own hand has. Square across the forearm, it left the far end of
+ * the upper arm, which folds back up over the forearm, on the kept side, so
+ * the plane leans 16 degrees back from square (its normal 30 degrees up from
+ * forward, where the forearm's is 46): the whole upper arm is then behind it.
  */
+#define FOREARM_CUT_X 3.1f
+#define FOREARM_CUT_Z (-23.8f)
+#define FOREARM_TOWARD_WRIST_X 0.866f
+#define FOREARM_TOWARD_WRIST_Z 0.5f
+
 static void keep_one_arm(const entity_t *e, int hand)
 {
-	float plane[4];
+	float plane[4], at[3], n[3];
 	const float *left = e->axis[1];
 	float sign = hand == LEFT ? 1.0f : -1.0f;
+	int i;
 
 	plane[0] = sign * left[0];
 	plane[1] = sign * left[1];
 	plane[2] = sign * left[2];
 	plane[3] = -sign * (left[0] * e->origin[0] + left[1] * e->origin[1] + left[2] * e->origin[2]);
+	vr_gl_clip_model_at(e->origin, plane);
+
+	if (vr_upper_arm && vr_upper_arm->value != 0.0f)
+	{
+		return;
+	}
+	for (i = 0; i < 3; ++i)
+	{
+		at[i] = e->origin[i] + e->scale * (FOREARM_CUT_X * e->axis[0][i] + FOREARM_CUT_Z * e->axis[2][i]);
+		n[i] = FOREARM_TOWARD_WRIST_X * e->axis[0][i] + FOREARM_TOWARD_WRIST_Z * e->axis[2][i];
+	}
+	plane[0] = n[0];
+	plane[1] = n[1];
+	plane[2] = n[2];
+	plane[3] = -(n[0] * at[0] + n[1] * at[1] + n[2] * at[2]);
 	vr_gl_clip_model_at(e->origin, plane);
 }
 

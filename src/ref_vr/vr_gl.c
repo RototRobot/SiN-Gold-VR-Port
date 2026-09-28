@@ -82,8 +82,8 @@ static struct
 {
 	int count;
 	float origin[MAX_MODELS][3];
-	GLdouble plane[MAX_MODELS][4];
-	int has_plane[MAX_MODELS];
+	GLdouble plane[MAX_MODELS][2][4];
+	int has_plane[MAX_MODELS];      /* how many planes */
 	int mirror[MAX_MODELS];
 	const int (*hide[MAX_MODELS])[2];
 	int hide_count[MAX_MODELS];
@@ -171,11 +171,15 @@ void vr_gl_clip_model_at(const float origin[3], const float plane[4])
 		return;
 	}
 
+	if (models.has_plane[at] >= 2)
+	{
+		return;
+	}
 	for (i = 0; i < 4; ++i)
 	{
-		models.plane[at][i] = plane[i];
+		models.plane[at][models.has_plane[at]][i] = plane[i];
 	}
-	models.has_plane[at] = 1;
+	models.has_plane[at]++;
 }
 
 void vr_gl_mirror_model_at(const float origin[3])
@@ -506,9 +510,14 @@ static void APIENTRY hook_glTranslatef(GLfloat x, GLfloat y, GLfloat z)
 			{
 				if (models.has_plane[i])
 				{
-					glClipPlane(GL_CLIP_PLANE0, models.plane[i]);
+					glClipPlane(GL_CLIP_PLANE0, models.plane[i][0]);
 					glEnable(GL_CLIP_PLANE0);
-					models.on = 1;
+					if (models.has_plane[i] > 1)
+					{
+						glClipPlane(GL_CLIP_PLANE1, models.plane[i][1]);
+						glEnable(GL_CLIP_PLANE1);
+					}
+					models.on = models.has_plane[i];
 				}
 				if (models.mirror[i])
 				{
@@ -547,6 +556,10 @@ static void end_model(void)
 	if (models.on)
 	{
 		glDisable(GL_CLIP_PLANE0);
+		if (models.on > 1)
+		{
+			glDisable(GL_CLIP_PLANE1);
+		}
 		models.on = 0;
 	}
 	if (models.mirrored)
@@ -744,6 +757,7 @@ int vr_gl_world_begin(const float vieworg[3], const float viewangles[3])
 	glDisable(GL_CULL_FACE);
 	glDisable(GL_SCISSOR_TEST);
 	glDisable(GL_CLIP_PLANE0);
+	glDisable(GL_CLIP_PLANE1);
 	glLineWidth(eye.target_width > 1600 ? 3.0f : 2.0f); /* about a tenth of a degree */
 
 	/* The real entry points throughout: the hooked ones are for ref_gl's own
