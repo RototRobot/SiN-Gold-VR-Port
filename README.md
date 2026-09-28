@@ -193,7 +193,7 @@ These console variables control the mod:
 | `vr_snap_turn` | 0 | 1 turns in steps: each push of the turning stick turns you `vr_snap_angle` degrees at once, and the stick has to come back to the middle before it turns you again. 0 is smooth turning. |
 | `vr_snap_angle` | 45 | How far one snap turns you, in degrees. |
 | `vr_weapon_buttons` | 0 | 1 lets the top buttons (B and Y) cycle weapons as well as the shoulders. |
-| `vr_haptics` | 1 | The controllers buzz: as a hand reaches a shoulder or hip, as a gesture fires, when a weapon goes off (harder for the heavy ones, and in both hands while steadying a rifle) and when a punch lands (harder on an enemy than a wall). 0 turns every buzz off. |
+| `vr_haptics` | 1 | The controllers buzz: as a hand reaches a shoulder or hip, as a gesture fires, when a weapon goes off (harder for the heavy ones, and in both hands while steadying a rifle), rising while the quantum destabilizer charges - full strength at five seconds, which is also when it blows up in your hands - and when a punch lands (harder on an enemy than a wall). 0 turns every buzz off. |
 | `vr_gestures` | 1 | The grips at the shoulders and hip change weapon, as in the controls above. 0 leaves the grips doing only what they do elsewhere. |
 | `vr_aim` | 1 | Shots come from the weapon in the hand rather than from the player's angles. |
 | `vr_weapon_hand` | 1 | Draw the weapon in the hand instead of in front of the camera. |

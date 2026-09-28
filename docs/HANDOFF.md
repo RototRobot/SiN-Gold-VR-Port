@@ -521,6 +521,17 @@ touches it: the controllers arrive the way a player's own binds and joystick wou
      launcher, sniper rifle, quantum destabilizer and speargun, and the other hand as well while it
      steadies the weapon. `vr_haptics 0` silences everything. Desk: the button off, then on; two
      swung punches into a grunt, both felt; the shots are for the headset.
+   - **Pulses long enough to feel, and the destabilizer's charge** (2026-09-28). The owner felt only
+     every other magnum shot, though the session's log had all 173 shots sent (as many as the 166
+     flashes, near enough): the G2's controllers let a 40 ms pulse through only some of the time. No
+     pulse is shorter than 100 ms now, and `vr_input_haptic` logs the first few the runtime refuses.
+     The quantum destabilizer charges while the trigger is held - `eatammo` every tenth of a second
+     from its fire animation, `ReleaseFire` setting the power to the seconds held over five, and
+     `destruct_time 5` blowing it up in the player's hands at five - so `Weapon::Fire` no longer sends
+     its shot; `QuantumDestabilizer::EatAmmo` sends `VR_FEEDBACK_CHARGE` with the seconds held over five
+     each tick, a 120 ms pulse from faint to full so they run together, and `ReleaseFire` the shot at
+     0.3 + 0.7 of the power. Under god mode `EatAmmo` does not post itself again, so the buzz is one
+     tick there. For the headset: nothing about firing reaches a desk run.
 4. **Focus.** `xrSyncActions` returns `XR_SESSION_NOT_FOCUSED` while the runtime is showing something of
    its own, and then everything held is released and the sticks centre. The same happens if a controller's
    action goes inactive while a button is held, or the session goes away.
