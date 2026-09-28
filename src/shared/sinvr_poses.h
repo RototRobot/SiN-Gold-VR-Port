@@ -78,4 +78,17 @@ typedef struct
 /* ref_vr.dll's export. NULL if it speaks a different version. */
 typedef const sinvr_poses_t *(*sinvr_poses_fn)(int version);
 
+/*
+ * The other way: something the player should feel, sent by the game as it
+ * happens through ref_vr.dll's SinVrFeedback. hand is SINVR_HAND_LEFT or
+ * _RIGHT, or SINVR_HAND_WEAPON for whichever holds the weapon; strength is
+ * 0-1. A shot is the weapon going off - the fists' punches are not shots - and
+ * a hit is a punch meeting something, 1 for something that can be hurt.
+ */
+#define SINVR_FEEDBACK_SHOT 1
+#define SINVR_FEEDBACK_HIT 2
+#define SINVR_HAND_WEAPON (-1)
+
+typedef void (*sinvr_feedback_fn)(int kind, int hand, float strength);
+
 #endif /* SINVR_POSES_H */

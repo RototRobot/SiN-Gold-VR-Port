@@ -44,6 +44,25 @@ static const sinvr_poses_t *find_poses(void)
 	return poses;
 }
 
+static HMODULE feedback_module;
+static sinvr_feedback_fn feedback;
+
+void VR_Feedback(int kind, int hand, float strength)
+{
+	HMODULE renderer = GetModuleHandleA("ref_vr.dll");
+
+	if (renderer != feedback_module)
+	{
+		feedback_module = renderer;
+		feedback = renderer ? (sinvr_feedback_fn)GetProcAddress(renderer, "SinVrFeedback") : NULL;
+	}
+
+	if (feedback)
+	{
+		feedback(kind, hand, strength);
+	}
+}
+
 /*
  * Poses are only worth using while they are being written. The renderer stops
  * writing when VR is switched off or the headset goes idle, and the block would

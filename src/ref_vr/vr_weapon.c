@@ -7,6 +7,7 @@
 #include "ref_vr.h"
 #include "vr_gl.h"
 #include "vr_hook.h"
+#include "vr_input.h"
 #include "vr_math.h"
 #include "vr_poses.h"
 #include "vr_weapon.h"
@@ -943,6 +944,43 @@ int vr_weapon_steady(int down)
 	return 1;
 }
 
+static unsigned shots_felt;
+static unsigned hits_felt;
+
+void vr_weapon_feedback(int kind, int hand, float strength)
+{
+	static const char *const heavy[] = { "shotgun", "rlaunch", "srifle", "quantum", "spgun" };
+	int h = (hand == LEFT || hand == RIGHT) ? hand : gun_hand();
+	int i, big = 0;
+
+	strength = strength < 0.0f ? 0.0f : (strength > 1.0f ? 1.0f : strength);
+
+	if (kind == SINVR_FEEDBACK_SHOT)
+	{
+		for (i = 0; current && i < (int)(sizeof(heavy) / sizeof(heavy[0])); ++i)
+		{
+			big |= strcmp(current->key, heavy[i]) == 0;
+		}
+		vr_input_haptic(h, big ? 0.09f : 0.04f, (big ? 0.6f : 0.35f) + 0.4f * strength);
+		if (steady.active)
+		{
+			vr_input_haptic(h == LEFT ? RIGHT : LEFT, big ? 0.07f : 0.03f, (big ? 0.4f : 0.25f) + 0.3f * strength);
+		}
+		if (!shots_felt++)
+		{
+			vrlog("VR: the game sends its shots - the %s hand feels them", hand_name(h));
+		}
+	}
+	else if (kind == SINVR_FEEDBACK_HIT)
+	{
+		vr_input_haptic(h, 0.08f, 0.4f + 0.6f * strength);
+		if (!hits_felt++)
+		{
+			vrlog("VR: the game sends its punches' hits - the %s hand felt one", hand_name(h));
+		}
+	}
+}
+
 static void reset_requested(void)
 {
 	if (!vr_weapon_reset || vr_weapon_reset->value == 0.0f)
@@ -1863,9 +1901,9 @@ void vr_weapon_uninstall(void)
 	patched = 0;
 	vrlog("VR: the view weapon was placed by the client %u times; %u of its bullet impacts were left "
 		"to the server; %u punches were thrown; the other hand took hold %u times; its effects were placed "
-		"at its true size %u times; of its %u commands, %u flashes were put back on the barrel",
-		client_placements, bullets_left_out, punches_thrown, steady.count, effects_placed, view_commands,
-		flash_offsets_dropped);
+		"at its true size %u times; of its %u commands, %u flashes were put back on the barrel; %u shots and "
+		"%u punches' hits were felt", client_placements, bullets_left_out, punches_thrown, steady.count,
+		effects_placed, view_commands, flash_offsets_dropped, shots_felt, hits_felt);
 }
 
 /* ------------------------------------------------------------------------- */

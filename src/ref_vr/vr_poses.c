@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "vr_poses.h"
+#include "vr_weapon.h"
 
 /*
  * One block, written in place. The game reads it on the same thread, between
@@ -88,4 +89,9 @@ const sinvr_poses_t *vr_poses_current(void)
 __declspec(dllexport) const sinvr_poses_t *SinVrPoses(int version)
 {
 	return version == SINVR_POSES_VERSION ? &poses : NULL;
+}
+
+__declspec(dllexport) void SinVrFeedback(int kind, int hand, float strength)
+{
+	vr_weapon_feedback(kind, hand, strength);
 }

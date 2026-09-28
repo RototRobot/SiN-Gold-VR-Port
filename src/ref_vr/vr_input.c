@@ -266,6 +266,9 @@ static unsigned frames;
 static cvar_t *vr_recentre_double;
 static cvar_t *vr_snap_turn;
 static cvar_t *vr_snap_angle;
+static cvar_t *vr_haptics;
+static cvar_t *vr_weapon_buttons;
+static int said_weapon_buttons;
 static int snap_armed = 1;
 static int said_no_snap;
 static int steadying; /* the other hand's grip button has hold of the weapon */
@@ -310,6 +313,8 @@ void vr_input_register(void)
 	vr_recentre_double = vr_cvar("vr_recentre_double", "1", CVAR_ARCHIVE);
 	vr_snap_turn = vr_cvar("vr_snap_turn", "0", CVAR_ARCHIVE);
 	vr_snap_angle = vr_cvar("vr_snap_angle", "45", CVAR_ARCHIVE);
+	vr_haptics = vr_cvar("vr_haptics", "1", CVAR_ARCHIVE);
+	vr_weapon_buttons = vr_cvar("vr_weapon_buttons", "0", CVAR_ARCHIVE);
 
 	for (i = 0; i < ACT_COUNT; ++i)
 	{
@@ -699,7 +704,8 @@ void vr_input_haptic(int hand, float seconds, float amplitude)
 	XrHapticVibration vibration = { XR_TYPE_HAPTIC_VIBRATION };
 	int index = hand == SINVR_HAND_LEFT ? ACT_HAPTIC_LEFT : ACT_HAPTIC_RIGHT;
 
-	if (input_session == XR_NULL_HANDLE || actions[index].action == XR_NULL_HANDLE)
+	if (input_session == XR_NULL_HANDLE || actions[index].action == XR_NULL_HANDLE ||
+		(vr_haptics && vr_haptics->value == 0.0f))
 	{
 		return;
 	}
@@ -872,6 +878,20 @@ static void let_go(int index)
 
 static void press_action(int index, int down, int menu)
 {
+	/* The top buttons cycle weapons only if vr_weapon_buttons says so: the
+	   shoulders do it now, and the buttons are free for something else. */
+	if (!menu && (index == ACT_WEAPON_NEXT || index == ACT_WEAPON_PREV) &&
+		vr_weapon_buttons && vr_weapon_buttons->value == 0.0f)
+	{
+		if (down && !said_weapon_buttons)
+		{
+			said_weapon_buttons = 1;
+			vr_printf("VR: the weapon buttons are off - reach over a shoulder to change weapon, or set "
+				"vr_weapon_buttons 1");
+		}
+		return;
+	}
+
 	/* Over a shoulder or at the hip, the gun hand's grip is a gesture's. */
 	if (index == ACT_ADJUST && !menu && vr_gesture_gun_grip(down))
 	{

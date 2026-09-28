@@ -133,4 +133,12 @@ int vr_weapon_adjusting(void);
  */
 int vr_weapon_steady(int down);
 
+/*
+ * Something the player should feel, from the game (sinvr_poses.h): a shot is
+ * a buzz in the hand holding the weapon - harder and longer for the heavy
+ * weapons, and in the other hand too while it steadies one - and a hit is a
+ * buzz in the hand that punched.
+ */
+void vr_weapon_feedback(int kind, int hand, float strength);
+
 #endif /* VR_WEAPON_H */

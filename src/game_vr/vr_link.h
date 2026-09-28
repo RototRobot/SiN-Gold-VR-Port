@@ -61,4 +61,15 @@ int VR_Punch(int hand, unsigned *number, float origin[3], float dir[3], float *s
  */
 int VR_TrackingChanged(void);
 
+/*
+ * Something the player should feel: a shot (VR_FEEDBACK_SHOT) or a punch
+ * landing (VR_FEEDBACK_HIT), in a hand - VR_HAND_LEFT, VR_HAND_RIGHT or
+ * VR_HAND_WEAPON for the one holding the weapon - at a strength from 0 to 1.
+ * Does nothing without the VR renderer.
+ */
+#define VR_FEEDBACK_SHOT 1
+#define VR_FEEDBACK_HIT 2
+#define VR_HAND_WEAPON (-1)
+void VR_Feedback(int kind, int hand, float strength);
+
 #endif /* VR_LINK_H */

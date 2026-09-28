@@ -2,3 +2,4 @@ LIBRARY ref_vr
 EXPORTS
 	GetRefAPI
 	SinVrPoses
+	SinVrFeedback
