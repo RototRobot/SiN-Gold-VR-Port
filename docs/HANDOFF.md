@@ -913,6 +913,18 @@ maths is what the owner's next headset test exercises.
      mirrored model. Desk: the mirrored magnum drawn in four poses, two half out of view, with nothing
      culled.
 
+20. **The rebuilt side's join** (2026-09-28). The owner marked a thin gap along the magnum's top where
+   the rebuilt side meets the real one. The mirror was across the barrel marker's y, -37.1, but the
+   magnum's upward-facing surfaces - modelled all the way across - run from -42.3 to -30.5, middle
+   -36.4, which is also the middle of its body; 0.7 units out, the reflection lands 1.4 units (about
+   9 mm at its size) too far out. Every gun measured the same way (upward faces within 37 degrees of
+   up, 5th to 95th percentile of their y) against its body's middle: where the two agree within half a
+   unit the top faces' middle is used - magnum -36.4, shotgun -14.85, assault rifle -22.25, sniper
+   rifle -15.9, pulse rifle -23.35, speargun -24.25 - and the body's elsewhere (quantum destabilizer
+   -35.1, rocket launcher -23.5; the chaingun is not rebuilt). No gun is rolled or yawed in its model
+   by more than 3 degrees, so the plane stays square. The join itself is for the headset; a desk pose
+   close enough to see it put the gun mostly out of the picture.
+
 What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
 computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the
 grip button freezing and re-attaching the weapon (frozen with the hand at yaw 0, released with it at yaw
@@ -935,6 +947,16 @@ the server's impacts - is what the owner's headset test exercises.
 
 Still to do, and what is known about each:
 
+- **The rebuilt side drifts during the fire animation** (owner, 2026-09-28: "moves a bit when the
+  recoil animation plays" - logged, not fixed). The reflection is across a fixed plane in the model's
+  frame, and the fire animation moves the gun in ways a mirror across that plane does not follow
+  (anything but a pitch about the model's y axis). The way to fix it: pick three vertices spread over
+  each gun's body, note their positions in ref_gl's vertex array whenever the idle is held (`hold_idle`
+  puts the gun on the first frame of its main idle, so that is the rest pose, at the size it is drawn),
+  and in any other animation work out the rigid motion from those three to their current positions
+  (orthonormal frames from each triangle) and carry the plane with it - reflecting across a general
+  plane, p - 2(n.p - d)n, instead of `y = middle`. The arrays are already there at the first `glBegin`
+  of the model.
 - **Two-handed holds, what is left**: the fore-end distances are first guesses waiting on the headset,
   and the other hand is a fist - there is no open hand in SiN's models to hold a fore-end with.
 - **Mutant hands** (`view_mutanthands.def`) are not in the weapon table, so they are placed from the
