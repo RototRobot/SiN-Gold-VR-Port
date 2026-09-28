@@ -12,6 +12,7 @@
 #include "refapi.h"
 #include "ref_vr.h"
 #include "vr_input.h"
+#include "vr_gesture.h"
 #include "vr_joy.h"
 #include "vr_keys.h"
 #include "vr_poses.h"
@@ -44,6 +45,8 @@ enum
 	ACT_HAND_RIGHT,
 	ACT_GRIP_LEFT,
 	ACT_GRIP_RIGHT,
+	ACT_HAPTIC_LEFT,
+	ACT_HAPTIC_RIGHT,
 	ACT_COUNT
 };
 
@@ -51,7 +54,8 @@ typedef enum
 {
 	KIND_BUTTON,
 	KIND_AXES,
-	KIND_POSE
+	KIND_POSE,
+	KIND_HAPTIC
 } action_kind_t;
 
 typedef struct
@@ -81,7 +85,9 @@ static action_t actions[ACT_COUNT] = {
 	{ "hand_left",   "Left hand",       KIND_POSE,   NULL },
 	{ "hand_right",  "Right hand",      KIND_POSE,   NULL },
 	{ "grip_left",   "Left grip",       KIND_POSE,   NULL },
-	{ "grip_right",  "Right grip",      KIND_POSE,   NULL }
+	{ "grip_right",  "Right grip",      KIND_POSE,   NULL },
+	{ "haptic_left", "Left buzz",       KIND_HAPTIC, NULL },
+	{ "haptic_right", "Right buzz",     KIND_HAPTIC, NULL }
 };
 
 typedef struct
@@ -118,7 +124,9 @@ static const binding_t bindings_hp[] = {
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
 	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" },
 	{ ACT_GRIP_LEFT,   "/user/hand/left/input/grip/pose" },
-	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" }
+	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" },
+	{ ACT_HAPTIC_LEFT, "/user/hand/left/output/haptic" },
+	{ ACT_HAPTIC_RIGHT, "/user/hand/right/output/haptic" }
 };
 
 /* Windows Mixed Reality controllers without that extension: no lettered
@@ -139,7 +147,9 @@ static const binding_t bindings_wmr[] = {
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
 	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" },
 	{ ACT_GRIP_LEFT,   "/user/hand/left/input/grip/pose" },
-	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" }
+	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" },
+	{ ACT_HAPTIC_LEFT, "/user/hand/left/output/haptic" },
+	{ ACT_HAPTIC_RIGHT, "/user/hand/right/output/haptic" }
 };
 
 static const binding_t bindings_touch[] = {
@@ -159,7 +169,9 @@ static const binding_t bindings_touch[] = {
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
 	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" },
 	{ ACT_GRIP_LEFT,   "/user/hand/left/input/grip/pose" },
-	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" }
+	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" },
+	{ ACT_HAPTIC_LEFT, "/user/hand/left/output/haptic" },
+	{ ACT_HAPTIC_RIGHT, "/user/hand/right/output/haptic" }
 };
 
 /* The Index has no menu button, so the menu is the right stick's click. */
@@ -179,7 +191,9 @@ static const binding_t bindings_index[] = {
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
 	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" },
 	{ ACT_GRIP_LEFT,   "/user/hand/left/input/grip/pose" },
-	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" }
+	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" },
+	{ ACT_HAPTIC_LEFT, "/user/hand/left/output/haptic" },
+	{ ACT_HAPTIC_RIGHT, "/user/hand/right/output/haptic" }
 };
 
 /* Whatever else a runtime offers: the two buttons every profile has. */
@@ -190,7 +204,9 @@ static const binding_t bindings_simple[] = {
 	{ ACT_HAND_LEFT,   "/user/hand/left/input/aim/pose" },
 	{ ACT_HAND_RIGHT,  "/user/hand/right/input/aim/pose" },
 	{ ACT_GRIP_LEFT,   "/user/hand/left/input/grip/pose" },
-	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" }
+	{ ACT_GRIP_RIGHT,  "/user/hand/right/input/grip/pose" },
+	{ ACT_HAPTIC_LEFT, "/user/hand/left/output/haptic" },
+	{ ACT_HAPTIC_RIGHT, "/user/hand/right/output/haptic" }
 };
 
 /*
@@ -226,6 +242,7 @@ static const char *const key_names[VR_KEY_COUNT] = { "up", "down", "left", "righ
 
 static XrInstance xr_instance;
 static XrActionSet action_set;
+static XrSession input_session; /* for the buzzes, which are asked for outside a frame's reading */
 static cvar_t *vr_input;
 static cvar_t *vr_deadzone;
 static cvar_t *vr_fake_axes;
@@ -384,7 +401,7 @@ static const char *for_hand(const char *path, action_kind_t kind, int halves, ch
 	const char *head, *tail;
 	int i;
 
-	if (kind == KIND_POSE || !vr_weapon_left_handed())
+	if (kind == KIND_POSE || kind == KIND_HAPTIC || !vr_weapon_left_handed())
 	{
 		return path;
 	}
@@ -496,6 +513,7 @@ int vr_input_create(XrInstance instance, XrSession session)
 	}
 
 	xr_instance = instance;
+	input_session = session;
 	if (vr_weapon_left_handed())
 	{
 		vrlog("VR: left-handed - each hand's buttons and stick are given to the other");
@@ -523,6 +541,9 @@ int vr_input_create(XrInstance instance, XrSession session)
 			break;
 		case KIND_POSE:
 			action_info.actionType = XR_ACTION_TYPE_POSE_INPUT;
+			break;
+		case KIND_HAPTIC:
+			action_info.actionType = XR_ACTION_TYPE_VIBRATION_OUTPUT;
 			break;
 		default:
 			action_info.actionType = XR_ACTION_TYPE_BOOLEAN_INPUT;
@@ -672,6 +693,24 @@ static int is_fake(int action)
 	return 0;
 }
 
+void vr_input_haptic(int hand, float seconds, float amplitude)
+{
+	XrHapticActionInfo info = { XR_TYPE_HAPTIC_ACTION_INFO };
+	XrHapticVibration vibration = { XR_TYPE_HAPTIC_VIBRATION };
+	int index = hand == SINVR_HAND_LEFT ? ACT_HAPTIC_LEFT : ACT_HAPTIC_RIGHT;
+
+	if (input_session == XR_NULL_HANDLE || actions[index].action == XR_NULL_HANDLE)
+	{
+		return;
+	}
+
+	info.action = actions[index].action;
+	vibration.duration = (XrDuration)(seconds * 1e9);
+	vibration.frequency = XR_FREQUENCY_UNSPECIFIED;
+	vibration.amplitude = amplitude;
+	xrApplyHapticFeedback(input_session, &info, (const XrHapticBaseHeader *)&vibration);
+}
+
 static void release_fake(int slot)
 {
 	int action = fake_held[slot];
@@ -807,7 +846,12 @@ static void stop_holding(int index)
 	if (index == ACT_ADJUST)
 	{
 		vrlog("    input: adjust is no longer held");
+		vr_gesture_gun_grip(0);
 		vr_weapon_adjust_button(0);
+		return;
+	}
+	if (index == ACT_RUN && vr_gesture_other_grip(0))
+	{
 		return;
 	}
 	if (index == ACT_RUN && steadying)
@@ -828,6 +872,13 @@ static void let_go(int index)
 
 static void press_action(int index, int down, int menu)
 {
+	/* Over a shoulder or at the hip, the gun hand's grip is a gesture's. */
+	if (index == ACT_ADJUST && !menu && vr_gesture_gun_grip(down))
+	{
+		vrlog("    input: adjust %s -> a gesture", down ? "pressed" : "let go");
+		return;
+	}
+
 	/* Held, it lets go of the weapon so the hand can take it another way. */
 	if (index == ACT_ADJUST)
 	{
@@ -852,6 +903,11 @@ static void press_action(int index, int down, int menu)
 	   goes wherever the press went. */
 	if (index == ACT_RUN && !menu)
 	{
+		if (vr_gesture_other_grip(down))
+		{
+			vrlog("    input: %s %s -> a gesture", actions[index].name, down ? "pressed" : "let go");
+			return;
+		}
 		if (down && vr_weapon_steady(1))
 		{
 			vrlog("    input: %s pressed at the fore-end -> both hands", actions[index].name);
@@ -1474,6 +1530,7 @@ void vr_input_release(void)
 
 void vr_input_destroy(void)
 {
+	input_session = XR_NULL_HANDLE;
 	int i;
 
 	vr_input_release();

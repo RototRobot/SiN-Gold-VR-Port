@@ -83,6 +83,10 @@ void vr_weapon_hands_begin(double seconds);
    do across that is not the player's doing. */
 void vr_weapon_recentred(void);
 void vr_weapon_track_hand(int hand, const float grip[3], const float aim_origin[3], const float aim_angles[3]);
+
+/* Where a hand holds its controller this frame, in the recentred frame.
+   Returns 0 if it is not tracked. */
+int vr_weapon_hand_at(int hand, float out[3]);
 void vr_weapon_publish(void);
 
 /* The frame is over: nothing is placed until the next publish. */

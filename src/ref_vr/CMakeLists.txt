@@ -17,7 +17,9 @@ add_library(ref_vr SHARED
 	vr_math.c
 	vr_math.h
 	vr_turn.c
+	vr_gesture.c
 	vr_turn.h
+	vr_gesture.h
 	vr_weapon.c
 	vr_weapon.h
 	vr_poses.c

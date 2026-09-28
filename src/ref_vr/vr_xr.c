@@ -30,6 +30,7 @@
 #include "vr_weapon.h"
 #include "vr_xr.h"
 #include "vrlog.h"
+#include "vr_gesture.h"
 #include "xr_layers.h"
 
 typedef BOOL(WINAPI *swap_interval_t)(int interval);
@@ -996,7 +997,9 @@ static void publish_poses(void)
 		}
 		vr_view_local(head_position, xr.eye_views[0].orientation, scale, head_origin, head_angles);
 		vr_poses_head(head_origin, head_angles);
+		vr_gesture_head(head_origin, head_angles);
 		vr_input_hands(xr.session, xr.space, xr.display_time, scale);
+		vr_gesture_frame();
 		vr_weapon_publish();
 	}
 

@@ -27,6 +27,7 @@
 #include "vr_math.h"
 #include "vr_turn.h"
 #include "vr_weapon.h"
+#include "vr_gesture.h"
 #include "vr_view.h"
 #include "vr_xr.h"
 #include "vrlog.h"
@@ -610,6 +611,7 @@ static int vr_Init(void *hinstance, void *wndproc)
 	   it, before the engine's own input start-up, which comes after this. */
 	vr_input_register();
 	vr_weapon_startup();
+	vr_gesture_startup();
 	if (vr_enable->value != 0.0f)
 	{
 		vr_input_startup();

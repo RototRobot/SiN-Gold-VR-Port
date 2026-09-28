@@ -56,6 +56,9 @@ void vr_input_hands(XrSession session, XrSpace space, XrTime time, float units_p
  */
 void vr_input_idle(XrSession session);
 
+/* A buzz in one hand's controller: how long, in seconds, and how hard, 0-1. */
+void vr_input_haptic(int hand, float seconds, float amplitude);
+
 /* Lets go of anything held, and centres the sticks. */
 void vr_input_release(void);
 

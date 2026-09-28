@@ -557,6 +557,16 @@ void vr_weapon_track_hand(int hand, const float grip[3], const float aim_origin[
 	hands[hand].valid = 1;
 }
 
+int vr_weapon_hand_at(int hand, float out[3])
+{
+	if ((hand != LEFT && hand != RIGHT) || !hands[hand].valid)
+	{
+		return 0;
+	}
+	memcpy(out, hands[hand].frame.origin, sizeof(float) * 3);
+	return 1;
+}
+
 void vr_weapon_adjust_button(int down)
 {
 	adjust.button = down;

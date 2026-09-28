@@ -1,0 +1,275 @@
+#include <windows.h>
+#include <math.h>
+
+#include "refapi.h"
+#include "ref_vr.h"
+#include "vr_gesture.h"
+#include "vr_input.h"
+#include "vr_poses.h"
+#include "vr_weapon.h"
+#include "vrlog.h"
+
+#define YAW 1
+#define LEFT SINVR_HAND_LEFT
+#define RIGHT SINVR_HAND_RIGHT
+
+#define DEG_TO_RAD 0.017453292519943295
+
+/* How long a gun hand's grip at a shoulder waits for the other hand to join it
+   before it is taken as a weapon change, in milliseconds. */
+#define BOTH_HANDS_MS 350
+
+typedef enum
+{
+	ZONE_NONE,
+	ZONE_SHOULDER_LEFT,
+	ZONE_SHOULDER_RIGHT,
+	ZONE_HIP_LEFT,
+	ZONE_HIP_RIGHT
+} zone_t;
+
+static cvar_t *vr_gestures;
+
+static struct
+{
+	int valid;
+	float origin[3];
+	float yaw;
+} head;
+
+static zone_t last_zone[2];
+
+static struct
+{
+	int active;
+	zone_t zone;
+	DWORD at;
+} waiting;                 /* the gun hand's grip at a shoulder, the other hand near one too */
+
+static int gun_taken;      /* the gun hand's grip went to a gesture: so does its release */
+static int other_taken;
+static int other_at_shoulder;
+static DWORD other_pressed_at;
+static unsigned done;
+
+void vr_gesture_startup(void)
+{
+	vr_gestures = vr_cvar("vr_gestures", "1", CVAR_ARCHIVE);
+}
+
+void vr_gesture_head(const float origin[3], const float angles[3])
+{
+	head.origin[0] = origin[0];
+	head.origin[1] = origin[1];
+	head.origin[2] = origin[2];
+	head.yaw = angles[YAW];
+	head.valid = 1;
+}
+
+static int enabled(void)
+{
+	return head.valid && (!vr_gestures || vr_gestures->value != 0.0f);
+}
+
+static int gun_hand(void)
+{
+	return vr_weapon_left_handed() ? LEFT : RIGHT;
+}
+
+static int other_hand(void)
+{
+	return vr_weapon_left_handed() ? RIGHT : LEFT;
+}
+
+/*
+ * Where a hand is on the body, from the head, in metres: forward the way the
+ * head faces, left, and up. Over a shoulder is anywhere from a little below
+ * the shoulders to above the head, level with the face or behind it, to that
+ * side; a hip is from half a metre to well over a metre below the eyes, close
+ * in at that side. Both are generous - a grip has to be pressed there as well.
+ */
+static zone_t zone_of(int hand)
+{
+	float at[3], units = vr_worldscale_units();
+	float dx, dy, forward, left, up;
+	double s, c;
+
+	if (!head.valid || units <= 0.0f || !vr_weapon_hand_at(hand, at))
+	{
+		return ZONE_NONE;
+	}
+
+	s = sin(head.yaw * DEG_TO_RAD);
+	c = cos(head.yaw * DEG_TO_RAD);
+	dx = at[0] - head.origin[0];
+	dy = at[1] - head.origin[1];
+	forward = (float)(dx * c + dy * s) / units;
+	left = (float)(-dx * s + dy * c) / units;
+	up = (at[2] - head.origin[2]) / units;
+
+	if (up > -0.40f && up < 0.30f && forward < 0.05f && forward > -0.50f && fabsf(left) > 0.02f &&
+		fabsf(left) < 0.50f)
+	{
+		return left > 0.0f ? ZONE_SHOULDER_LEFT : ZONE_SHOULDER_RIGHT;
+	}
+
+	if (up < -0.50f && up > -1.20f && forward > -0.35f && forward < 0.25f && fabsf(left) > 0.05f &&
+		fabsf(left) < 0.50f)
+	{
+		return left > 0.0f ? ZONE_HIP_LEFT : ZONE_HIP_RIGHT;
+	}
+
+	return ZONE_NONE;
+}
+
+static int is_shoulder(zone_t zone)
+{
+	return zone == ZONE_SHOULDER_LEFT || zone == ZONE_SHOULDER_RIGHT;
+}
+
+/* The gun hand's own side's hip. */
+static int is_gun_hip(zone_t zone)
+{
+	return zone == (gun_hand() == LEFT ? ZONE_HIP_LEFT : ZONE_HIP_RIGHT);
+}
+
+static void act(const char *command, const char *what)
+{
+	vr_command(command);
+	done++;
+	vrlog("VR: gesture - %s", what);
+}
+
+/* Over the gun hand's own shoulder is the next weapon, over the other one the
+   previous: mirrored for a left-handed player, as everything else is. */
+static void change_weapon(zone_t zone)
+{
+	int own = zone == (gun_hand() == LEFT ? ZONE_SHOULDER_LEFT : ZONE_SHOULDER_RIGHT);
+
+	vr_input_haptic(gun_hand(), 0.04f, 0.8f);
+	act(own ? "weapnext" : "weapprev", own ? "next weapon, over the gun hand's shoulder" :
+		"previous weapon, over the other shoulder");
+}
+
+static void fists(void)
+{
+	waiting.active = 0;
+	vr_input_haptic(LEFT, 0.06f, 1.0f);
+	vr_input_haptic(RIGHT, 0.06f, 1.0f);
+	act("use Fists", "both hands at the shoulders - the fists");
+}
+
+int vr_gesture_gun_grip(int down)
+{
+	zone_t zone;
+
+	if (!down)
+	{
+		if (gun_taken)
+		{
+			gun_taken = 0;
+			return 1;
+		}
+		return 0;
+	}
+
+	if (!enabled())
+	{
+		return 0;
+	}
+
+	zone = zone_of(gun_hand());
+	if (is_shoulder(zone))
+	{
+		gun_taken = 1;
+		if (other_at_shoulder && GetTickCount() - other_pressed_at < BOTH_HANDS_MS)
+		{
+			fists();
+		}
+		else if (is_shoulder(zone_of(other_hand())))
+		{
+			/* the other hand may be on its way to its grip */
+			waiting.active = 1;
+			waiting.zone = zone;
+			waiting.at = GetTickCount();
+		}
+		else
+		{
+			change_weapon(zone);
+		}
+		return 1;
+	}
+
+	if (is_gun_hip(zone))
+	{
+		gun_taken = 1;
+		vr_input_haptic(gun_hand(), 0.04f, 0.8f);
+		act("use Magnum", "the magnum, from the hip");
+		return 1;
+	}
+
+	return 0;
+}
+
+int vr_gesture_other_grip(int down)
+{
+	if (!down)
+	{
+		other_at_shoulder = 0;
+		if (other_taken)
+		{
+			other_taken = 0;
+			return 1;
+		}
+		return 0;
+	}
+
+	if (!enabled() || !is_shoulder(zone_of(other_hand())) || !is_shoulder(zone_of(gun_hand())))
+	{
+		return 0;
+	}
+
+	/* Both hands up: this grip is the fists' half, not running. */
+	other_taken = 1;
+	other_at_shoulder = 1;
+	other_pressed_at = GetTickCount();
+	if (waiting.active)
+	{
+		fists();
+	}
+	return 1;
+}
+
+void vr_gesture_frame(void)
+{
+	int hand;
+
+	if (waiting.active && GetTickCount() - waiting.at >= BOTH_HANDS_MS)
+	{
+		waiting.active = 0;
+		change_weapon(waiting.zone);
+	}
+
+	if (!enabled())
+	{
+		last_zone[LEFT] = last_zone[RIGHT] = ZONE_NONE;
+		return;
+	}
+
+	/* A light tap as a hand reaches somewhere a grip will do something. */
+	for (hand = 0; hand < 2; ++hand)
+	{
+		zone_t zone = zone_of(hand);
+		int counts = is_shoulder(zone) || (hand == gun_hand() && is_gun_hip(zone));
+
+		if (!counts)
+		{
+			zone = ZONE_NONE;
+		}
+		if (zone != ZONE_NONE && zone != last_zone[hand])
+		{
+			vr_input_haptic(hand, 0.02f, 0.3f);
+		}
+		last_zone[hand] = zone;
+	}
+}
