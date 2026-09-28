@@ -703,6 +703,8 @@ void vr_input_haptic(int hand, float seconds, float amplitude)
 	XrHapticActionInfo info = { XR_TYPE_HAPTIC_ACTION_INFO };
 	XrHapticVibration vibration = { XR_TYPE_HAPTIC_VIBRATION };
 	int index = hand == SINVR_HAND_LEFT ? ACT_HAPTIC_LEFT : ACT_HAPTIC_RIGHT;
+	static unsigned haptic_failures;
+	XrResult result;
 
 	if (input_session == XR_NULL_HANDLE || actions[index].action == XR_NULL_HANDLE ||
 		(vr_haptics && vr_haptics->value == 0.0f))
@@ -714,7 +716,12 @@ void vr_input_haptic(int hand, float seconds, float amplitude)
 	vibration.duration = (XrDuration)(seconds * 1e9);
 	vibration.frequency = XR_FREQUENCY_UNSPECIFIED;
 	vibration.amplitude = amplitude;
-	xrApplyHapticFeedback(input_session, &info, (const XrHapticBaseHeader *)&vibration);
+	result = xrApplyHapticFeedback(input_session, &info, (const XrHapticBaseHeader *)&vibration);
+	if (XR_FAILED(result) && haptic_failures++ < 5)
+	{
+		vrlog("VR: the runtime would not buzz the %s controller (%d)", hand == SINVR_HAND_LEFT ? "left" : "right",
+			(int)result);
+	}
 }
 
 static void release_fake(int slot)

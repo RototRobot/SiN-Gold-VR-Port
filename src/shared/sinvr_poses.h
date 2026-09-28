@@ -83,10 +83,13 @@ typedef const sinvr_poses_t *(*sinvr_poses_fn)(int version);
  * happens through ref_vr.dll's SinVrFeedback. hand is SINVR_HAND_LEFT or
  * _RIGHT, or SINVR_HAND_WEAPON for whichever holds the weapon; strength is
  * 0-1. A shot is the weapon going off - the fists' punches are not shots - and
- * a hit is a punch meeting something, 1 for something that can be hurt.
+ * a hit is a punch meeting something, 1 for something that can be hurt. A
+ * charge is the quantum destabilizer being held, strength rising to 1 over its
+ * five seconds; its shot, on release, carries the power it was charged to.
  */
 #define SINVR_FEEDBACK_SHOT 1
 #define SINVR_FEEDBACK_HIT 2
+#define SINVR_FEEDBACK_CHARGE 3 /* a weapon being charged, strength how far: sent every tenth of a second */
 #define SINVR_HAND_WEAPON (-1)
 
 typedef void (*sinvr_feedback_fn)(int kind, int hand, float strength);

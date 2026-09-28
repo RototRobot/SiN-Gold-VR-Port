@@ -961,19 +961,32 @@ void vr_weapon_feedback(int kind, int hand, float strength)
 		{
 			big |= strcmp(current->key, heavy[i]) == 0;
 		}
-		vr_input_haptic(h, big ? 0.09f : 0.04f, (big ? 0.6f : 0.35f) + 0.4f * strength);
+		/* The G2's controllers let a 40 ms pulse through only some of the time
+		   (the owner felt every other magnum shot, with all of them sent), so
+		   nothing here is shorter than a tenth of a second. */
+		vr_input_haptic(h, big ? 0.14f : 0.10f, (big ? 0.6f : 0.4f) + 0.4f * strength);
 		if (steady.active)
 		{
-			vr_input_haptic(h == LEFT ? RIGHT : LEFT, big ? 0.07f : 0.03f, (big ? 0.4f : 0.25f) + 0.3f * strength);
+			vr_input_haptic(h == LEFT ? RIGHT : LEFT, big ? 0.12f : 0.10f, (big ? 0.4f : 0.25f) + 0.3f * strength);
 		}
 		if (!shots_felt++)
 		{
 			vrlog("VR: the game sends its shots - the %s hand feels them", hand_name(h));
 		}
 	}
+	else if (kind == SINVR_FEEDBACK_CHARGE)
+	{
+		/* A tick every tenth of a second, each a little longer, so the buzz
+		   runs on unbroken while the trigger is held, from faint to full. */
+		vr_input_haptic(h, 0.12f, 0.08f + 0.92f * strength);
+		if (steady.active)
+		{
+			vr_input_haptic(h == LEFT ? RIGHT : LEFT, 0.12f, 0.05f + 0.6f * strength);
+		}
+	}
 	else if (kind == SINVR_FEEDBACK_HIT)
 	{
-		vr_input_haptic(h, 0.08f, 0.4f + 0.6f * strength);
+		vr_input_haptic(h, 0.10f, 0.4f + 0.6f * strength);
 		if (!hits_felt++)
 		{
 			vrlog("VR: the game sends its punches' hits - the %s hand felt one", hand_name(h));
