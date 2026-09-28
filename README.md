@@ -93,12 +93,16 @@ unaffected either way.
 | Left trigger | Use |
 | Right **A** | Jump |
 | Left **X** | Crouch |
-| Right **B** | Next weapon |
-| Left **Y** | Previous weapon |
+| Right **B** | Next weapon (the shoulders do this too) |
+| Left **Y** | Previous weapon (the shoulders do this too) |
 | Left grip | Run - or, with your left hand at a rifle's fore-end, hold it in both hands (see below) |
 | Right stick, click | Opens and closes the game menu (Escape) |
 | Right stick, up/down, while adjusting a weapon | Makes it bigger or smaller |
 | Right grip, held | Lets go of the weapon so you can take it another way - see below |
+| Right hand over your right shoulder, right grip | Next weapon |
+| Right hand over your left shoulder, right grip | Previous weapon |
+| Right hand at your right hip, right grip | The magnum |
+| Both hands up at your shoulders, both grips together | The fists |
 | Swing a fist, with the fists out | Punches with that hand, where the fist is - the trigger still punches too |
 | Any button, on "PRESS ANY KEY TO CONTINUE" | Continues |
 | Left stick, click twice | Recentre: the way you are standing and facing becomes forward |
@@ -127,6 +131,14 @@ only thing moving is your hand. Move your hand to hold it the way you want - and
 stick up or down to make it bigger or smaller - then let go of the grip.
 It is remembered for that weapon, and kept between sessions. `vr_weapon_reset 1` in the console puts
 the weapon you are holding back to its first guess.
+
+**Reaching for a weapon.** The shoulders and the hip on your gun side are measured from your head, so
+they fit your height and turn with you, and the controller gives a light tap when your hand gets there.
+Reach over your gun hand's own shoulder and squeeze its grip for the next weapon, over the other
+shoulder for the previous one; squeeze it at your gun-side hip to draw the magnum. Put both hands up at
+your shoulders and squeeze both grips together for the fists - one hand's grip waits a third of a
+second for the other. Left-handed, all of it is the mirror image. Anywhere else the grips do what they
+always did: the gun hand's adjusts the weapon when held, the other hand's runs or steadies a rifle.
 
 **Two hands on a long weapon.** Put your other hand where you would hold the front of the gun - the
 fore-end, where SiN's own model had its left hand (on the rocket launcher, the handle out on its left
@@ -180,6 +192,7 @@ These console variables control the mod:
 | `vr_recentre_double` | 1 | Require two clicks of the left stick to recentre. 0 makes one do. |
 | `vr_snap_turn` | 0 | 1 turns in steps: each push of the turning stick turns you `vr_snap_angle` degrees at once, and the stick has to come back to the middle before it turns you again. 0 is smooth turning. |
 | `vr_snap_angle` | 45 | How far one snap turns you, in degrees. |
+| `vr_gestures` | 1 | The grips at the shoulders and hip change weapon, as in the controls above. 0 leaves the grips doing only what they do elsewhere. |
 | `vr_aim` | 1 | Shots come from the weapon in the hand rather than from the player's angles. |
 | `vr_weapon_hand` | 1 | Draw the weapon in the hand instead of in front of the camera. |
 | `vr_left_handed` | 0 | 1 puts the weapon in the left hand, mirrored, and swaps the two controllers' buttons and sticks. Read when the renderer starts, so `vid_restart` after changing it. |

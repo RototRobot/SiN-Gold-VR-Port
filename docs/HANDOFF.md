@@ -491,6 +491,23 @@ touches it: the controllers arrive the way a player's own binds and joystick wou
      those profiles, and on Touch, whose menu button is on the left only, that one binding is left out
      rather than sinking the rest. The log says `bindings suggested for <profile>` for each table taken;
      a `would not take` line for a controller you are using is the thing to look for.
+   - **Body gestures** (`vr_gesture.c`, `vr_gestures`, 2026-09-28). The owner's design: the gun hand's grip
+     over its own shoulder is `weapnext`, over the other `weapprev`, at its own hip `use Magnum`; both
+     hands up at the shoulders with both grips `use Fists`. The places are boxes in metres from the head,
+     turned with the head's yaw (over a shoulder: 0.40 below the eyes to 0.30 above, level with the face
+     or behind it to half a metre back, to that side; a hip: 0.50 to 1.20 below the eyes, 0.35 back to
+     0.25 forward, 5-50 cm out). `press_action` asks `vr_gesture_gun_grip`/`vr_gesture_other_grip` first,
+     and a press they take takes its release as well, so the adjust hold and running never see it. A gun
+     grip at a shoulder with the other hand also at one waits 350 ms for the other grip before it is a
+     weapon change (`vr_gesture_frame` times it out); the other grip, pressed with both hands up, is the
+     fists' half and never `+speed`. Haptics came with it: two `XR_ACTION_TYPE_VIBRATION_OUTPUT` actions
+     bound to each profile's `/user/hand/*/output/haptic`, not swapped for the left-handed, a light tap
+     as a hand reaches a place and a firmer one as a gesture fires (`vr_input_haptic`). Desk, both
+     handednesses, with the hands put in each place: next, previous, magnum, the fists with either grip
+     first, and away from the places the adjust hold and `+speed` as before; every profile's bindings
+     still taken. The commands themselves queue behind a test cfg's `wait`s, as every mod-queued
+     command does (§5), so the weapon changes are for the headset. The Y and B buttons keep the weapon
+     cycling for now, as a fallback, until the owner gives them something else.
 4. **Focus.** `xrSyncActions` returns `XR_SESSION_NOT_FOCUSED` while the runtime is showing something of
    its own, and then everything held is released and the sticks centre. The same happens if a controller's
    action goes inactive while a button is held, or the session goes away.
