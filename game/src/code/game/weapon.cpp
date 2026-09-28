@@ -895,8 +895,9 @@ void Weapon::Fire(void)
    else
       UseAmmo(secondary_ammorequired);
 
-   // SiN Gold VR: the hand holding it feels the shot; a punch is felt when it lands
-   if(owner && owner->isClient() && !inheritsFrom("Fists"))
+   // SiN Gold VR: the hand holding it feels the shot; a punch is felt when it lands,
+   // and the quantum destabilizer's shot when the charge is let go
+   if(owner && owner->isClient() && !inheritsFrom("Fists") && !inheritsFrom("QuantumDestabilizer"))
    {
       VR_Feedback(VR_FEEDBACK_SHOT, VR_HAND_WEAPON, 1.0f);
    }
