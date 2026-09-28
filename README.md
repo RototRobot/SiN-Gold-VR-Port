@@ -209,6 +209,7 @@ These console variables control the mod:
 | `vr_weapon_fill` | 1 | Rebuild the side of each gun that SiN never made - its right side, which the original camera never saw - as its left side reflected. 0 shows the guns as they were built. |
 | `vr_fill_<weapon>` | 1, 0 for the chaingun | The same for one weapon, for any that look wrong mirrored. The chaingun is off: it has a box on its left side only. |
 | `vr_weapon_idle` | 0 | The weapon's idle animation - breathing and swaying - is held still, since the weapon already moves with your hand. 1 lets it play. Firing, reloading and switching still animate. |
+| `vr_upper_arm` | 0 | The fists - in both hands, and the one drawn in the hand without a weapon - stop just short of the elbow. 1 draws the whole arm the model has, elbow and upper arm too. |
 | `vr_weapon_arm` | 0 | 1 puts back the left arm SiN built into the long weapons' models; 0 leaves it out, since your own other hand is drawn instead. |
 | `vr_fore_<weapon>` | empty | Where that weapon's fore-end is, in the model's own units. Set by squeezing the other grip while adjusting; empty means about 30 cm ahead of the grip along the barrel. |
 | `vr_weapon_reset` | 0 | Set it to 1 to forget the setting for the weapon in hand. Clears itself. |

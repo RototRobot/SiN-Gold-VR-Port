@@ -966,6 +966,16 @@ maths is what the owner's next headset test exercises.
    by more than 3 degrees, so the plane stays square. The join itself is for the headset; a desk pose
    close enough to see it put the gun mostly out of the picture.
 
+21. **The fists' arms cut short** (`vr_upper_arm`, default 0), 2026-09-28. The owner wanted the fists' arm,
+   and the other hand's, to stop below the elbow as the magnum's hand does. The fists' model has the
+   whole arm - wrist to elbow, then back up (drawn with `scratchpad`'s side view: wrist at (13.5, -13),
+   elbow at (0.5, -26.5), x forward and z up, both arms alike). `keep_one_arm`, which every fist goes
+   through, now adds a second clip plane (`vr_gl` takes two per model, GL_CLIP_PLANE0 and 1) through
+   the forearm 80% of the way to the elbow. Square across the forearm it left the upper arm's far end,
+   which folds back over the forearm, on the kept side - a sliver in the first desk picture - so it
+   leans 16 degrees back from square; checked against every vertex of the arm first, then in the
+   eye dumps from both sides.
+
 What the desk could show, with `vr_fake_hand` and `vr_fake_hand_left`: the weapon in the hand at the
 computed place and size, turning the right way in pitch and yaw, the fists as one arm per hand, and the
 grip button freezing and re-attaching the weapon (frozen with the hand at yaw 0, released with it at yaw
