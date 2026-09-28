@@ -60,10 +60,13 @@
  * its left side instead (vertices 310-357, those more than 12 units left of
  * the body's middle).
  *
- * middle is the model's own middle across - the barrel marker each model
- * carries, which is the middle of its body within a unit or so, except on the
- * chaingun and rocket launcher, whose marker is on one barrel of several and
- * whose body's middle is used instead. The missing right side is rebuilt
+ * middle is the model's own middle across: halfway between the two edges of
+ * its upward-facing surfaces, which were modelled all the way across - where
+ * that agrees with the middle of its body within half a unit. The barrel
+ * markers are off by up to 0.75 units, and a mirror that far out opens a gap
+ * of twice that down the join, which the owner saw on the magnum. The quantum
+ * destabilizer, rocket launcher and chaingun, whose tops carry parts on one
+ * side only, use the middle of the body. The missing right side is rebuilt
  * across it, as the left side reflected
  * (vr_gl_fill_model_at). fill says whether the weapon is near enough
  * symmetrical for that - the chaingun, with a box on its left side only, is
@@ -91,15 +94,15 @@ typedef struct
 
 static const weapon_info_t weapon_table[] = {
 	{ "punch",     { 18.5f, -11.0f, -10.0f }, 0.50f, 1, 0.0f },
-	{ "magnum",    { 53.0f, -36.0f, -31.0f }, 0.35f, 0, 0.0f, 0, { { 0 } }, 0, { 0 }, -37.1f, 1, 1, { { 8, 116 } } },
-	{ "shotgun",   {  8.0f, -14.0f, -15.0f }, 0.60f, 0, 0.30f, 1, { { 30, 95 } }, 1, { 27.6f, -13.3f, -16.4f }, -15.0f, 1 },
-	{ "asrifle",   { 37.0f, -21.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 276, 308 } }, 1, { 79.3f, -18.5f, -39.4f }, -23.0f, 1 },
+	{ "magnum",    { 53.0f, -36.0f, -31.0f }, 0.35f, 0, 0.0f, 0, { { 0 } }, 0, { 0 }, -36.4f, 1, 1, { { 8, 116 } } },
+	{ "shotgun",   {  8.0f, -14.0f, -15.0f }, 0.60f, 0, 0.30f, 1, { { 30, 95 } }, 1, { 27.6f, -13.3f, -16.4f }, -14.85f, 1 },
+	{ "asrifle",   { 37.0f, -21.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 276, 308 } }, 1, { 79.3f, -18.5f, -39.4f }, -22.25f, 1 },
 	{ "hvgun",     { 30.0f, -25.0f, -38.0f }, 0.35f, 0, 0.30f, 2, { { 200, 309 }, { 358, 405 } }, 1, { 36.9f, -9.0f, -36.6f }, -24.1f, 0 },
 	{ "rlaunch",   { 28.0f, -24.0f, -36.0f }, 0.35f, 0, 0.30f, 1, { { 146, 218 } }, 1, { 49.8f, -6.3f, -33.3f }, -23.5f, 1 },
 	{ "srifle",    { 15.0f, -13.0f, -14.0f }, 0.35f, 0, 0.35f, 1, { { 249, 306 } }, 1, { 30.5f, -12.7f, -13.3f }, -15.9f, 1 },
-	{ "pulse2",    { 25.0f, -18.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 358, 393 } }, 1, { 49.0f, -19.0f, -26.0f }, -23.6f, 1, 1, { { 44, 147 } } },
-	{ "quantum",   { 20.0f, -30.0f, -40.0f }, 0.30f, 0, 0.35f, 0, { { 0 } }, 0, { 0 }, -35.6f, 1 },
-	{ "spgun",     { 30.0f, -15.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 217, 259 } }, 1, { 60.1f, -21.3f, -35.8f }, -24.1f, 1 },
+	{ "pulse2",    { 25.0f, -18.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 358, 393 } }, 1, { 49.0f, -19.0f, -26.0f }, -23.35f, 1, 1, { { 44, 147 } } },
+	{ "quantum",   { 20.0f, -30.0f, -40.0f }, 0.30f, 0, 0.35f, 0, { { 0 } }, 0, { 0 }, -35.1f, 1 },
+	{ "spgun",     { 30.0f, -15.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 217, 259 } }, 1, { 60.1f, -21.3f, -35.8f }, -24.25f, 1 },
 	{ "mines",     { 36.0f, -22.0f, -18.0f }, 0.35f, 0, 0.0f },
 	{ "detonator", { 15.0f,  -5.0f, -12.0f }, 0.40f, 0, 0.0f }
 };
