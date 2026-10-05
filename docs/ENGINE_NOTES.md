@@ -418,6 +418,40 @@ does the movement work itself. The console says `joystick detected` where it use
   Pitch should be the float before it, as in Quake II's `vec3_t`, but that has not been checked.
   Nothing wraps the yaw, and the game gets it as a short, which does.
 
+## Movement commands and their prediction (2026-10-05)
+
+Found for roomscale (HANDOFF §13), from the strings `exceeded CMD_BACKUP` and `prediction miss` and the
+code around them, with capstone over the Steam `sin.exe` (preferred base 0x400000).
+
+- **`CL_Frame`** calls `CL_SendCmd` (+0xF070) at +0x12DC1 and `CL_PredictMovement` (+0x15DE0) at
+  +0x12DCB, then later draws (+0x12E50). So a command is built, then predicted, then the frame is drawn,
+  in that order every frame - as in Quake II.
+- **`CL_SendCmd`** builds the command on its stack: `CL_BaseMove` (+0xE750, command in `ecx`), the mouse
+  and joystick moves, then **`CL_FinishMove` (+0xEC50), called once, at +0xF11B**, also with the command
+  in `ecx` and nothing on the stack. `CL_FinishMove` sets the buttons and `msec`, writes each angle as
+  `(short)(cl.viewangles[i] * 65536 / 360)` in a loop over +0x3CBADC..+0x3CBAE8 - so **pitch is at
+  +0x3CBADC and roll at +0x3CBAE4**, either side of the yaw - then `impulse` and `lightlevel`.
+  `CL_SendCmd` adds `debris` and stores the command into `cl.cmds[sequence & 63]` at +0x3CA2EE,
+  18 bytes each.
+- **Nothing writes `cl.viewangles[ROLL]`**: the only two instructions naming +0x3CBAE4 read it
+  (`CL_BaseMove`, and `CL_PredictMovement` when it is not predicting), and `CL_FinishMove`'s loop reads
+  it. A command's roll is therefore always 0 - free to carry something of our own.
+- **`CL_PredictMovement`** clears a 0x11C-byte `pmove_t` on its stack, copies
+  `cl.frame.playerstate.pmove` (+0x3CAA4C, 0x24 bytes) into it, sets `trace` (+0x114) to one of two
+  trace functions depending on `pm_type == PM_ONBIKE` (+0x15560 or +0x15690) and `pointcontents`
+  (+0x118) to +0x15BC0, and for each unacknowledged command copies it in at +0x24 and calls
+  **`Pmove` (+0x84EE0) at +0x15F2D** - the only direct call to it. The server's goes through the game
+  module's `gi.Pmove`; sin.exe builds the game's import table on the stack, with `Pmove` at +0x90BDD.
+- The layouts match `q_shared.h` exactly: `pmove_state_t` 0x24 bytes (`gravity_axis` in its own
+  `unsigned` at +0x18, which `Pmove` reads as `[esi+0x18] & 7`; `delta_angles` at +0x1C), `usercmd_t`
+  18, `pmove_t` 0x11C, and **`trace_t` 0x70** - `CL_PMTrace` copies it out with `rep movsd` of 28
+  dwords, through the hidden return pointer.
+- **The player's box** is (-16 -16 0)-(16 16 72), with the eye 66 above the origin: the origin is the
+  feet, not the middle of the box as in Quake II.
+- **The client's step smoothing** (after the loop) compares the newest predicted origin's z with the
+  one two commands back and smooths a step of 63-160 eighths (8-20 units) on the ground over a tenth of
+  a second - it applies to roomscale's own stair steps too.
+
 ## The client's view weapon and its effects (2026-09-19)
 
 All RVAs are for the Steam build of `sin.exe` (preferred base 0x400000, ASLR on).
@@ -552,6 +586,11 @@ still ahead.
   own plan because its game dir is `2015`.
 - ~~Observe `cl_stereo 1` at runtime.~~ Done: see "The stereo path confirmed at runtime" above.
 - Map the rest of the `refdef_t` and `entity_t` layouts (needed for hand and weapon models).
+- **The command buffer overflowing is sometimes fatal.** `Cbuf_AddText` only complains
+  ("Cbuf_AddText: overflow") and drops the text, but `exec` puts back whatever was queued behind the
+  file with `SZ_Write`, and when that is what does not fit, `SZ_GetSpace` stops the game with
+  "SZ_GetSpace: overflow without allowoverflow set" in a message box (seen 2026-10-05, a 5.4 KB cfg
+  `exec`ed with `desk-test.ps1`'s own still queued).
 - Is the level-start card the engine's or the game DLL's? It is drawn by `sin.exe`, but what dismisses it,
   and whether a cvar can skip it, is still unknown. Relevant to VR: while it is up, no world is drawn.
 - How to handle cinematic cameras (`SetCameraValues`) and `.ogv` movies in VR.

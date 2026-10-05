@@ -8,7 +8,7 @@ movement and tracked motion controllers.
 > renders the world **in stereo with head tracking** through an OpenXR projection layer, keeps the HUD
 > in a readable panel, **plays with the VR controllers**, and **puts the weapon in your hand**: it is
 > drawn where the controller is, it fires down its own barrel, and its muzzle flash, tracers and
-> bullet holes come from there too. Comfort and roomscale come next (see the roadmap).
+> bullet holes come from there too. **Walking and crouching in your room** move and crouch the player.
 
 **New to the project?** Start with [docs/HANDOFF.md](docs/HANDOFF.md).
 
@@ -106,6 +106,8 @@ unaffected either way.
 | Swing a fist, with the fists out | Punches with that hand, where the fist is - the trigger still punches too |
 | Any button, on "PRESS ANY KEY TO CONTINUE" | Continues |
 | Left stick, click twice | Recentre: the way you are standing and facing becomes forward |
+| Walk in your room | Walks the player, stopped by walls like any other movement |
+| Crouch in your room | Crouches the player, once your head is `vr_crouch_depth` below where you recentred |
 
 On the Reverb G2 the two **menu** buttons never reach the game: SteamVR keeps them for its own
 dashboard, and a press takes the input focus away instead. So the menu is on the right stick's click.
@@ -139,6 +141,17 @@ shoulder for the previous one; squeeze it at your gun-side hip to draw the magnu
 your shoulders and squeeze both grips together for the fists - one hand's grip waits a third of a
 second for the other. Left-handed, all of it is the mirror image. Anywhere else the grips do what they
 always did: the gun hand's adjusts the weapon when held, the other hand's runs or steadies a rifle.
+
+**Walking and crouching in your room.** Step, lean or walk in your room and the player goes with
+you: the body - what the game collides with - follows your head, through the world's own movement, so
+walls stop it, stairs are climbed and turns pivot on you. Lean over something and your head can go
+`vr_lean` (30 cm) past where your body is stopped; push it further, into a wall, and the room slides
+instead, so you never see through. Duck down, about 35 cm from where you were standing, and the player
+crouches: you fit under what a crouch fits under, and your eye stays below whatever is over you. The
+crouch button still works as it always did, dropping you as far as SiN's own crouch. **Recentre
+standing up straight** - two clicks of the left stick - since the crouch is measured from there. The
+body follows a point just behind and below your eyes, where your neck is, so nodding or looking at
+the floor does not shuffle you about.
 
 **Two hands on a long weapon.** Put your other hand where you would hold the front of the gun - the
 fore-end, where SiN's own model had its left hand (on the rocket launcher, the handle out on its left
@@ -195,6 +208,10 @@ These console variables control the mod:
 | `vr_weapon_buttons` | 0 | 1 lets the top buttons (B and Y) cycle weapons as well as the shoulders. |
 | `vr_haptics` | 1 | The controllers buzz: as a hand reaches a shoulder or hip, as a gesture fires, when a weapon goes off (harder for the heavy ones, and in both hands while steadying a rifle), rising while the quantum destabilizer charges - full strength at five seconds, which is also when it blows up in your hands - and when a punch lands (harder on an enemy than a wall). 0 turns every buzz off. |
 | `vr_gestures` | 1 | The grips at the shoulders and hip change weapon, as in the controls above. 0 leaves the grips doing only what they do elsewhere. |
+| `vr_roomscale` | 1 | Walking in your room walks the player. 0 leaves the body where the stick puts it, and only the view moves with your head. |
+| `vr_lean` | 0.3 | How far your head can go past your body when the body is stopped - leaning over a ledge, into a wall - in metres. Past it the room slides instead. |
+| `vr_crouch` | 1 | Crouching in your room crouches the player. 0 leaves crouching to the button. |
+| `vr_crouch_depth` | 0.35 | How far below where you recentred your head has to go to crouch, in metres. It stands again 8 cm above that. |
 | `vr_aim` | 1 | Shots come from the weapon in the hand rather than from the player's angles. |
 | `vr_weapon_hand` | 1 | Draw the weapon in the hand instead of in front of the camera. |
 | `vr_left_handed` | 0 | 1 puts the weapon in the left hand, mirrored, and swaps the two controllers' buttons and sticks. Read when the renderer starts, so `vid_restart` after changing it. |
@@ -217,6 +234,7 @@ These console variables control the mod:
 | `vr_client_bullets` | 0 | 1 puts back the client's own bullet impacts, which are drawn from the eye rather than from the barrel. |
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. For testing with the headset off. |
 | `vr_dump_eye` | 0 | Set it to 1 to write the next frame's two eye images beside `sin.exe`, for checking a build at the desk. |
+| `vr_fake_step` | empty | For testing at the desk: `"1 0 0"` moves the head a metre forward at once (x forward, y left, z up), `"1 0 0 2"` over two seconds, which is walking; `"0"` only says in `sinvr.log` where the body and view are. |
 | `vr_trace` | 1 | Record the renderer calls of each new kind of frame in `sinvr.log`. |
 
 While stereo is on, the mod sets `cl_stereo 1`, `cl_stereo_separation 0`, and switches off view bob
@@ -241,7 +259,7 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   the fists' own reach (about 1.6 m, the same as the trigger's punch) nearest where you are looking or
   where your fist was headed, if there is nothing solid in between; and failing that, on the wall your
   swing went into, or on nothing. A fist that has gone through a wall hits the wall where your arm went
-  in. There is no buzz in the controller yet when a punch connects.
+  in. The controller buzzes when a punch connects.
 - **The guns' right sides are rebuilt, not original.** SiN's view models were only ever meant to be seen
   from behind and to the left, so most of each gun's right side was never modelled - from the right a
   gun used to be a few floating slivers. The right side is now the left side reflected across the
@@ -271,10 +289,13 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   what carries its muzzle flash, tracers and shell cases along with it. Both are checked against the
   Steam build before anything is changed, so another build of `sin.exe` is left alone - the weapon then
   still goes to the hand, but its effects stay at the eye.
-- The body does not move with the headset yet: walking and turning are the sticks' job. That is also
-  why a turn - smooth or snap - swings you round the spot where you last recentred rather than round
-  your head: step half a metre away from it and a snap moves the view sideways as well. Recentring
-  puts the spot back under you.
+- **Crouching is measured from where you recentred.** Recentre while sitting or stooping and standing
+  up straight only makes you taller; recentre bent over and a smaller duck crouches. Recentre standing
+  up straight. Playing seated, crouch with the button (`vr_crouch 0` if a lean forward ever crouches you).
+- A step the world refuses - a wall, a railing - is kept between your head and your body, up to
+  `vr_lean`, and anything past that slides the room. Stand back up, or step back, and the body is
+  under you again. Steps are taken only on foot: in a vehicle, while dead or with the console or a
+  menu up, the view still follows your head but the body stays put.
 - **The controllers only work while the headset is awake.** OpenXR gives an application controller input
   only while it has the input focus, and SteamVR takes the focus away when the headset goes to sleep -
   put it down on a desk and the game stops hearing the controllers. For testing with the headset off your
@@ -297,7 +318,8 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 6. ✅ Tracked hands: the weapon is drawn in the hand, fires down its own barrel, and carries its
    effects with it; each weapon's grip can be set in the headset, long weapons can be held in both
    hands, and left-handed players get the mirror image of all of it
-7. Roomscale comfort: ✅ snap turning; crouching, and the body following the head
+7. ✅ Roomscale comfort: snap turning, the body following the head through the world, and crouching
+   in the room
 8. Wages of Sin
 9. Release packaging
 

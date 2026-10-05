@@ -4,7 +4,7 @@ This is the handoff for anyone joining the project, whether a person or an AI. I
 why it is shaped the way it is, how to build and test it, what has already been learned the hard way,
 and what comes next. The detailed evidence lives in the other files in `docs/`; this one is the map.
 
-*Last updated 2026-09-20 (seventh pass).*
+*Last updated 2026-10-05 (roomscale).*
 
 ## 1. Where the project is
 
@@ -16,7 +16,8 @@ and what comes next. The detailed evidence lives in the other files in `docs/`; 
 | 4. HUD, crosshair and console in VR | ✅ Built 2026-09-16. The 2D goes into a panel `vr_hud_fov` degrees wide, `vr_hud_depth` metres away, centred on each eye's own axis - which is also what stops the crosshair from doubling. [§9](#9-how-stereo-works) |
 | 5. Motion controller input | ✅ Built 2026-09-16: buttons run console commands, the sticks arrive as a joystick the engine polls, and in menus both turn into keystrokes. Measured at the desk. [§11](#11-controller-input) |
 | 6. Tracked hands | ✅ Built 2026-09-19, left-handed mode 2026-09-20. The weapon is drawn on the controller, at a per-weapon grip the player can set in the headset, and fires down its own barrel; sin.exe itself places it, so its muzzle flash, tracers and impacts come from there too. The fists are one arm per hand. `vr_left_handed 1` mirrors the lot into the other hand. Firing is the one part the desk cannot exercise. [§12](#12-tracked-hands) |
-| 7–9 | Roomscale comfort, Wages of Sin, and packaging (see the roadmap in the [README](../README.md)) |
+| 7. Roomscale comfort | ✅ Snap turning (§11). The body following the head, and crouching in the room, built and verified at the desk 2026-10-05: each movement command carries the head's step, sin.exe's Pmove is followed by it on the client and the server alike, and the view moves with the body. [§13](#13-roomscale) |
+| 8–9 | Wages of Sin, and packaging (see the roadmap in the [README](../README.md)) |
 
 ## 2. How it fits together
 
@@ -187,7 +188,11 @@ are parameters. What to expect:
 - **A cfg must fit in the command buffer.** `exec` puts the whole file into an 8 KB buffer, and a
   `wait`-heavy test cfg reaches that easily - whereupon *nothing* in it runs, not even the `map` on the
   first line, and the game sits on the menu looking like a hang. Split long ones into files that `exec`
-  each other at the end; each is only read when its turn comes.
+  each other at the end; each is only read when its turn comes. The other way to overflow it: a file
+  that fits, `exec`ed while plenty is still queued behind it (the rest of `desk-test.ps1`'s own cfg),
+  so that putting the rest back after it does not. That one is fatal - SiN shows "SZ_GetSpace:
+  overflow without allowoverflow set" in a message box and quits, straight after `execing ...` in the
+  log. Keep each chained file to 3-4 KB.
 - **Rendered frames and `wait`s do not run at the same rate.** On this machine the command buffer gets
   through about 180 `wait`s a second while the headset path renders about 88 frames a second, and the
   ratio moves. Anything timed against a held button (the weapon adjustment, say) wants
@@ -268,6 +273,7 @@ python -c "from PIL import Image; im = Image.open('sinvr_eye0.tga').convert('L')
 | `src/ref_vr/vr_joy.c` | The joystick that only exists in this process, which is how the sticks reach the engine |
 | `src/ref_vr/vr_keys.c` | Keystrokes posted to the engine's window, for the menus and the console |
 | `src/ref_vr/vr_poses.c` | The head and hand poses the game module reads, and the export that hands them over |
+| `src/ref_vr/vr_room.c` | Roomscale: the head's step in each movement command, the step after Pmove for client and server (`SinVrPmove`), crouching in the room, the crouch button's drop, the ceiling and the lean (§13) |
 | `src/ref_vr/vr_weapon.c` | The weapon in the hand: per-weapon grips and sizes, the adjustment in the headset, the two calls redirected inside sin.exe, the fists split between the hands, and which hand holds it |
 | `src/ref_vr/vr_math.c` | Poses in Quake's terms: angles to axes and back, composing them, taking one relative to another, and reflecting one for the other hand |
 | `src/shared/sinvr_poses.h` | The contract between the two DLLs: the block, its frame of reference |
@@ -275,7 +281,7 @@ python -c "from PIL import Image; im = Image.open('sinvr_eye0.tga').convert('L')
 | `src/ref_vr/vr_hook.c` | Patching another module in this process: its imports (the GL and joystick hooks), and single direct calls inside sin.exe |
 | `src/ref_vr/xr_layers.c` | Implicit-layer hygiene for 32-bit processes (shared with xrprobe) |
 | `src/ref_vr/vrlog.c` | `sinvr.log` |
-| `game/` | Night Dive's source (SiN in `src/code/game`, WoS in `src/code/game2015`, shared `elib`) plus `game/CMakeLists.txt`. `git diff 5236699 -- game` shows everything we changed there: VR aiming in `player.cpp`/`player.h`, the muzzle and shot direction in `weapon.cpp`, server-side bullet impacts in `bullet.cpp`, and a line in `g_main.cpp`. |
+| `game/` | Night Dive's source (SiN in `src/code/game`, WoS in `src/code/game2015`, shared `elib`) plus `game/CMakeLists.txt`. `git diff 5236699 -- game` shows everything we changed there: VR aiming, swing punches, and roomscale's step and held eye height in `player.cpp`/`player.h`, the muzzle and shot direction in `weapon.cpp`, server-side bullet impacts in `bullet.cpp`, and a line in `g_main.cpp`. |
 | `cmake/openxr.cmake` | Builds the loader from the sibling SDK, or fetches `release-1.1.63` |
 | `tools/deploy.ps1`, `tools/desk-test.ps1`, `tools/xrprobe/` | Install/uninstall, an unattended run, and the OpenXR probe |
 | `docs/ENGINE_NOTES.md` | How the engine works: the slot map, RVAs, `refdef_t`, the stereo path and runtime observations |
@@ -412,8 +418,8 @@ arms; the doubled crosshair and edge-flung HUD they reported are what the panel 
 
 Still to do, in the order it matters:
 
-- **The body does not follow the head.** Pitch and yaw are the head's, but movement, turning and the
-  player's collision position still come from the keyboard and mouse.
+- ~~**The body does not follow the head.**~~ It does now (§13): the head's step is in every movement
+  command, so the player's collision position follows it.
 - **Screen-copy effects** (screenshots, and anything that reads the window) still assume window coordinates.
 
 ## 10. Open questions and backlog
@@ -427,13 +433,9 @@ Still to do, in the order it matters:
 
 **Input**
 
-- The body does not follow the head yet. The head pose already reaches the game module
-  (`VR_HeadPose`, §12), so walking in the room can become the player walking - the game moves the
-  player by the head's change of position each frame, and recentres around it - without a new channel.
-- A real crouch - the head going down past a threshold pressing crouch - is the rest of roadmap
-  milestone 7, with the body following the head. Until then a turn pivots on the recentre point, not
-  on the head (`vr_view_apply` turns the head's offset with the body's yaw), so a snap taken half a
-  metre from it swings the view sideways too.
+- ~~The body following the head, and a real crouch~~: done, §13. It did need a channel of its own in
+  the end - the step has to be the same each time the client re-predicts a command, so it travels in
+  the command.
 
 **Content and release**
 
@@ -1014,11 +1016,9 @@ Still to do, and what is known about each:
   general guess and treated as a gun held in one hand. The model very likely has two arms like the
   fists and wants the fists' treatment (`two_arms`), and punching - the game already lets `MutantHands`
   punch, as it derives from `Fists`.
-- **Manual reloading**: SiN already has clips, `reload`/`silreload` animations and
-  `Weapon::ForceReload`, which `Player::DoUse` calls - the Use button doubles as a reload key. So a
-  gesture only has to reach it: watching the off hand under the weapon in `vr_weapon.c` and running
-  the bound command is the whole of it, with a small console command of our own in the game DLL if it
-  should not also open doors.
+- ~~**Manual reloading**~~: dropped by the owner on 2026-09-28 - only the magnum (15) and the assault
+  rifle (45) have clips at all, so it would do little. If it comes back: SiN already has
+  `reload`/`silreload` animations and `Weapon::ForceReload`, which `Player::DoUse` calls.
 - **The game module's idle freeze is not always consistent** (owner, in the headset, 2026-09-21: "works,
   but didn't seem 100% consistent"). The picture no longer depends on it - the renderer holds the idle
   still (§12 item 17) - so this matters only if `vr_freeze_idle` is wanted for its own sake. Leads,
@@ -1032,5 +1032,75 @@ Still to do, and what is known about each:
   - `Weapon::SecondaryUse` starts `primaryidle`/`secondaryidle` itself for the dual-mode weapons, which
     then play through once before the freeze sees them.
   Nothing else in the game overrides `Idle` or `ForceIdle`.
-- **Comfort and roomscale:** crouching, and the body following the head (snap turning is done, §11).
+- ~~**Comfort and roomscale**~~: done - snap turning (§11), the body following the head and crouching
+  (§13).
 - **Hand tracking** (`XR_EXT_hand_tracking`) is the same channel with a different source.
+
+## 13. Roomscale
+
+Built 2026-10-05 (`vr_room.c`, and `Player::ClientThink`, `ClientMove` and `CalcViewOffset` in
+`player.cpp`). Until then the view followed the head but the body - the box the game collides, the
+point a turn pivots on - stayed where the stick left it, so a player could walk their head through a
+wall, and a snap turn half a metre from the recentre point swung the view sideways.
+
+1. **Why the step travels in the command.** The client predicts movement: every frame it runs the
+   engine's `Pmove` again over each command the server has not acknowledged, from the server's last
+   state, and the server runs it once more for real. Anything that moves the body has to give the
+   same answer each of those times, or the client's prediction and the server disagree and the view
+   is pulled about. So the step is attached to the command it was taken in:
+   - `CL_FinishMove` is hooked (sin.exe +0xF11B, one call per command, the command in `ecx`). After
+     it, the step from the body to the head - the **neck**, 8 cm behind and 11 cm below the eyes
+     along the head's own axes, so that nodding or looking at the floor is not a step - is turned
+     into the world with the body's yaw, kept in a table of 255, and its number written into the
+     command's **roll** angle, which SiN's client always sends as 0 (`cl.viewangles[ROLL]` is never
+     written). At most 16 units a command; under an eighth of a unit is not worth a number.
+   - The client's `Pmove` call in `CL_PredictMovement` (+0x15F2D) is hooked, and the game module
+     calls `SinVrPmove(pm, number, gi.Pmove)` instead of `gi.Pmove` (`VR_Pmove`). Both take the
+     number out of the command, run the real `Pmove`, then **sweep the box along the step**: sliding
+     along what it meets, a stair's height up and back down when it is stopped on the ground, kept on
+     the ground going down, and put on the engine's eighth-of-a-unit grid somewhere the box fits.
+     `ClientThink` takes the number out of `current_ucmd` before anything reads the angles, and only
+     for the first client - another player's numbers would mean nothing here.
+   - Steps are only asked for while both sides have run a move in the last half second - the client's
+     prediction (so not with `cl_predict 0` or `PMF_NO_PREDICTION`: vehicles, death, cameras) and the
+     game module (so not on someone else's server) - and only on foot (`PM_NORMAL`, `PM_ZOOM`).
+2. **The view follows the body.** The first time the client takes a command's step, the recentred
+   head moves with it (`vr_view_shift`), so the view stays exactly where the head is and the body
+   ends up under it. That happens in the frame the command was built: `CL_Frame` sends the command
+   (+0x12DC1) and predicts (+0x12DCB) before it draws. A step the world refuses stays between head and
+   body; past `vr_lean` the recentred head is moved instead - the room slides - so a head pushed into
+   a wall stops 30 cm out from the body's middle, 4 units clear of the wall the 32-unit box is
+   touching.
+3. **Crouching.** The neck `vr_crouch_depth` below where it was recentred (8 cm back up to stand) sets
+   the command's `upmove` to the crouch key's -200 - but not in water, where it would swim down, or on
+   a ladder. The game now holds `ps.viewoffset` at the standing 66 while the headset is tracked
+   (`CalcViewOffset`; no landing dip, bob or kick either), so the head's own height is the eye's. Two
+   things are then the renderer's:
+   - **the crouch button** - the engine ducked without the player crouching in the room - lowers the
+     whole recentred frame, head and hands alike, as far as SiN's own crouch (36 units, over a tenth
+     of a second), but never below its crouching eye (30), so a player already low drops less. The
+     hands going down with it fixes something that was wrong before: crouched by the button, the view
+     dropped 36 units but the game still shot from 64 above the feet, well above the gun on screen;
+   - **the ceiling** - after each prediction a head-sized box is swept up from the body's middle, and
+     the eye is kept 5 units under whatever it meets. Only the view is held down, not the hands.
+
+What the desk showed, on `sindm6` with `vr_fake_step` (a pretend step of the head, at once or walked
+over some seconds) and `cl_showmiss 1`:
+
+- the box is (-16 -16 0)-(16 16 72), the eye 66 above the origin, as `q_shared.h` says;
+- walking 25 m backward, left and forward over six seconds each: the body walked until a wall
+  stopped it, with the eye held 11.8 units (`vr_lean`) behind it; slid along that wall 15 m; climbed a
+  16-unit step and stopped at the next wall, where the eye dump shows the wall close up and nothing
+  through it. 1098 steps asked for, the server ran 1098, 731 refused by walls, the room slid 553
+  times - and **not one prediction miss**;
+- a pretend 0.5 m crouch: crouching at 0.36 m, the engine ducked, the eye going 66 → 49 → 46 above the
+  feet while the engine's own stayed at 66; back to 66 standing;
+- `+movedown`: ducked, the eye at 30.1 - lowered 36 - and back to 66.1 on release;
+- a snap turn of 90 and back: the eye stayed 2.7 units from the body's middle (the neck behind the
+  eyes) and turned about it, the body stayed put - the turn pivots on the player now;
+- a pretend 1 m step at once is mostly taken up by the lean - the room slides 0.7 m of it - which is
+  what a sudden metre should do; walking is what the body follows.
+
+What it cannot show: how it feels. The owner's headset test is for walking into things, leaning over
+edges, crouching under something low (the ceiling clamp has only been reasoned about - nothing in
+the desk walks went under anything), and whether 0.35 m is the right depth.

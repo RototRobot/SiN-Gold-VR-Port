@@ -24,7 +24,9 @@ test workflow, and the traps already hit.
    - a `wait` holds up everything behind it in the command buffer, so a `wait`-heavy test cfg swallows
      console commands the mod itself queues - use `desk-test.ps1 -KeepRunning` for those;
    - `exec` puts a whole cfg into an 8 KB command buffer, and a `wait`-heavy one overflows it, whereupon
-     nothing in the file runs at all - not even the `map` on its first line. Chain smaller cfgs instead;
+     nothing in the file runs at all - not even the `map` on its first line - or, if the file fits but
+     what was still queued behind it then doesn't, SiN quits with a fatal "SZ_GetSpace: overflow" box.
+     Chain smaller cfgs instead, 3-4 KB each;
    - **a shot cannot be fired in an unattended run.** Neither a console `+attack` nor a key bound to it
      reaches the weapon code, though every other command and key does, so anything about shooting is for
      the owner's headset test;
