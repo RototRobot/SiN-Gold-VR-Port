@@ -1,3 +1,5 @@
+#include <windows.h>
+#include <float.h>
 #include <math.h>
 #include <string.h>
 
@@ -39,6 +41,21 @@ static double largest(double a, double b)
 /* The head pose everything is measured from, in Quake axes and degrees. */
 static float g_origin[3];
 static float g_origin_yaw;
+
+/* Game units the whole player is lowered by (the crouch button), and the
+   highest the eye may go, above the recentred head (the ceiling). */
+static float g_lowered;
+static float g_ceiling = FLT_MAX;
+
+/* The body's yaw the last stereo frame turned the head with, and when. */
+static float g_body_yaw;
+static DWORD g_body_tick;
+
+#define BODY_STALE_MS 250
+
+/* Where the last eye was drawn from, and where the engine had the view. */
+static float g_last_eye[3];
+static float g_last_engine[3];
 
 /* The direction the quaternion q looks, and the yaw of it, in Quake terms. */
 static void quake_forward(const float q[4], float forward[3])
@@ -83,7 +100,7 @@ void vr_view_local(const float position[3], const float orientation[4], float un
 
 	origin[0] = (float)((offset[0] * c - offset[1] * s) * units_per_metre);
 	origin[1] = (float)((offset[0] * s + offset[1] * c) * units_per_metre);
-	origin[2] = offset[2] * units_per_metre;
+	origin[2] = offset[2] * units_per_metre - g_lowered;
 
 	sin_pitch = forward[2] > 1.0f ? 1.0 : (forward[2] < -1.0f ? -1.0 : forward[2]);
 	angles[PITCH] = (float)(-asin(sin_pitch) * DEG_PER_RAD);
@@ -104,6 +121,10 @@ void vr_view_apply(refdef_t *fd, const vr_eye_t *eye, float units_per_metre, vr_
 	double s = sin(turn);
 	double c = cos(turn);
 	double sin_pitch;
+	float height;
+
+	g_body_yaw = body_yaw;
+	g_body_tick = GetTickCount();
 
 	memcpy(saved->vieworg, fd->vieworg, sizeof(saved->vieworg));
 	memcpy(saved->viewangles, fd->viewangles, sizeof(saved->viewangles));
@@ -121,9 +142,10 @@ void vr_view_apply(refdef_t *fd, const vr_eye_t *eye, float units_per_metre, vr_
 	offset[1] -= g_origin[1];
 	offset[2] -= g_origin[2];
 
+	height = offset[2] * units_per_metre - g_lowered;
 	fd->vieworg[0] += (float)((offset[0] * c - offset[1] * s) * units_per_metre);
 	fd->vieworg[1] += (float)((offset[0] * s + offset[1] * c) * units_per_metre);
-	fd->vieworg[2] += offset[2] * units_per_metre;
+	fd->vieworg[2] += height < g_ceiling ? height : g_ceiling;
 
 	/* Quake angles: pitch positive looking down, yaw positive turning left,
 	   roll positive tipping the right side down. */
@@ -132,8 +154,58 @@ void vr_view_apply(refdef_t *fd, const vr_eye_t *eye, float units_per_metre, vr_
 	fd->viewangles[YAW] = body_yaw - g_origin_yaw + (float)(atan2(forward[1], forward[0]) * DEG_PER_RAD);
 	fd->viewangles[ROLL] = (float)(atan2(-right[2], up[2]) * DEG_PER_RAD);
 
+	memcpy(g_last_eye, fd->vieworg, sizeof(g_last_eye));
+	memcpy(g_last_engine, saved->vieworg, sizeof(g_last_engine));
+
 	fd->fov_x = (float)(2.0 * atan(largest(-eye->tan_left, eye->tan_right)) * DEG_PER_RAD);
 	fd->fov_y = (float)(2.0 * atan(largest(eye->tan_up, -eye->tan_down)) * DEG_PER_RAD);
+}
+
+void vr_view_shift(const float by[3], float units_per_metre)
+{
+	double yaw = g_origin_yaw * RAD_PER_DEG;
+	double s = sin(yaw);
+	double c = cos(yaw);
+
+	if (units_per_metre <= 0.0f)
+	{
+		return;
+	}
+
+	g_origin[0] += (float)((by[0] * c - by[1] * s) / units_per_metre);
+	g_origin[1] += (float)((by[0] * s + by[1] * c) / units_per_metre);
+	g_origin[2] += by[2] / units_per_metre;
+}
+
+void vr_view_set_lowered(float units)
+{
+	g_lowered = units;
+}
+
+float vr_view_lowered(void)
+{
+	return g_lowered;
+}
+
+void vr_view_set_ceiling(float units)
+{
+	g_ceiling = units;
+}
+
+void vr_view_last(float engine[3], float eye[3])
+{
+	memcpy(engine, g_last_engine, sizeof(g_last_engine));
+	memcpy(eye, g_last_eye, sizeof(g_last_eye));
+}
+
+int vr_view_body_yaw(float *yaw)
+{
+	if (!g_body_tick || GetTickCount() - g_body_tick > BODY_STALE_MS)
+	{
+		return 0;
+	}
+	*yaw = g_body_yaw;
+	return 1;
 }
 
 void vr_view_restore(refdef_t *fd, const vr_view_saved_t *saved)

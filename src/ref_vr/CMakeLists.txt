@@ -24,6 +24,8 @@ add_library(ref_vr SHARED
 	vr_weapon.h
 	vr_poses.c
 	vr_poses.h
+	vr_room.c
+	vr_room.h
 	../shared/sinvr_poses.h
 	vr_view.c
 	vr_view.h

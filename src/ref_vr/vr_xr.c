@@ -27,6 +27,7 @@
 #include "vr_gl.h"
 #include "vr_input.h"
 #include "vr_poses.h"
+#include "vr_room.h"
 #include "vr_weapon.h"
 #include "vr_xr.h"
 #include "vrlog.h"
@@ -995,6 +996,7 @@ static void publish_poses(void)
 		{
 			head_position[i] = 0.5f * (xr.eye_views[0].position[i] + xr.eye_views[1].position[i]);
 		}
+		vr_room_frame(head_position, xr.eye_views[0].orientation);
 		vr_view_local(head_position, xr.eye_views[0].orientation, scale, head_origin, head_angles);
 		vr_poses_head(head_origin, head_angles);
 		vr_gesture_head(head_origin, head_angles);

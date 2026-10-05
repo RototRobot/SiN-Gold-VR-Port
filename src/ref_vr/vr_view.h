@@ -53,4 +53,28 @@ void vr_view_restore(refdef_t *fd, const vr_view_saved_t *saved);
 void vr_view_local(const float position[3], const float orientation[4], float units_per_metre,
 	float origin[3], float angles[3]);
 
+/*
+ * Roomscale (vr_room.c). The recentred head moves by "by" - game units, in the
+ * recentred frame - so that everything measured from it afterwards is that
+ * much less: the body has stepped after the head, and the head is measured
+ * from where the body is now.
+ */
+void vr_view_shift(const float by[3], float units_per_metre);
+
+/* The whole player - head, hands and weapon - lowered by this many units,
+   for the crouch button: vr_view_local and vr_view_apply both take it off. */
+void vr_view_set_lowered(float units);
+float vr_view_lowered(void);
+
+/* The highest an eye may be, in units above the recentred head: what is above
+   the player. FLT_MAX for nothing. Only the view is held down by it. */
+void vr_view_set_ceiling(float units);
+
+/* The body's yaw the last stereo frame was turned with. 0 if there has not
+   been one lately. */
+int vr_view_body_yaw(float *yaw);
+
+/* For the log: the last eye's view origin, and the engine's under it. */
+void vr_view_last(float engine[3], float eye[3]);
+
 #endif /* VR_VIEW_H */

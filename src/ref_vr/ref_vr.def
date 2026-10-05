@@ -3,3 +3,4 @@ EXPORTS
 	GetRefAPI
 	SinVrPoses
 	SinVrFeedback
+	SinVrPmove

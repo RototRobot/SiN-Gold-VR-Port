@@ -63,6 +63,48 @@ void VR_Feedback(int kind, int hand, float strength)
 	}
 }
 
+static HMODULE pmove_module;
+static sinvr_pmove_fn room_pmove;
+
+static sinvr_pmove_fn find_room_pmove(void)
+{
+	HMODULE renderer = GetModuleHandleA("ref_vr.dll");
+
+	if (renderer != pmove_module)
+	{
+		pmove_module = renderer;
+		room_pmove = renderer ? (sinvr_pmove_fn)GetProcAddress(renderer, "SinVrPmove") : NULL;
+	}
+	return room_pmove;
+}
+
+int VR_TakeMoveKey(short angles[3])
+{
+	int key = angles[2];
+
+	if (!find_room_pmove() || key <= 0 || key > SINVR_MOVE_KEY_MAX)
+	{
+		return 0;
+	}
+
+	angles[2] = 0;
+	return key;
+}
+
+void VR_Pmove(void *pm, int key, vr_pmove_fn pmove)
+{
+	sinvr_pmove_fn room = find_room_pmove();
+
+	if (room)
+	{
+		room(pm, key, pmove);
+	}
+	else
+	{
+		pmove(pm);
+	}
+}
+
 /*
  * Poses are only worth using while they are being written. The renderer stops
  * writing when VR is switched off or the headset goes idle, and the block would
@@ -88,6 +130,11 @@ static int tracking(void)
 
 	/* A tenth of a second of the same frame means the renderer has stopped. */
 	return now - last_frame_time < 100;
+}
+
+int VR_Tracking(void)
+{
+	return tracking() && poses->head_valid;
 }
 
 int VR_HandPose(int hand, float origin[3], float angles[3])

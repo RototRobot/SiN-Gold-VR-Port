@@ -73,4 +73,19 @@ int VR_TrackingChanged(void);
 #define VR_HAND_WEAPON (-1)
 void VR_Feedback(int kind, int hand, float strength);
 
+/*
+ * Roomscale. The client marks each movement command with the step the player
+ * took in their room, in the command's roll angle. VR_TakeMoveKey takes that
+ * mark out of the command's angles, before anything reads them, and returns it
+ * - 0 for none, and always 0 without the VR renderer. VR_Pmove then moves the
+ * player with pmove (gi.Pmove) and the step after it, exactly as the client
+ * predicted; without the VR renderer it is pmove alone.
+ */
+typedef void (*vr_pmove_fn)(void *pm);
+int VR_TakeMoveKey(short angles[3]);
+void VR_Pmove(void *pm, int key, vr_pmove_fn pmove);
+
+/* The renderer is drawing the view from the headset. */
+int VR_Tracking(void);
+
 #endif /* VR_LINK_H */

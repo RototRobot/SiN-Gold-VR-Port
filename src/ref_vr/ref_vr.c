@@ -25,6 +25,7 @@
 #include "vr_gl.h"
 #include "vr_input.h"
 #include "vr_math.h"
+#include "vr_room.h"
 #include "vr_turn.h"
 #include "vr_weapon.h"
 #include "vr_gesture.h"
@@ -612,6 +613,7 @@ static int vr_Init(void *hinstance, void *wndproc)
 	vr_input_register();
 	vr_weapon_startup();
 	vr_gesture_startup();
+	vr_room_startup();
 	if (vr_enable->value != 0.0f)
 	{
 		vr_input_startup();
@@ -635,6 +637,7 @@ static int vr_Init(void *hinstance, void *wndproc)
 			start_idle_timer();
 			vr_weapon_install();
 			vr_turn_install();
+			vr_room_install();
 		}
 	}
 
@@ -694,6 +697,7 @@ static void vr_Shutdown(void)
 	stop_idle_timer();
 
 	/* sin.exe's calls into this DLL go back to where they went before. */
+	vr_room_uninstall();
 	vr_weapon_uninstall();
 
 	/* Before ref_gl destroys the GL context the OpenXR session belongs to. */

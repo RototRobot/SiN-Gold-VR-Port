@@ -94,4 +94,18 @@ typedef const sinvr_poses_t *(*sinvr_poses_fn)(int version);
 
 typedef void (*sinvr_feedback_fn)(int kind, int hand, float strength);
 
+/*
+ * Roomscale (src/ref_vr/vr_room.c). The client marks each movement command with
+ * the step the player's head has taken away from their body, as a number from
+ * 1 to SINVR_MOVE_KEY_MAX in the command's roll angle - which SiN otherwise
+ * always sends as 0 - and keeps the step itself. The game module takes the
+ * number out of the command before anything reads its angles, and moves the
+ * player with ref_vr.dll's SinVrPmove(pm, number, gi.Pmove) instead of
+ * gi.Pmove(pm): the engine's Pmove, then the step, exactly as the client's
+ * prediction took it. pm is the game's pmove_t; a number of 0 is no step.
+ */
+#define SINVR_MOVE_KEY_MAX 255
+
+typedef void (*sinvr_pmove_fn)(void *pm, int key, void (*pmove)(void *pm));
+
 #endif /* SINVR_POSES_H */
