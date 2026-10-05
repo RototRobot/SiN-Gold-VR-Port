@@ -2220,6 +2220,9 @@ EXPORT_FROM_DLL pmtype_t Player::GetMovePlayerMoveType(void)
    }
 }
 
+// SiN Gold VR: the step this command carries from the player's room (vr_link.h)
+static int vr_move_key = 0;
+
 EXPORT_FROM_DLL void Player::ClientMove(usercmd_t *ucmd)
 {
    pmove_t pm;
@@ -2262,7 +2265,9 @@ EXPORT_FROM_DLL void Player::ClientMove(usercmd_t *ucmd)
    SetMoveInfo(&pm, ucmd);
 
    // perform a pmove
-   gi.Pmove(&pm);
+   // SiN Gold VR: and then the step the player took in their room
+   VR_Pmove(&pm, vr_move_key, (vr_pmove_fn)gi.Pmove);
+   vr_move_key = 0;
 
    if(!deadflag && !level.playerfrozen)
    {
@@ -2324,6 +2329,10 @@ usually be a couple times for each server frame.
 */
 EXPORT_FROM_DLL void Player::ClientThink(Event *ev)
 {
+   // SiN Gold VR: the client marks the command with the step the player took in
+   // their room; the mark comes out before anything reads the angles
+   vr_move_key = (entnum == 1) ? VR_TakeMoveKey(current_ucmd->angles) : 0;
+
    if(!has_thought)
    {
       // let any threads waiting on us know they can go ahead
@@ -3305,6 +3314,14 @@ void Player::CalcViewOffset(void)
    else if(v_offset[2] > STAND_HEIGHT - 2)
    {
       v_offset[2] = STAND_HEIGHT - 2;
+   }
+
+   // SiN Gold VR: the headset is the eye. The renderer adds the player's own
+   // height in their room, crouching included, so the view is held at standing
+   // height, with no dip on landing, no bob and no kick to move it.
+   if((entnum == 1) && !deadflag && VR_Tracking())
+   {
+      v_offset = Vector(0, 0, STAND_EYE_HEIGHT);
    }
 
    // clear weapon kicks
