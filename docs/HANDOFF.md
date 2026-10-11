@@ -1154,7 +1154,7 @@ goes into both copies.
 
 **The menus.** The first run in the headset showed SiN's main menu, whose New Game starts SiN: the
 expansion's menus are not in its pak but loose, in `2015\locale\en\menus` (with its dialogue and
-pictures), and sin.exe adds `<base>ase\locale\<lang>` and `<base>\<gamedir>\locale\<lang>` by the
+pictures), and sin.exe adds `<base>\base\locale\<lang>` and `<base>\<gamedir>\locale\<lang>` by the
 game folder's own name (+0x54F60) - so `sinvr2015\locale`, which did not exist. `deploy.ps1` makes it
 a **junction** to `2015\locale`: nothing copied, nothing of the game's changed, and uninstalling
 removes the link with `rmdir` - never a recursive delete, which would follow it into `2015`. With it
