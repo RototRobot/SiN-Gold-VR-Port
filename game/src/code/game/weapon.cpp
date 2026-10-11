@@ -27,6 +27,7 @@
 #include "chaingun.h"
 #include "assaultrifle.h"
 #include "game_vr/vr_link.h"
+#include "game_vr/vr_game.h"
 #include "player.h"
 
 #ifdef SIN_ARCADE
@@ -1087,36 +1088,6 @@ void Weapon::PickupWeapon(Event *ev)
    }
 }
 
-//
-// SiN Gold VR: the view weapon is held still - it is being placed in the
-// player's hand, or vr_freeze_idle asks for it in play as well. The weapon is
-// on a controller there, which gives it all the movement it needs.
-//
-#define VR_IDLE_BEAT 0.5f
-
-static qboolean vr_said_still = false;
-
-static qboolean vr_hold_still(Sentient *owner)
-{
-   qboolean still = false;
-
-   if(owner && owner->isClient())
-   {
-      ((Player *)(Entity *)owner)->VRWeaponPose(NULL, NULL, NULL, NULL, NULL, &still);
-   }
-
-   // said either way, once each time it changes: it is a question a player
-   // asks of the picture, and the log answers it
-   if(still != vr_said_still)
-   {
-      vr_said_still = still;
-      gi.printf(still ? "SiN Gold VR: the weapon's idle animation is held still\n" :
-                "SiN Gold VR: the weapon's idle animation is running again\n");
-   }
-
-   return still;
-}
-
 void Weapon::ForceIdle(void)
 {
    const char *animname;
@@ -1142,7 +1113,7 @@ void Weapon::ForceIdle(void)
    // from. Held still, it takes the idle pose once and keeps that frame - and
    // a beat stands in for the animation's end, which is what brings the weapon
    // back here to reload and to pick its next idle.
-   if(vr_hold_still(owner))
+   if(VR_HoldWeaponStill(owner))
    {
       const char *playing = gi.Anim_NameForNum(edict->s.modelindex, edict->s.anim);
 
@@ -1308,7 +1279,7 @@ void Weapon::Idle(Event *ev)
    // SiN Gold VR: the beat that stands in for the idle animation can arrive
    // while the weapon is firing or reloading, where the animation's own end
    // never would. It has nothing to say then but "ask again".
-   if((weaponstate != WEAPON_READY) && vr_hold_still(owner))
+   if((weaponstate != WEAPON_READY) && VR_HoldWeaponStill(owner))
    {
       CancelEventsOfType(EV_Weapon_Idle);
       PostEvent(EV_Weapon_Idle, VR_IDLE_BEAT);

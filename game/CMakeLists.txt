@@ -56,14 +56,17 @@ list(TRANSFORM SINVR_GAME_WOS_SOURCES PREPEND src/code/game2015/)
 set(SINVR_GAME_VR_SOURCES
 	"${CMAKE_SOURCE_DIR}/src/game_vr/vr_link.cpp"
 	"${CMAKE_SOURCE_DIR}/src/game_vr/vr_link.h"
+	"${CMAKE_SOURCE_DIR}/src/game_vr/vr_game.cpp"
+	"${CMAKE_SOURCE_DIR}/src/game_vr/vr_game.h"
 	"${CMAKE_SOURCE_DIR}/src/shared/sinvr_poses.h"
 )
 
-function(sinvr_game_dll target sources def_file extra_definitions stage_subdir)
+function(sinvr_game_dll target game_dir sources def_file extra_definitions stage_subdir)
 	add_library(${target} SHARED ${SINVR_GAME_ELIB_SOURCES} ${sources} ${SINVR_GAME_VR_SOURCES} ${def_file})
 
-	# So that the game sources can say #include "game_vr/vr_link.h".
-	target_include_directories(${target} PRIVATE "${CMAKE_SOURCE_DIR}/src")
+	# So that the game sources can say #include "game_vr/vr_link.h", and the
+	# shared VR game code (vr_game.cpp) finds this game's own headers.
+	target_include_directories(${target} PRIVATE "${CMAKE_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/${game_dir}")
 
 	target_compile_definitions(${target} PRIVATE
 		WIN32 _WINDOWS _USRDLL GAMEX86_EXPORTS BUILDING_REF_GL SIN ELIB_GAMEDLL
@@ -79,8 +82,8 @@ function(sinvr_game_dll target sources def_file extra_definitions stage_subdir)
 	sinvr_stage(${target} ${stage_subdir})
 endfunction()
 
-sinvr_game_dll(game_sin "${SINVR_GAME_SIN_SOURCES}" src/code/game/game.def "" sinvr)
+sinvr_game_dll(game_sin src/code/game "${SINVR_GAME_SIN_SOURCES}" src/code/game/game.def "" sinvr)
 # Wages of Sin's goes in sinvr2015: sin.exe adds the 2015 folder - the expansion's
 # data - under any game folder whose name has "2015" in it, and runs as the
 # expansion there (docs/ENGINE_NOTES.md).
-sinvr_game_dll(game_wos "${SINVR_GAME_WOS_SOURCES}" src/code/game2015/game.def "GAMEX86_WOS_EXPORTS" sinvr2015)
+sinvr_game_dll(game_wos src/code/game2015 "${SINVR_GAME_WOS_SOURCES}" src/code/game2015/game.def "GAMEX86_WOS_EXPORTS" sinvr2015)
