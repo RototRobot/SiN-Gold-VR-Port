@@ -6,6 +6,7 @@
 #include "ref_vr.h"
 #include "vr_gl.h"
 #include "vr_hook.h"
+#include "vrlog.h"
 
 vr_gl_t vrgl;
 
@@ -91,6 +92,12 @@ static struct
 	float middle[MAX_MODELS];
 	const int (*keep[MAX_MODELS])[2];
 	int keep_count[MAX_MODELS];
+	vr_gl_tracking_t *track[MAX_MODELS];
+	int at_rest[MAX_MODELS];
+	int plane_ready;   /* the reflecting plane is worked out for the model being drawn */
+	float plane_n[3];  /* and is n.p = plane_d, n pointing to the side that is copied */
+	float plane_d;
+	unsigned moved;    /* how often it moved with the model, for the log */
 	int on;        /* the clip plane is on */
 	int counting;  /* a mirrored model's rotations are being counted */
 	int rotates;
@@ -158,6 +165,7 @@ static int model_at(const float origin[3])
 	models.hide[models.count] = NULL;
 	models.hide_count[models.count] = 0;
 	models.fill[models.count] = 0;
+	models.track[models.count] = NULL;
 	return models.count++;
 }
 
@@ -209,7 +217,8 @@ void vr_gl_hide_model_parts_at(const float origin[3], const int (*ranges)[2], in
 	}
 }
 
-void vr_gl_fill_model_at(const float origin[3], float middle, const int (*keep)[2], int keep_count)
+void vr_gl_fill_model_at(const float origin[3], float middle, const int (*keep)[2], int keep_count,
+	vr_gl_tracking_t *track, int at_rest)
 {
 	int at;
 
@@ -225,7 +234,14 @@ void vr_gl_fill_model_at(const float origin[3], float middle, const int (*keep)[
 		models.middle[at] = middle;
 		models.keep[at] = keep;
 		models.keep_count[at] = keep ? keep_count : 0;
+		models.track[at] = track;
+		models.at_rest[at] = at_rest;
 	}
+}
+
+unsigned vr_gl_planes_moved(void)
+{
+	return models.moved;
 }
 
 int vr_gl_can_hide_parts(void)
@@ -300,15 +316,168 @@ static void send_strip(void)
  * pointing -y; measured over the models, the fists come out even and every
  * weapon several times over on that side (docs/ENGINE_NOTES.md).
  */
+static const float *lerp_vertex(int index)
+{
+	return (const float *)(lerp_array + LERP_STRIDE * index);
+}
+
+/* An orthonormal frame from three points: along the first two, then towards
+   the third. 0 if they are too nearly in a line to say. */
+static int frame_of(const float a[3], const float b[3], const float c[3], float e[3][3])
+{
+	float u[3], w[3], len, along;
+	int i;
+
+	for (i = 0; i < 3; ++i)
+	{
+		u[i] = b[i] - a[i];
+		w[i] = c[i] - a[i];
+	}
+	len = sqrtf(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+	if (len < 0.01f)
+	{
+		return 0;
+	}
+	for (i = 0; i < 3; ++i)
+	{
+		e[0][i] = u[i] / len;
+	}
+	along = w[0] * e[0][0] + w[1] * e[0][1] + w[2] * e[0][2];
+	for (i = 0; i < 3; ++i)
+	{
+		w[i] -= along * e[0][i];
+	}
+	len = sqrtf(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
+	if (len < 0.01f)
+	{
+		return 0;
+	}
+	for (i = 0; i < 3; ++i)
+	{
+		e[1][i] = w[i] / len;
+	}
+	e[2][0] = e[0][1] * e[1][2] - e[0][2] * e[1][1];
+	e[2][1] = e[0][2] * e[1][0] - e[0][0] * e[1][2];
+	e[2][2] = e[0][0] * e[1][1] - e[0][1] * e[1][0];
+	return 1;
+}
+
+/*
+ * The plane for the model about to be filled: y = middle at rest - noting the
+ * three followed vertices as it is drawn - and anywhere else that plane
+ * carried by the turn and shift that took them from rest to where they are.
+ */
+static int said_untracked;
+
+static void place_plane(int entry, float middle)
+{
+	vr_gl_tracking_t *t = models.track[entry];
+	float rest[3][3], now[3][3], from_rest[3], q[3], n[3];
+	int i, j;
+
+	models.plane_n[0] = 0.0f;
+	models.plane_n[1] = 1.0f;
+	models.plane_n[2] = 0.0f;
+	models.plane_d = middle;
+	models.plane_ready = 1;
+
+	if (!t || models.at_rest[entry] || t->found != 7)
+	{
+		if (t && !models.at_rest[entry] && !said_untracked)
+		{
+			said_untracked = 1;
+			vrlog("VR: a rebuilt side stays where it was - its gun has not been seen at rest yet (%d)", t->found);
+		}
+		return;
+	}
+	if (!frame_of(t->rest[0], t->rest[1], t->rest[2], rest) ||
+		!frame_of(lerp_vertex(t->index[0]), lerp_vertex(t->index[1]), lerp_vertex(t->index[2]), now))
+	{
+		if (!said_untracked)
+		{
+			said_untracked = 1;
+			vrlog("VR: a rebuilt side stays where it was - its gun's followed points are in a line");
+		}
+		return;
+	}
+
+	/* n is (0 1 0) turned; q is the point (0 middle 0) carried */
+	for (i = 0; i < 3; ++i)
+	{
+		from_rest[i] = (i == 1 ? middle : 0.0f) - t->rest[0][i];
+	}
+	for (i = 0; i < 3; ++i)
+	{
+		n[i] = 0.0f;
+		q[i] = lerp_vertex(t->index[0])[i];
+		for (j = 0; j < 3; ++j)
+		{
+			n[i] += now[j][i] * rest[j][1];
+			q[i] += now[j][i] * (rest[j][0] * from_rest[0] + rest[j][1] * from_rest[1] + rest[j][2] * from_rest[2]);
+		}
+	}
+	memcpy(models.plane_n, n, sizeof(n));
+	models.plane_d = n[0] * q[0] + n[1] * q[1] + n[2] * q[2];
+	models.moved++;
+}
+
+/* At rest, the three followed vertices: furthest back, furthest forward and
+   highest of those drawn, none of them a part left out or a hand kept. */
+static void note_rest(int entry, const GLfloat *xyz, int index)
+{
+	vr_gl_tracking_t *t = models.track[entry];
+	int k;
+
+	if (!t || !models.at_rest[entry] || index < 0 ||
+		in_ranges(index, models.hide[entry], models.hide_count[entry]) ||
+		in_ranges(index, models.keep[entry], models.keep_count[entry]))
+	{
+		return;
+	}
+
+	for (k = 0; k < 3; ++k)
+	{
+		int better;
+
+		if ((t->found & (1 << k)) && t->index[k] == index)
+		{
+			memcpy(t->rest[k], xyz, sizeof(t->rest[k]));
+			continue;
+		}
+		better = !(t->found & (1 << k)) ||
+			(k == 0 && xyz[0] < t->rest[0][0] - 0.01f) ||
+			(k == 1 && xyz[0] > t->rest[1][0] + 0.01f) ||
+			(k == 2 && xyz[2] > t->rest[2][2] + 0.01f);
+		if (better)
+		{
+			t->index[k] = index;
+			memcpy(t->rest[k], xyz, sizeof(t->rest[k]));
+			t->found |= 1 << k;
+		}
+	}
+}
+
 static void fill_strip(float middle)
 {
 	int k, sent = 0;
+	const int entry = models.hiding - 1;
+	const float *pn;
+
+	if (!models.plane_ready)
+	{
+		place_plane(entry, middle);
+	}
+	pn = models.plane_n;
+	for (k = 0; k < strip.count; ++k)
+	{
+		note_rest(entry, strip.v[k].xyz, strip.v[k].index);
+	}
 
 	for (k = 2; k < strip.count; ++k)
 	{
 		int a, b, c, j;
 		const GLfloat *p, *q, *r;
-		float n_x, n_y, n_z, centre_y;
+		float n_x, n_y, n_z, facing, side;
 
 		if (strip.mode == GL_TRIANGLE_FAN)
 		{
@@ -338,12 +507,15 @@ static void fill_strip(float middle)
 		n_x = (q[1] - p[1]) * (r[2] - p[2]) - (q[2] - p[2]) * (r[1] - p[1]);
 		n_y = (q[2] - p[2]) * (r[0] - p[0]) - (q[0] - p[0]) * (r[2] - p[2]);
 		n_z = (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
-		centre_y = (p[1] + q[1] + r[1]) / 3.0f;
+		/* against the plane's normal is left, at rest; and which side of it */
+		facing = -(n_x * pn[0] + n_y * pn[1] + n_z * pn[2]);
+		side = (pn[0] * (p[0] + q[0] + r[0]) + pn[1] * (p[1] + q[1] + r[1]) + pn[2] * (p[2] + q[2] + r[2])) / 3.0f -
+			models.plane_d;
 
 		/* Facing left - within 60 degrees of it: the top and the underside
 		   were built across the middle already, and a copy of them only lies
 		   on top of the real thing - and on the left of the middle. */
-		if (n_y >= 0.0f || n_y * n_y < 0.25f * (n_x * n_x + n_y * n_y + n_z * n_z) || centre_y <= middle)
+		if (facing <= 0.0f || facing * facing < 0.25f * (n_x * n_x + n_y * n_y + n_z * n_z) || side <= 0.0f)
 		{
 			continue;
 		}
@@ -370,9 +542,14 @@ static void fill_strip(float middle)
 					real_glColor4f(strip.v[i].colour[0], strip.v[i].colour[1], strip.v[i].colour[2],
 						strip.v[i].colour[3]);
 				}
-				xyz[0] = strip.v[i].xyz[0];
-				xyz[1] = 2.0f * middle - strip.v[i].xyz[1];
-				xyz[2] = strip.v[i].xyz[2];
+				{
+					const GLfloat *v = strip.v[i].xyz;
+					float away = pn[0] * v[0] + pn[1] * v[1] + pn[2] * v[2] - models.plane_d;
+
+					xyz[0] = v[0] - 2.0f * away * pn[0];
+					xyz[1] = v[1] - 2.0f * away * pn[1];
+					xyz[2] = v[2] - 2.0f * away * pn[2];
+				}
 				real_glVertex3fv(xyz);
 			}
 		}
@@ -527,6 +704,7 @@ static void APIENTRY hook_glTranslatef(GLfloat x, GLfloat y, GLfloat z)
 				if ((models.hide[i] || models.fill[i]) && vr_gl_can_hide_parts())
 				{
 					models.hiding = i + 1;
+					models.plane_ready = 0;
 				}
 				break;
 			}

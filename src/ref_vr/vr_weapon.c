@@ -109,7 +109,26 @@ static const weapon_info_t weapon_table[] = {
 	/* Two arms like the fists, either side of y = 0 with nothing near it (165
 	   vertices each, y -30..-12.5 and 11.7..28.7), each a stub of forearm and
 	   a clawed hand, x 28-43. Held at the root of the claws. */
-	{ "mutanthands", { 31.0f, -21.0f, -15.0f }, 0.35f, 1, 0.0f }
+	{ "mutanthands", { 31.0f, -21.0f, -15.0f }, 0.35f, 1, 0.0f },
+
+	/* Wages of Sin's (measured 2026-10-11 off 2015\pak0.sin, as the base
+	   game's were). The dual magnums are a pistol in each gloved hand, either
+	   side of y = 0 like the fists. The long guns each have a left arm built
+	   in - a sleeve and a blue glove, one run of vertices - reaching to where
+	   the other hand holds them: the flamethrower's yellow handle under the
+	   barrel, the informer gun's front grip, the crossbow's fore-end, the
+	   missile launcher's top. That glove is the other hand's place, and the
+	   middle is of the gun's body without the arm. The rocket pack is only a
+	   hand on its remote, kept as it is. Grips are first guesses, for the
+	   grip button to settle. */
+	{ "dualmagnum",  { 52.0f, -31.0f, -31.0f }, 0.35f, 1, 0.0f },
+	{ "concussion",  { 35.0f, -27.0f, -45.0f }, 0.35f, 0, 0.30f, 1, { { 63, 133 } }, 1, { 52.7f, -2.8f, -37.2f }, -26.31f, 1 },
+	{ "crossbow",    { 30.0f, -22.0f, -28.0f }, 0.35f, 0, 0.30f, 1, { { 237, 277 } }, 1, { 56.2f, -17.6f, -28.4f }, -22.34f, 1 },
+	{ "flame",       { 43.0f, -24.5f, -36.0f }, 0.35f, 0, 0.30f, 1, { { 45, 76 } }, 1, { 61.2f, -21.1f, -31.1f }, -23.63f, 1 },
+	{ "informergun", { 38.0f, -22.0f, -38.0f }, 0.35f, 0, 0.30f, 1, { { 276, 308 } }, 1, { 83.7f, -19.4f, -38.8f }, -22.54f, 1 },
+	{ "missile",     { 35.0f, -18.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 141, 213 } }, 1, { 50.9f, -6.1f, -33.1f }, -17.60f, 1 },
+	{ "nuke",        { 20.0f, -18.0f, -12.0f }, 0.60f, 0, 0.30f, 1, { { 365, 424 } }, 1, { 33.2f, -13.8f, -18.0f }, -17.89f, 1 },
+	{ "pack",        { 31.0f, -12.0f,  -9.0f }, 0.35f, 0, 0.0f }
 };
 
 static const weapon_info_t weapon_other = { NULL, { 30.0f, -20.0f, -25.0f }, 0.35f, 0, 0.30f };
@@ -166,7 +185,16 @@ static const idle_info_t idle_table[] = {
 	{ "spgun",       4, { { 1, 1 }, { 2, 1 }, { 3, 1 }, { 4, 1 } }, 0x001F },
 	{ "mines",       2, { { 1, 1 }, { 2, 1 } }, 0x0007 },
 	{ "detonator",   2, { { 1, 1 }, { 2, 1 } }, 0x0007 },
-	{ "mutanthands", 1, { { 4, 4 } }, 0x001F }
+	{ "mutanthands", 1, { { 4, 4 } }, 0x001F },
+	/* Wages of Sin's, numbered as above from each .def's animation names */
+	{ "dualmagnum",  2, { { 5, 5 }, { 14, 14 } }, 0x7E3F },
+	{ "concussion",  3, { { 1, 1 }, { 2, 1 }, { 3, 1 } }, 0x000F },
+	{ "crossbow",    2, { { 4, 4 }, { 9, 9 } }, 0x1217 },
+	{ "flame",       2, { { 2, 2 }, { 3, 2 } }, 0x000F },
+	{ "informergun", 3, { { 1, 1 }, { 2, 1 }, { 3, 1 } }, 0x000F },
+	{ "missile",     1, { { 1, 1 } }, 0x0003 },
+	{ "nuke",        1, { { 2, 2 } }, 0x0007 },
+	{ "pack",        2, { { 1, 1 }, { 2, 1 } }, 0x0007 }
 };
 
 static const idle_info_t *idle_info(const char *key)
@@ -199,6 +227,7 @@ typedef struct
 	cvar_t *grip[2];             /* vr_grip_<key>, and vr_grip_<key>_left for two arms */
 	cvar_t *fore;                /* vr_fore_<key>: the fore-end, in the model's own units */
 	cvar_t *fill;                /* vr_fill_<key>: whether its missing side is rebuilt */
+	vr_gl_tracking_t track;      /* how the rebuilt side follows the gun as it animates */
 } weapon_t;
 
 static weapon_t weapons[48];
@@ -220,6 +249,7 @@ static cvar_t *vr_weapon_arm;
 static cvar_t *vr_weapon_fill;
 static cvar_t *vr_weapon_idle;
 static cvar_t *vr_upper_arm;
+static cvar_t *vr_fake_anim;
 static cvar_t *vr_aim;
 
 /* Read once, at start-up: the buttons are attached to the session with the
@@ -384,6 +414,7 @@ void vr_weapon_startup(void)
 	vr_weapon_fill = vr_cvar("vr_weapon_fill", "1", CVAR_ARCHIVE);
 	vr_weapon_idle = vr_cvar("vr_weapon_idle", "0", CVAR_ARCHIVE);
 	vr_upper_arm = vr_cvar("vr_upper_arm", "0", CVAR_ARCHIVE);
+	vr_fake_anim = vr_cvar("vr_fake_anim", "", 0);
 	vr_aim = vr_cvar("vr_aim", "1", 0);
 	lefty = vr_left_handed->value != 0.0f;
 	if (lefty)
@@ -1476,8 +1507,15 @@ static void hide_modelled_arm(const entity_t *gun)
 		(!vr_weapon_fill || vr_weapon_fill->value != 0.0f) &&
 		anims && gun->anim >= 0 && gun->anim < 32 && (anims->steady >> gun->anim & 1))
 	{
+		int at_rest = 0, k;
+
+		/* At rest on an idle; anywhere else - firing - the plane follows. */
+		for (k = 0; k < anims->count; ++k)
+		{
+			at_rest |= gun->anim == anims->map[k][0] || gun->anim == anims->map[k][1];
+		}
 		vr_gl_fill_model_at(gun->origin, current->info->middle * gun->scale, current->info->keep,
-			current->info->keep_count);
+			current->info->keep_count, &current->track, at_rest);
 	}
 }
 
@@ -1557,7 +1595,17 @@ static int is_other_hand(const entity_t *e)
 static void hold_idle(entity_t *e)
 {
 	const idle_info_t *anims = idle_info(current ? current->key : NULL);
-	int j;
+	int j, anim, frame;
+
+	/* Desk testing: "vr_fake_anim 0 2" shows the weapon on animation 0, frame
+	   2 - a fire animation's, say, which an unattended run cannot fire. */
+	if (vr_fake_anim && vr_fake_anim->string && sscanf(vr_fake_anim->string, "%d %d", &anim, &frame) == 2)
+	{
+		e->anim = anim;
+		e->frame = e->oldframe = frame;
+		e->backlerp = 0.0f;
+		return;
+	}
 
 	if (!anims || (vr_weapon_idle && vr_weapon_idle->value != 0.0f))
 	{
@@ -1821,15 +1869,16 @@ static void __fastcall add_view_weapon(entity_t *gun)
 		vr_gl_mirror_model_at(gun->origin);
 		mirror_axis(gun);
 	}
-	hide_modelled_arm(gun);
 
 	/* The scene gets the weapon held still; the client's commands, which go on
-	   to run on this entity, still see the frame the game is really on. */
+	   to run on this entity, still see the frame the game is really on. What
+	   is left out and filled in goes by the frame that is drawn. */
 	{
 		int anim = gun->anim, frame = gun->frame, oldframe = gun->oldframe;
 		float backlerp = gun->backlerp;
 
 		hold_idle(gun);
+		hide_modelled_arm(gun);
 		real_add_entity(gun);
 		gun->anim = anim;
 		gun->frame = frame;
@@ -1956,8 +2005,9 @@ void vr_weapon_uninstall(void)
 	vrlog("VR: the view weapon was placed by the client %u times; %u of its bullet impacts were left "
 		"to the server; %u punches were thrown; the other hand took hold %u times; its effects were placed "
 		"at its true size %u times; of its %u commands, %u flashes were put back on the barrel; %u shots and "
-		"%u punches' hits were felt", client_placements, bullets_left_out, punches_thrown, steady.count,
-		effects_placed, view_commands, flash_offsets_dropped, shots_felt, hits_felt);
+		"%u punches' hits were felt; a rebuilt side followed its gun %u times", client_placements, bullets_left_out,
+		punches_thrown, steady.count, effects_placed, view_commands, flash_offsets_dropped, shots_felt, hits_felt,
+		vr_gl_planes_moved());
 }
 
 /* ------------------------------------------------------------------------- */
@@ -2057,8 +2107,8 @@ void vr_weapon_to_hand(refdef_t *fd)
 	{
 		vr_gl_mirror_model_at(gun->origin);
 	}
-	hide_modelled_arm(gun);
 	hold_idle(gun);
+	hide_modelled_arm(gun);
 	placed_this_frame = 1;
 	say_placed("moved in the renderer");
 }

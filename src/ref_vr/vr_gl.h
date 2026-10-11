@@ -104,7 +104,28 @@ void vr_gl_hide_model_parts_at(const float origin[3], const int (*ranges)[2], in
  * those with a vertex in keep, runs of first and last vertex as in
  * vr_gl_hide_model_parts_at: a hand on the weapon, which is not symmetrical.
  */
-void vr_gl_fill_model_at(const float origin[3], float middle, const int (*keep)[2], int keep_count);
+/*
+ * The plane moves with the model. A gun's fire animation kicks it back and
+ * tips it up inside its own frame, and a copy reflected across a plane that
+ * stays put slides against the real side. So three of the model's vertices
+ * are followed: with the weapon at rest (at_rest), whichever are furthest
+ * back, furthest forward and highest are chosen and where they are noted; in
+ * any other frame, the turn and shift that takes them from there to where
+ * they are now takes the plane with them. The caller keeps one of these per
+ * weapon. NULL keeps the plane where it is.
+ */
+typedef struct
+{
+	int found;          /* a bit for each of the three chosen */
+	int index[3];       /* in the model's numbering */
+	float rest[3][3];   /* where each was, at rest */
+} vr_gl_tracking_t;
+
+void vr_gl_fill_model_at(const float origin[3], float middle, const int (*keep)[2], int keep_count,
+	vr_gl_tracking_t *track, int at_rest);
+
+/* How often a filled model's plane has moved with it, for the log. */
+unsigned vr_gl_planes_moved(void);
 
 /* Whether ref_gl is the build whose vertices vr_gl_hide_model_parts_at can
    recognise - and whose strips vr_gl_fill_model_at can copy. */
