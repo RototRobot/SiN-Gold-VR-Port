@@ -105,7 +105,11 @@ static const weapon_info_t weapon_table[] = {
 	{ "quantum",   { 20.0f, -30.0f, -40.0f }, 0.30f, 0, 0.35f, 0, { { 0 } }, 0, { 0 }, -35.1f, 1 },
 	{ "spgun",     { 30.0f, -15.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 217, 259 } }, 1, { 60.1f, -21.3f, -35.8f }, -24.25f, 1 },
 	{ "mines",     { 36.0f, -22.0f, -18.0f }, 0.35f, 0, 0.0f },
-	{ "detonator", { 15.0f,  -5.0f, -12.0f }, 0.40f, 0, 0.0f }
+	{ "detonator", { 15.0f,  -5.0f, -12.0f }, 0.40f, 0, 0.0f },
+	/* Two arms like the fists, either side of y = 0 with nothing near it (165
+	   vertices each, y -30..-12.5 and 11.7..28.7), each a stub of forearm and
+	   a clawed hand, x 28-43. Held at the root of the claws. */
+	{ "mutanthands", { 31.0f, -21.0f, -15.0f }, 0.35f, 1, 0.0f }
 };
 
 static const weapon_info_t weapon_other = { NULL, { 30.0f, -20.0f, -25.0f }, 0.35f, 0, 0.30f };
@@ -1439,7 +1443,9 @@ static void keep_one_arm(const entity_t *e, int hand)
 	plane[3] = -sign * (left[0] * e->origin[0] + left[1] * e->origin[1] + left[2] * e->origin[2]);
 	vr_gl_clip_model_at(e->origin, plane);
 
-	if (vr_upper_arm && vr_upper_arm->value != 0.0f)
+	/* Only the fists have an upper arm: the mutant hands' arms stop at the
+	   forearm already. */
+	if ((vr_upper_arm && vr_upper_arm->value != 0.0f) || e->model != fist_model)
 	{
 		return;
 	}
