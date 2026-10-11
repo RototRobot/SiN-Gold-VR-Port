@@ -82,6 +82,19 @@ It also adds two launchers beside `sin.exe`:
 | `SiN VR - Wages of Sin.bat` | The expansion, Wages of Sin, in VR - everything above works there too. |
 | `SiN VR - Wages of Sin (flatscreen).bat` | The expansion through the mod with VR off. |
 
+**From Steam's Play button instead.** In the Steam library, right-click SiN Gold → Properties →
+Launch Options, and enter:
+
+```
++set game sinvr2015 +set vid_ref vr +set vr_enable 1
+```
+
+Steam puts these after its own arguments for whichever entry is played - "Play" adds nothing,
+"Play Wages of SiN" adds `+set game 2015` - so either one starts the mod's Wages of Sin folder, and
+its New Game asks which adventure: Wages of Sin or the original Sin. (The same options with `sinvr`
+in place of `sinvr2015` start only SiN, from either entry.) Empty the box to play without VR again.
+It also takes over the "Play CTF" entry while it is set.
+
 Wages of Sin keeps its own settings (`sinvr2015\players\blade\config.cfg`), separate from SiN's: a
 weapon's grip, left-handed mode and the rest are set for each game on its own.
 

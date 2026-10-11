@@ -1173,6 +1173,16 @@ removes the link with `rmdir` - never a recursive delete, which would follow it 
 the main menu reads "Wages of Sin" in its corner and New Game reaches "Select single player
 adventure", Wages of Sin or Sin (desk, by Enter through the menus).
 
+**Steam's Play button.** Steam's launch entries for app 1313 (from `appcacheppinfo.vdf`) are
+`sin.exe` with nothing, "Play Wages of SiN" with `+set game 2015`, and "Play CTF" with `+set game ctf`;
+the player's Launch Options come after them, and the last `+set game` wins. So
+`+set game sinvr2015 +set vid_ref vr +set vr_enable 1` makes every entry the mod's Wages of Sin,
+whose New Game offers both adventures. Desk, with Steam's Wages of Sin command line in front: VR,
+and New Game reached "Select single player adventure". `game2015` reads 0 at that menu when
+`+set game 2015` came first - the game-change handler resets it, even after `+set game2015 1` - and 1
+once a level starts, which the expansion's game module forces in `InitGame`; the menus come from
+`locale` either way.
+
 What the desk showed, on `2015dm1` (`club-day` starts with the player held for its intro, which
 rightly leaves roomscale off): `SiN Gold VR game module` in the console, tracking, the weapon in the
 hand, a pretend metre walked as 39.4 units, client and server agreeing on every step.
