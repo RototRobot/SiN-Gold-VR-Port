@@ -1007,8 +1007,16 @@ the server's impacts - is what the owner's headset test exercises.
 
 Still to do, and what is known about each:
 
-- **The rebuilt side drifts during the fire animation** (owner, 2026-09-28: "moves a bit when the
-  recoil animation plays" - logged, not fixed). The reflection is across a fixed plane in the model's
+- ~~**The rebuilt side drifts during the fire animation**~~ - fixed 2026-10-11, as planned below:
+  `vr_gl_tracking_t`, one per weapon, follows three vertices (furthest back, furthest forward,
+  highest - none hidden or kept), noted while the gun is drawn on one of its idles; in any other
+  frame the orthonormal frames of the three, at rest and now, give the turn and shift, and the
+  reflecting plane `y = middle` goes with them (`place_plane`, `p - 2(n.p - d)n`). The fill is now
+  set up from the frame that is drawn (after `hold_idle`), not the one the game is on. Desk, with
+  `vr_fake_anim "1 2"` (the assault rifle's fire1, frame 2 - an unattended run cannot fire): the
+  plane followed the gun on every frame, and the rebuilt side stays whole and tipped with the
+  kick, against slivers with `vr_fill_asrifle 0`. Original note (owner, 2026-09-28: "moves a bit
+  when the recoil animation plays"). The reflection is across a fixed plane in the model's
   frame, and the fire animation moves the gun in ways a mirror across that plane does not follow
   (anything but a pitch about the model's y axis). The way to fix it: pick three vertices spread over
   each gun's body, note their positions in ref_gl's vertex array whenever the idle is held (`hold_idle`
@@ -1190,3 +1198,16 @@ hand, a pretend metre walked as 39.4 units, client and server agreeing on every 
 Not yet looked at: the expansion's own new weapons are not in the weapon table, so they are held from
 the general guess until the grip button settles them; and its config is separate from SiN's - the
 owner's was copied across once, by hand.
+
+**Wages of Sin's own weapons** (2026-10-11). Measured off `2015\pak0.sin` with a new helper
+(`scratchpad/wosparts.py`, `wosdraw.py`: connected pieces with their skin colour, drawn from above and
+from the right). The dual magnums are a pistol in each gloved hand either side of y = 0, so they are
+two-armed like the fists. The concussion gun, plasma bow (`view_crossbow`), flamethrower, informer
+gun, missile launcher and IP36 (`view_nuke`) each have a left arm built in - sleeve and blue glove, one
+run of vertices - reaching to where the other hand holds them; that run is hidden, its glove is the
+other hand's place, and the middle is of the body without it. The stinger pack (`view_pack`) is only a
+hand on a remote and is kept. Each has its idle table entry, numbered from its .def's animation names
+in alphabetical order. Grips are first guesses. Desk, on `2015dm1` with `give`/`use`: the dual
+magnums, concussion gun, plasma bow, flamethrower and informer gun drawn in the hand, the arms gone,
+the far side rebuilt; the missile launcher, IP36 and stinger pack would not be switched to there, so
+they are for the headset.

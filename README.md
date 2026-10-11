@@ -287,7 +287,7 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
   are not symmetrical - an ejection port, a label - appear on both sides. The chaingun is left as it
   was, having a box on its left side only; `vr_fill_<weapon> 0` does the same for any other that looks
   wrong. The magnum's own hand and a sleeve along the pulse rifle's top are not copied. The rebuilt side
-  is only there while the gun is idling or firing: raising, lowering, reloading and changing mode turn
+  follows the gun through its firing animation, and is only there while the gun is idling or firing: raising, lowering, reloading and changing mode turn
   the gun in ways a mirror image would follow the wrong way, so for those moments it is the gun as
   built.
 - Most of SiN's two-handed weapons modelled a left arm reaching in to the fore-end, all one piece with
