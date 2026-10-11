@@ -219,6 +219,7 @@ These console variables control the mod:
 | `vr_show_hands` | 1 | Draw the controllers - a cross and the line they point along - while a weapon is being placed. 2 draws them all the time, 0 never. |
 | `vr_punch` | 1 | Swinging a fist punches while the fists are out. 0 leaves punching to the trigger; 2 also says in the console what each punch hit. |
 | `vr_punch_speed` | 2 | How fast a fist has to be going to punch, in metres a second. |
+| `vr_punch_full` | 4 | How fast a swung punch has to go to hit as hard as the trigger's, in metres a second. Slower swings hit softer, down to half; faster ones harder, up to twice. |
 | `vr_punch_assist` | 35 | How far to either side of where you look - or where your fist was headed - a punch still finds someone within reach, in degrees. 0 lands punches only where the fist actually goes. |
 | `vr_freeze_idle` | 0 | 1 also stops the game module playing idle animations at all. Not needed for the picture any more - `vr_weapon_idle` holds that still - and the game's own hold only takes effect at the next idle. |
 | `vr_grip_<weapon>` | empty | Where that weapon sits in the hand: offset, angles and size. The grip button writes it; empty means the measured guess. |

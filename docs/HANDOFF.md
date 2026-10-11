@@ -1012,10 +1012,15 @@ Still to do, and what is known about each:
   of the model.
 - **Two-handed holds, what is left**: the fore-end distances are first guesses waiting on the headset,
   and the other hand is a fist - there is no open hand in SiN's models to hold a fore-end with.
-- **Mutant hands** (`view_mutanthands.def`) are not in the weapon table, so they are placed from the
-  general guess and treated as a gun held in one hand. The model very likely has two arms like the
-  fists and wants the fists' treatment (`two_arms`), and punching - the game already lets `MutantHands`
-  punch, as it derives from `Fists`.
+- ~~**Mutant hands**~~ (2026-10-11): in the table now as two arms, like the fists - `view_mutanthands.def`
+  has them either side of y = 0 with nothing near it (165 vertices each), each a stub of forearm
+  (x 5) and a clawed hand (x 28-43), so the fists' elbow cut is not wanted and `keep_one_arm` makes it
+  only on the fists' model. Held at the root of the claws, (31, -21, -15), at 0.35. Swing punches
+  already reached them: `MutantHands` derives from `Fists` (reach 75, damage 100). Desk: both hands on
+  their own pretend controllers, each turning with its own.
+- **Punches by speed** (`vr_punch_full`, 2026-10-11): a swung punch's damage is `Strike`'s times its
+  speed over `vr_punch_full` (4 m/s), held between half and twice; the trigger's is unchanged. The
+  desk cannot throw one (§8) - for the headset.
 - ~~**Manual reloading**~~: dropped by the owner on 2026-09-28 - only the magnum (15) and the assault
   rifle (45) have clips at all, so it would do little. If it comes back: SiN already has
   `reload`/`silreload` animations and `Weapon::ForceReload`, which `Player::DoUse` calls.
