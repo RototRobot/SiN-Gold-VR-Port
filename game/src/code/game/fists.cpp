@@ -99,6 +99,11 @@ void Fists::VRFeelHit(trace_t trace, int hand)
 #define VR_PUNCH_FIST   6.0f
 
 static cvar_t *vr_punch_assist = NULL;
+static cvar_t *vr_punch_full = NULL;
+
+// SiN Gold VR: how hard the blow Strike is landing is, against the button's:
+// a swung punch lands harder the faster the fist was going.
+static float vr_strike_scale = 1.0f;
 
 static Vector vr_middle(Entity *ent)
 {
@@ -226,7 +231,25 @@ static Entity *vr_punch_target(Entity *owner, Vector eye, Vector look, Vector to
    return best;
 }
 
-trace_t Fists::VRPunch(Vector fist, Vector dir, Vector look, const char **how)
+trace_t Fists::VRPunch(Vector fist, Vector dir, Vector look, float speed, const char **how)
+{
+   trace_t  blow;
+
+   // as hard as the button's at vr_punch_full metres a second, half that at
+   // half the speed and twice at twice, and no more or less
+   if(!vr_punch_full)
+   {
+      vr_punch_full = gi.cvar("vr_punch_full", "4", CVAR_ARCHIVE);
+   }
+   vr_strike_scale = vr_punch_full->value > 0 ? speed / vr_punch_full->value : 1.0f;
+   vr_strike_scale = vr_strike_scale < 0.5f ? 0.5f : (vr_strike_scale > 2.0f ? 2.0f : vr_strike_scale);
+
+   blow = VRSwing(fist, dir, look, how);
+   vr_strike_scale = 1.0f;
+   return blow;
+}
+
+trace_t Fists::VRSwing(Vector fist, Vector dir, Vector look, const char **how)
 {
    trace_t  reach;
    trace_t  probe;
@@ -308,6 +331,7 @@ trace_t Fists::Strike(Vector start, Vector end)
    int      surftype;
 
    damage = G_Random(strike_damage)+strike_damage;
+   damage *= vr_strike_scale;   // SiN Gold VR: a swung punch, by its speed
 
    trace = G_FullTrace(start, vec_zero, vec_zero, end, 64, owner, MASK_PROJECTILE, "Fists::Shoot");
 

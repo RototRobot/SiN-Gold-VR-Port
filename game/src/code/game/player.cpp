@@ -6598,7 +6598,7 @@ void Player::VRPunches(void)
          v_angle.AngleVectors(&look, NULL, NULL);
       }
 
-      trace = ((Fists *)currentWeapon)->VRPunch(fist, way, look, &how);
+      trace = ((Fists *)currentWeapon)->VRPunch(fist, way, look, speed, &how);
       ((Fists *)currentWeapon)->VRFeelHit(trace, hand);
 
       if(vr_punch->value >= 2)
