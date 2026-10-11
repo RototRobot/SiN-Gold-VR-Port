@@ -426,8 +426,13 @@ Still to do, in the order it matters:
 
 **Resolution and rendering**
 
-- The theatre screen uses the window's resolution (640×480 by default). A higher `gl_mode` would sharpen it.
-  The stereo path does not care: it renders at the runtime's recommended eye size regardless of `gl_mode`.
+- The theatre screen uses the window's resolution (640×480 by default). A higher `gl_mode` does **not**
+  sharpen it (desk, 2026-10-11, `gl_mode 7`, 1600×1200): SiN draws its menus and HUD at their 640×480
+  size in pixels, so they come out as a small picture in the middle of a big black one, and the HUD
+  shrinks the same way in the stereo panel. Sharper menus would mean drawing the 2D into a bigger
+  buffer of our own with the viewport scaled up - text and edges crisper, though the art itself is
+  640×480. The stereo path does not care: it renders at the runtime's recommended eye size regardless
+  of `gl_mode`.
 - The level-start card (§8) is worth handling in VR: it is a non-world frame, so it lands on the theatre
   screen while the world behind it is not being drawn.
 
