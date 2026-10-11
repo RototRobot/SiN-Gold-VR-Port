@@ -82,7 +82,7 @@ It also adds two launchers beside `sin.exe`:
 | `SiN VR - Wages of Sin.bat` | The expansion, Wages of Sin, in VR - everything above works there too. |
 | `SiN VR - Wages of Sin (flatscreen).bat` | The expansion through the mod with VR off. |
 
-Wages of Sin keeps its own settings (`sinvr2015\playerslade\config.cfg`), separate from SiN's: a
+Wages of Sin keeps its own settings (`sinvr2015\players\blade\config.cfg`), separate from SiN's: a
 weapon's grip, left-handed mode and the rest are set for each game on its own.
 
 `tools\deploy.ps1 -Uninstall` removes exactly what was installed. Launching SiN from Steam as normal is
