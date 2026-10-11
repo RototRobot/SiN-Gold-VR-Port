@@ -60,6 +60,14 @@ if ($Uninstall) {
     }
     Remove-Item $manifest
 
+    # The link to Wages of Sin's locale folder goes as a link: rmdir on a
+    # junction takes the link alone, where a recursive delete would follow it.
+    $link = Join-Path $GameDir "sinvr2015\locale"
+    if ((Test-Path $link) -and ((Get-Item $link -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        cmd /c rmdir "$link" | Out-Null
+        Write-Host "removed  sinvr2015\locale (the link; 2015\locale is untouched)"
+    }
+
     foreach ($folder in @("sinvr2015", "sinvr")) {
         $path = Join-Path $GameDir $folder
         if (-not (Test-Path $path)) { continue }
@@ -103,6 +111,16 @@ Install-StagedFile "sinvr\gamex86.pdb" -Optional
 # with "2015" in its name, so this one runs the expansion with the VR game module.
 Install-StagedFile "sinvr2015\gamex86.dll"
 Install-StagedFile "sinvr2015\gamex86.pdb" -Optional
+
+# The engine finds menus, dialogue and their pictures in <game folder>\locale,
+# by the folder's own name, so without this the expansion would show SiN's
+# menus - whose New Game starts SiN, not Wages of Sin. A junction, so nothing
+# of the game's is copied or changed.
+$link = Join-Path $GameDir "sinvr2015\locale"
+if (-not (Test-Path $link)) {
+    New-Item -ItemType Junction -Path $link -Target (Join-Path $GameDir "2015\locale") | Out-Null
+    Write-Host "linked   sinvr2015\locale -> 2015\locale"
+}
 
 # logfile 2 keeps sinvr\qconsole.log written line by line while this is in development.
 $common = "+set vid_ref vr +set logfile 2"
