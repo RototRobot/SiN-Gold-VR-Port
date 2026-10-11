@@ -1101,6 +1101,13 @@ over some seconds) and `cl_showmiss 1`:
 - a pretend 1 m step at once is mostly taken up by the lean - the room slides 0.7 m of it - which is
   what a sudden metre should do; walking is what the body follows.
 
+**Which way the stick walks** (`vr_move_dir`, 2026-10-11). Until then the stick's forward was the
+body's - the way the player faced at the last recentre - because nothing turned it: the owner noticed
+once walking about the room made them face elsewhere. `read_sticks` now turns the stick by the head's
+yaw (1, the default) or the moving hand's aim yaw (2) from the published poses, keeping the last one
+when a pose is not tracked. Desk: with `vr_fake_hand`/`vr_fake_hand_left` at yaw 90 and mode 2, the
+stick's forward walked the body 98 units to its left and none forward.
+
 What it cannot show: how it feels. The owner's headset test is for walking into things, leaning over
 edges, crouching under something low (the ceiling clamp has only been reasoned about - nothing in
 the desk walks went under anything), and whether 0.35 m is the right depth.

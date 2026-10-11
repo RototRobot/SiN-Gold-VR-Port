@@ -87,7 +87,7 @@ unaffected either way.
 
 | Control (Reverb G2) | Does |
 |---|---|
-| Left stick | Move and strafe |
+| Left stick | Move and strafe - forward is where you are looking (`vr_move_dir`) |
 | Right stick, left/right | Turn - smoothly, or `vr_snap_angle` degrees a push with `vr_snap_turn 1` |
 | Right trigger | Fire |
 | Left trigger | Use |
@@ -208,6 +208,7 @@ These console variables control the mod:
 | `vr_weapon_buttons` | 0 | 1 lets the top buttons (B and Y) cycle weapons as well as the shoulders. |
 | `vr_haptics` | 1 | The controllers buzz: as a hand reaches a shoulder or hip, as a gesture fires, when a weapon goes off (harder for the heavy ones, and in both hands while steadying a rifle), rising while the quantum destabilizer charges - full strength at five seconds, which is also when it blows up in your hands - and when a punch lands (harder on an enemy than a wall). 0 turns every buzz off. |
 | `vr_gestures` | 1 | The grips at the shoulders and hip change weapon, as in the controls above. 0 leaves the grips doing only what they do elsewhere. |
+| `vr_move_dir` | 1 | Which way the stick's forward is: 1 where your head faces, 2 where the moving hand's controller points, 0 the way you faced when you last recentred. |
 | `vr_roomscale` | 1 | Walking in your room walks the player. 0 leaves the body where the stick puts it, and only the view moves with your head. |
 | `vr_lean` | 0.3 | How far your head can go past your body when the body is stopped - leaning over a ledge, into a wall - in metres. Past it the room slides instead. |
 | `vr_crouch` | 1 | Crouching in your room crouches the player. 0 leaves crouching to the button. |

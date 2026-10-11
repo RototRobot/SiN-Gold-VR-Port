@@ -267,6 +267,7 @@ static cvar_t *vr_recentre_double;
 static cvar_t *vr_snap_turn;
 static cvar_t *vr_snap_angle;
 static cvar_t *vr_haptics;
+static cvar_t *vr_move_dir;
 static cvar_t *vr_weapon_buttons;
 static int said_weapon_buttons;
 static int snap_armed = 1;
@@ -314,6 +315,7 @@ void vr_input_register(void)
 	vr_snap_turn = vr_cvar("vr_snap_turn", "0", CVAR_ARCHIVE);
 	vr_snap_angle = vr_cvar("vr_snap_angle", "45", CVAR_ARCHIVE);
 	vr_haptics = vr_cvar("vr_haptics", "1", CVAR_ARCHIVE);
+	vr_move_dir = vr_cvar("vr_move_dir", "1", CVAR_ARCHIVE);
 	vr_weapon_buttons = vr_cvar("vr_weapon_buttons", "0", CVAR_ARCHIVE);
 
 	for (i = 0; i < ACT_COUNT; ++i)
@@ -1136,6 +1138,39 @@ static float snap_turn(float turn)
 	return 0.0f;
 }
 
+/*
+ * Which way the stick's forward is, against the body's facing: the head's
+ * (vr_move_dir 1), the moving hand's controller's (2), or the body's own (0) -
+ * which is the way the player faced when they last recentred. A pose that is
+ * not tracked this frame keeps the last one it had.
+ */
+static float move_yaw(void)
+{
+	static float head_yaw, hand_yaw;
+	static int said_mode = -1;
+	const sinvr_poses_t *p = vr_poses_current();
+	int mode = vr_move_dir ? (int)vr_move_dir->value : 1;
+	int hand = vr_weapon_left_handed() ? SINVR_HAND_RIGHT : SINVR_HAND_LEFT;
+
+	if (p->head_valid)
+	{
+		head_yaw = p->head_angles[1];
+	}
+	if (p->hand_valid[hand])
+	{
+		hand_yaw = p->hand_angles[hand][1];
+	}
+
+	if (mode != said_mode)
+	{
+		said_mode = mode;
+		vrlog("VR: the stick's forward is the %s, %.0f degrees from the body's", mode == 2 ? "moving hand's" :
+			(mode == 1 ? "head's" : "body's own"), mode == 2 ? hand_yaw : (mode == 1 ? head_yaw : 0.0f));
+	}
+
+	return mode == 2 ? hand_yaw : (mode == 1 ? head_yaw : 0.0f);
+}
+
 static void read_sticks(XrSession session, int menu)
 {
 	float move_x, move_y, turn_x, turn_y;
@@ -1179,6 +1214,16 @@ static void read_sticks(XrSession session, int menu)
 	if (vr_weapon_adjusting())
 	{
 		turn = 0.0f;
+	}
+
+	/* Forward is the way the head - or the hand - points: the stick is turned by
+	   that yaw (positive to the left) away from the body's. */
+	{
+		double yaw = move_yaw() * 0.017453292519943295;
+		float f = forward, s = side;
+
+		forward = (float)(f * cos(yaw) + s * sin(yaw));
+		side = (float)(s * cos(yaw) - f * sin(yaw));
 	}
 
 	vr_joy_set(forward, side, snap_turn(turn));
