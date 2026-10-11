@@ -1101,6 +1101,13 @@ over some seconds) and `cl_showmiss 1`:
 - a pretend 1 m step at once is mostly taken up by the lean - the room slides 0.7 m of it - which is
   what a sudden metre should do; walking is what the body follows.
 
+**Where the menu screen hangs** (2026-10-11). The theatre quad was posed at the LOCAL space's origin
+- wherever the headset was when the session began - so a session started with the headset low (on the
+desk) put every menu that far down: the owner found menus "way too low". It is placed in front of
+the head now (a VIEW space located in LOCAL), level and at head height, each time the screen comes up
+after the world and after a recentre. A desk run put the head 2.2 m above the LOCAL origin - which is
+how far down the old screen would have been.
+
 **Which way the stick walks** (`vr_move_dir`, 2026-10-11). Until then the stick's forward was the
 body's - the way the player faced at the last recentre - because nothing turned it: the owner noticed
 once walking about the room made them face elsewhere. `read_sticks` now turns the stick by the head's

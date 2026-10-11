@@ -69,6 +69,7 @@ static struct
 	XrSessionState state;
 	int running;
 	XrSpace space;
+	XrSpace view_space; /* the head, for placing the screen in front of it */
 	int64_t format;
 
 	HDC dc;
@@ -79,6 +80,9 @@ static struct
 	unsigned frames_shown;
 	float screen_distance, screen_width; /* as last shown, for the idle frames */
 	int last_was_theatre;                /* the last frame shown was the screen */
+	int screen_placed;                   /* screen_head/screen_yaw hold where the head was */
+	float screen_head[3];
+	float screen_yaw;                    /* about +y, radians; 0 faces -z */
 	unsigned idle_frames;
 
 	/* Stereo. */
@@ -315,6 +319,10 @@ static void xr_teardown(void)
 	xr_destroy_target(&xr.eye[0]);
 	xr_destroy_target(&xr.eye[1]);
 
+	if (xr.view_space != XR_NULL_HANDLE)
+	{
+		xrDestroySpace(xr.view_space);
+	}
 	if (xr.space != XR_NULL_HANDLE)
 	{
 		xrDestroySpace(xr.space);
@@ -527,6 +535,13 @@ static int xr_start(void)
 		return 0;
 	}
 
+	/* Without it the screen stays where the tracking space began. */
+	space_info.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
+	if (XR_FAILED(xrCreateReferenceSpace(xr.session, &space_info, &xr.view_space)))
+	{
+		xr.view_space = XR_NULL_HANDLE;
+	}
+
 	/* The headset paces the frame loop from now on (xrWaitFrame). The desktop
 	   window's vsync would be a second clock fighting it, so it goes off. */
 	swap_interval = (swap_interval_t)wglGetProcAddress("wglSwapIntervalEXT");
@@ -566,6 +581,7 @@ static void xr_poll_events(void)
 			{
 				/* Whoever just put the headset on is the new centre. */
 				xr.recenter_wanted = 1;
+				xr.screen_placed = 0;
 			}
 
 			if (xr.state == XR_SESSION_STATE_READY)
@@ -589,6 +605,7 @@ static void xr_poll_events(void)
 		else if (event.type == XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING)
 		{
 			xr.recenter_wanted = 1;
+			xr.screen_placed = 0;
 		}
 		else if (event.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING)
 		{
@@ -617,6 +634,7 @@ static int xr_ready(void)
 		}
 		xr.started = 1;
 		xr.recenter_wanted = 1;
+		xr.screen_placed = 0;
 	}
 
 	xr_poll_events();
@@ -671,6 +689,63 @@ static int xr_copy_window(int width, int height)
 	return copied;
 }
 
+/*
+ * The screen goes in front of the head, level and at its height, each time
+ * the screen comes up after the world (a menu, a loading screen) and when the
+ * player recentres. Otherwise it would hang in front of the tracking space's
+ * origin - wherever the headset was when the session began, which is desk
+ * height if it was lying there.
+ */
+static void place_screen(XrTime when)
+{
+	XrSpaceLocation location = { XR_TYPE_SPACE_LOCATION };
+	const XrQuaternionf *q;
+	float fx, fz;
+
+	if (xr.view_space == XR_NULL_HANDLE ||
+		XR_FAILED(xrLocateSpace(xr.view_space, xr.space, when, &location)) ||
+		!(location.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) ||
+		!(location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT))
+	{
+		return;
+	}
+
+	q = &location.pose.orientation;
+	fx = -2.0f * (q->x * q->z + q->w * q->y);
+	fz = -(1.0f - 2.0f * (q->x * q->x + q->y * q->y));
+	if (fx * fx + fz * fz < 0.01f)
+	{
+		return; /* looking straight up or down: no way to face */
+	}
+
+	xr.screen_head[0] = location.pose.position.x;
+	xr.screen_head[1] = location.pose.position.y;
+	xr.screen_head[2] = location.pose.position.z;
+	xr.screen_yaw = atan2f(-fx, -fz);
+	xr.screen_placed = 1;
+	vrlog("VR: the screen goes in front of the head, at (%.2f %.2f %.2f) m facing %.0f degrees",
+		xr.screen_head[0], xr.screen_head[1], xr.screen_head[2], xr.screen_yaw * 57.29578f);
+}
+
+static void screen_pose(XrPosef *pose, float distance)
+{
+	pose->orientation.x = pose->orientation.z = 0.0f;
+	pose->orientation.y = 0.0f;
+	pose->orientation.w = 1.0f;
+	pose->position.x = pose->position.y = 0.0f;
+	pose->position.z = -distance;
+	if (!xr.screen_placed)
+	{
+		return;
+	}
+
+	pose->orientation.y = sinf(0.5f * xr.screen_yaw);
+	pose->orientation.w = cosf(0.5f * xr.screen_yaw);
+	pose->position.x = xr.screen_head[0] - sinf(xr.screen_yaw) * distance;
+	pose->position.y = xr.screen_head[1];
+	pose->position.z = xr.screen_head[2] - cosf(xr.screen_yaw) * distance;
+}
+
 void vr_xr_frame(float screen_distance, float screen_width, int force_render)
 {
 	XrFrameWaitInfo wait_info = { XR_TYPE_FRAME_WAIT_INFO };
@@ -716,13 +791,17 @@ void vr_xr_frame(float screen_distance, float screen_width, int force_render)
 			screen_width = 0.2f;
 		}
 
+		if (!xr.last_was_theatre || !xr.screen_placed)
+		{
+			place_screen(frame_state.predictedDisplayTime);
+		}
+
 		quad.space = xr.space;
 		quad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
 		quad.subImage.swapchain = xr.screen.swapchain;
 		quad.subImage.imageRect.extent.width = xr.screen.width;
 		quad.subImage.imageRect.extent.height = xr.screen.height;
-		quad.pose.orientation.w = 1.0f;
-		quad.pose.position.z = -screen_distance;
+		screen_pose(&quad.pose, screen_distance);
 		quad.size.width = screen_width;
 		quad.size.height = screen_width * (float)xr.screen.height / (float)xr.screen.width;
 		layers[layer_count++] = (const XrCompositionLayerBaseHeader *)&quad;
@@ -780,8 +859,7 @@ void vr_xr_idle(int force_render)
 		quad.subImage.swapchain = xr.screen.swapchain;
 		quad.subImage.imageRect.extent.width = xr.screen.width;
 		quad.subImage.imageRect.extent.height = xr.screen.height;
-		quad.pose.orientation.w = 1.0f;
-		quad.pose.position.z = -xr.screen_distance;
+		screen_pose(&quad.pose, xr.screen_distance);
 		quad.size.width = xr.screen_width;
 		quad.size.height = xr.screen_width * (float)xr.screen.height / (float)xr.screen.width;
 		layers[layer_count++] = (const XrCompositionLayerBaseHeader *)&quad;
@@ -808,6 +886,7 @@ void vr_xr_idle(int force_render)
 void vr_xr_request_recenter(void)
 {
 	xr.recenter_wanted = 1;
+	xr.screen_placed = 0;
 }
 
 void vr_xr_input(void)

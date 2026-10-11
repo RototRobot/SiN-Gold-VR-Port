@@ -195,7 +195,7 @@ These console variables control the mod:
 | `vr_stereo` | 1 | Render the world once per eye. With 0, everything stays on the virtual screen. |
 | `vr_resolution` | 1 | How big each eye is rendered, on each side, against the size the headset's runtime recommends. 1.2 is sharper and costs 44% more pixels; 0.8 is softer and faster. Takes effect straight away. |
 | `vr_worldscale` | 39.37 | Game units per metre, for head movement. Lower values make the world feel bigger. |
-| `vr_screen_distance` | 2.5 | Virtual screen distance, in metres. |
+| `vr_screen_distance` | 2.5 | Virtual screen distance, in metres. The screen comes up in front of you, at your head's height, each time a menu or loading screen does, and when you recentre. |
 | `vr_screen_width` | 2.4 | Virtual screen width, in metres. |
 | `vr_hud_fov` | 60 | How wide the HUD, crosshair and console panel is, in degrees. Smaller brings it closer to the middle. |
 | `vr_hud_depth` | 6 | How far away that panel appears, in metres. 0 puts it at infinity. |
