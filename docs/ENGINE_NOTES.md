@@ -418,6 +418,16 @@ does the movement work itself. The console says `joystick detected` where it use
   Pitch should be the float before it, as in Quake II's `vec3_t`, but that has not been checked.
   Nothing wraps the yaw, and the game gets it as a short, which does.
 
+## Wages of Sin's folder (2026-10-11)
+
+- **`FS_SetGamedir` (sin.exe +0x54DC0)** sets `gamedir`, then compares the new folder with "2015":
+  not equal, but containing it (`strstr`, through `ebx`), it adds `<basedir>/2015` as a search path
+  (+0x54E62, `"%s2015"` or `"%s/2015"` by whether the base ends in a slash) and sets `game2015` to 1
+  (+0x54E7D). Changing `game` (+0x80819) sets `game2015` to 1 for exactly "2015" and 0 otherwise, and
+  +0x765A0 queues `set game2015 1` when a `2015` argument is seen at startup.
+- So a mod for the expansion is a folder whose name has "2015" in it: `sinvr2015` loads Wages of
+  Sin's data from `2015` and its own `gamex86.dll`, which is searched first.
+
 ## Movement commands and their prediction (2026-10-05)
 
 Found for roomscale (HANDOFF §13), from the strings `exceeded CMD_BACKUP` and `prediction miss` and the

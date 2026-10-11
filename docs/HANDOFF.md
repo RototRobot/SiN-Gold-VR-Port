@@ -17,7 +17,8 @@ and what comes next. The detailed evidence lives in the other files in `docs/`; 
 | 5. Motion controller input | ✅ Built 2026-09-16: buttons run console commands, the sticks arrive as a joystick the engine polls, and in menus both turn into keystrokes. Measured at the desk. [§11](#11-controller-input) |
 | 6. Tracked hands | ✅ Built 2026-09-19, left-handed mode 2026-09-20. The weapon is drawn on the controller, at a per-weapon grip the player can set in the headset, and fires down its own barrel; sin.exe itself places it, so its muzzle flash, tracers and impacts come from there too. The fists are one arm per hand. `vr_left_handed 1` mirrors the lot into the other hand. Firing is the one part the desk cannot exercise. [§12](#12-tracked-hands) |
 | 7. Roomscale comfort | ✅ Snap turning (§11). The body following the head, and crouching in the room, built and verified at the desk 2026-10-05: each movement command carries the head's step, sin.exe's Pmove is followed by it on the client and the server alike, and the view moves with the body. [§13](#13-roomscale) |
-| 8–9 | Wages of Sin, and packaging (see the roadmap in the [README](../README.md)) |
+| 8. Wages of Sin | ✅ 2026-10-11: every VR change ported to `game2015`, built into `sinvr2015\gamex86.dll`, run with `+set game sinvr2015` - the engine adds the expansion's `2015` data under it. Desk: `2015dm1` in stereo, the weapon in the hand, a pretend metre walked with the server running every step. [§14](#14-wages-of-sin) |
+| 9 | Packaging (see the roadmap in the [README](../README.md)) |
 
 ## 2. How it fits together
 
@@ -444,7 +445,7 @@ Still to do, in the order it matters:
 
 **Content and release**
 
-- Wages of Sin: its game DLL builds, but how to deploy it next to the `2015` data is still undecided.
+- ~~Wages of Sin's deployment~~: `sinvr2015` (§14).
 - The licence for the mod's own code (`src/`, `tools/`, `cmake/`) has not been chosen.
 
 ## 11. Controller input
@@ -1128,3 +1129,33 @@ stick's forward walked the body 98 units to its left and none forward.
 What it cannot show: how it feels. The owner's headset test is for walking into things, leaning over
 edges, crouching under something low (the ceiling clamp has only been reasoned about - nothing in
 the desk walks went under anything), and whether 0.35 m is the right depth.
+
+## 14. Wages of Sin
+
+2026-10-11. Steam's own Wages of Sin launch runs `sin.exe +set game 2015`, the expansion's folder,
+which holds its data (`pak0.sin`, 270 MB) and its own `gamex86.dll`. Neither can be touched, and a mod
+folder of our own would normally lose the data - but **sin.exe adds the `2015` folder under any game
+folder whose name contains "2015"** (and is not `2015` itself), and sets `game2015 1` as it does for
+the expansion (`FS_SetGamedir`, sin.exe +0x54DC0: a `strstr` against "2015", then the `2015`
+directory added and `game2015` set; ENGINE_NOTES). So the expansion's VR game module goes in
+**`sinvr2015`**, and `+set game sinvr2015` runs Wages of Sin with it - its maps, its weapons, our
+code. `deploy.ps1` installs it and writes `SiN VR - Wages of Sin.bat` and a flatscreen one;
+`desk-test.ps1 -Game sinvr2015` tests it.
+
+**The code.** `game2015` is Night Dive's separate copy of the game source for the expansion - the
+same files, much changed (3,500 lines of `player.cpp` differ). Every VR change in `game` was carried
+across by applying `git diff 5236699 -- game/src/code/game` to it with `patch -F3`: 27 of 28 pieces
+went in, and `ForceIdle`'s idle hold, whose signature reads `ForceIdle()` there, was put in by hand.
+**Every fuzzy placement has to be read**: one of them - `ClientThink` taking the step's number out
+of the command - landed inside the comment above the function, and the first desk run showed it:
+the client took 65 steps, the server none, and `cl_showmiss` printed a prediction miss each frame.
+In its place, the server ran all 65 and the misses stopped. From now on a change to the game code
+goes into both copies.
+
+What the desk showed, on `2015dm1` (`club-day` starts with the player held for its intro, which
+rightly leaves roomscale off): `SiN Gold VR game module` in the console, tracking, the weapon in the
+hand, a pretend metre walked as 39.4 units, client and server agreeing on every step.
+
+Not yet looked at: the expansion's own new weapons are not in the weapon table, so they are held from
+the general guess until the grip button settles them; and its config is separate from SiN's - the
+owner's was copied across once, by hand.

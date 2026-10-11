@@ -79,6 +79,11 @@ It also adds two launchers beside `sin.exe`:
 |---|---|
 | `SiN VR.bat` | VR on: the world is drawn in stereo in the headset, menus on a virtual screen. Start SteamVR first. |
 | `SiN VR (flatscreen).bat` | The same mod with VR off. Use it to check that the pass-through changes nothing. |
+| `SiN VR - Wages of Sin.bat` | The expansion, Wages of Sin, in VR - everything above works there too. |
+| `SiN VR - Wages of Sin (flatscreen).bat` | The expansion through the mod with VR off. |
+
+Wages of Sin keeps its own settings (`sinvr2015\playerslade\config.cfg`), separate from SiN's: a
+weapon's grip, left-handed mode and the rest are set for each game on its own.
 
 `tools\deploy.ps1 -Uninstall` removes exactly what was installed. Launching SiN from Steam as normal is
 unaffected either way.
@@ -322,7 +327,7 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
    hands, and left-handed players get the mirror image of all of it
 7. ✅ Roomscale comfort: snap turning, the body following the head through the world, and crouching
    in the room
-8. Wages of Sin
+8. ✅ Wages of Sin: the same VR, from its own launcher
 9. Release packaging
 
 ## Repository layout
