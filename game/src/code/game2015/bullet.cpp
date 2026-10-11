@@ -20,6 +20,7 @@
 #include "bullet.h"
 #include "q_shared.h"
 #include "surface.h"
+#include "player.h"
 #include "hoverbike.h" //###
 
 CLASS_DECLARATION(Weapon, BulletWeapon, NULL);
@@ -220,6 +221,18 @@ void BulletWeapon::FireBullets(int numbullets, Vector spread, int mindamage, int
    }
 
    GetMuzzlePosition(&src, &dir);
+
+   // SiN Gold VR: the client's own impacts start at the eye, so it leaves them
+   // to these when the weapon is in the hand
+   if(owner->isClient())
+   {
+      qboolean vr_server_effects;
+
+      if(((Player *)(Entity *)owner)->VRWeaponPose(NULL, NULL, NULL, &vr_server_effects) && vr_server_effects)
+      {
+         server_effects = true;
+      }
+   }
 
    owner->angles.AngleVectors(NULL, &right, &up);
 

@@ -18,6 +18,7 @@
 
 #include <setjmp.h>
 #include "limits.h"
+#include "game_vr/vr_link.h"
 #include "g_local.h"
 #include "g_utils.h"
 #include "entity.h"
@@ -227,6 +228,7 @@ only happens when a new game is begun
 void G_InitGame(void)
 {
    gi.dprintf("==== InitGame ====\n");
+   gi.printf("SiN Gold VR game module, built " __DATE__ " " __TIME__ "\n");
 
    // Install our own error handler, since we can't
    // call the EXE's handler from within a C++ class
@@ -1365,6 +1367,16 @@ Advances the world by 0.1 seconds
 */
 void G_RunFrame(void)
 {
+   // SiN Gold VR: say when the renderer's head and hand poses come and go.
+   {
+      int vr_link = VR_TrackingChanged();
+
+      if(vr_link > 0)
+         gi.printf("SiN Gold VR: tracking the player's head and hands\n");
+      else if(vr_link < 0)
+         gi.printf("SiN Gold VR: no longer tracking\n");
+   }
+
    edict_t	*edict;
    Entity	*ent;
    int		num;

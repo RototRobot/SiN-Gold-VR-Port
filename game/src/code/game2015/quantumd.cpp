@@ -18,6 +18,7 @@
 #include "explosion.h"
 #include "player.h"
 #include "surface.h"
+#include "game_vr/vr_link.h"
 
 #define ION_MODE 1
 #define DESTAB_MODE 2
@@ -460,6 +461,13 @@ void QuantumDestabilizer::EatAmmo(Event *ev)
    Ammo * ammo;
 
    assert(owner);
+
+   // SiN Gold VR: the charge builds in the hand, to full at five seconds
+   if(owner && owner->isClient())
+   {
+      VR_Feedback(VR_FEEDBACK_CHARGE, VR_HAND_WEAPON, (level.time - owner->firedowntime) / 5.0f);
+   }
+
    if(owner && owner->isClient() && !(owner->flags & FL_GODMODE))
    {
       if(ammotype.length())
@@ -585,6 +593,12 @@ void QuantumDestabilizer::ReleaseFire(float holdfiretime)
          holdfiretime = 0;
 
       power = holdfiretime / 5.0f;
+
+      // SiN Gold VR: let go, it kicks as hard as it was charged
+      if(owner && owner->isClient())
+      {
+         VR_Feedback(VR_FEEDBACK_SHOT, VR_HAND_WEAPON, 0.3f + 0.7f * power);
+      }
 
       RandomAnimate("releasefire", EV_Weapon_DoneFiring);
       last_attack_time = level.time;

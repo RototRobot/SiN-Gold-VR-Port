@@ -19,6 +19,7 @@
 #include "player.h"
 #include "worldspawn.h"
 #include "weapon.h"
+#include "fists.h"
 #include "trigger.h"
 #include "scriptmaster.h"
 #include "vehicle.h"
@@ -47,6 +48,7 @@
 #include "informergun.h"
 //###
 #include "ctf.h"
+#include "game_vr/vr_link.h"
 
 #include <windows.h>
 
@@ -2701,6 +2703,9 @@ EXPORT_FROM_DLL pmtype_t Player::GetMovePlayerMoveType()
    }
 }
 
+// SiN Gold VR: the step this command carries from the player's room (vr_link.h)
+static int vr_move_key = 0;
+
 EXPORT_FROM_DLL void Player::ClientMove(usercmd_t *ucmd)
 {
    pmove_t pm;
@@ -2748,7 +2753,9 @@ EXPORT_FROM_DLL void Player::ClientMove(usercmd_t *ucmd)
    SetMoveInfo(&pm, ucmd);
 
    // perform a pmove
-   gi.Pmove(&pm);
+   // SiN Gold VR: and then the step the player took in their room
+   VR_Pmove(&pm, vr_move_key, (vr_pmove_fn)gi.Pmove);
+   vr_move_key = 0;
 
    //### added movement capturer condition
    //if(!deadflag && !level.playerfrozen)
@@ -2818,6 +2825,10 @@ usually be a couple times for each server frame.
 EXPORT_FROM_DLL void Player::ClientThink(Event *ev)
 {
    int i; //###
+
+   // SiN Gold VR: the client marks the command with the step the player took in
+   // their room; the mark comes out before anything reads the angles
+   vr_move_key = (entnum == 1) ? VR_TakeMoveKey(current_ucmd->angles) : 0;
 
    if(!has_thought)
    {
@@ -4272,6 +4283,14 @@ void Player::CalcViewOffset()
    else if(v_offset[2] > STAND_HEIGHT - 2)
    {
       v_offset[2] = STAND_HEIGHT - 2;
+   }
+
+   // SiN Gold VR: the headset is the eye. The renderer adds the player's own
+   // height in their room, crouching included, so the view is held at standing
+   // height, with no dip on landing, no bob and no kick to move it.
+   if((entnum == 1) && !deadflag && VR_Tracking())
+   {
+      v_offset = Vector(0, 0, STAND_EYE_HEIGHT);
    }
 
    // clear weapon kicks
@@ -6563,6 +6582,7 @@ and right after spawning
 EXPORT_FROM_DLL void Player::EndFrame(Event *ev)
 {
    FinishMove();
+   VRPunches();
    UpdateStats();
    UpdateMusic();
 
@@ -8596,6 +8616,206 @@ void Player::DropWeaponEvent(Event *ev)
 void Player::SetViewAngles(Vector ang)
 {
    v_angle = ang;
+}
+
+/*
+ * SiN Gold VR: shots come from the weapon in the player's right hand.
+ *
+ * The renderer draws the view weapon in the tracked hand and says where: the
+ * model's origin and angles in the frame it recentred - from the player's eyes,
+ * with +x the way their body faces - and the size it draws it at. The player's
+ * own yaw turns that into the world. GunPosition is the model's origin and
+ * GetGunOrientation its axes, so the barrel bone Weapon::MuzzleOffset measures
+ * from the model's origin lands on the barrel the player sees.
+ *
+ * Only the first client - the player at this machine - aims this way. With no
+ * weapon in the hand, gravity turned on its side, or vr_aim off, this is the
+ * ordinary SiN behaviour.
+ *
+ * A left-handed player holds a mirrored model, and mirrored is set for whoever
+ * measures anything off it; still says the weapon's idle animation should be
+ * held where it is.
+ */
+static cvar_t *vr_aim = NULL;
+static qboolean vr_said_aiming = false;
+
+qboolean Player::VRWeaponPose(Vector *pos, Vector *angles, float *scale, qboolean *server_effects,
+                              qboolean *mirrored, qboolean *still)
+{
+   float    origin[3];
+   float    ang[3];
+   float    size;
+   float    yaw;
+   float    s, c;
+   int      flags;
+
+   if(!vr_aim)
+   {
+      vr_aim = gi.cvar("vr_aim", "1", 0);
+   }
+
+   if(!vr_aim->value || gravaxis || entnum != 1 || !VR_WeaponPose(origin, ang, &size, &flags))
+   {
+      return false;
+   }
+
+   if(!vr_said_aiming)
+   {
+      vr_said_aiming = true;
+      gi.printf("SiN Gold VR: shots come from the weapon in the player's hand\n");
+   }
+
+   yaw = worldangles[YAW] * (M_PI / 180.0f);
+   s = sin(yaw);
+   c = cos(yaw);
+
+   if(pos)
+   {
+      *pos = EyePosition() + Vector(origin[0] * c - origin[1] * s,
+                                    origin[0] * s + origin[1] * c,
+                                    origin[2]);
+   }
+   if(angles)
+   {
+      *angles = Vector(ang[0], ang[1] + worldangles[YAW], ang[2]);
+   }
+   if(scale)
+   {
+      *scale = size;
+   }
+   if(server_effects)
+   {
+      *server_effects = (flags & VR_CLIENT_BULLETS_OFF) != 0;
+   }
+   if(mirrored)
+   {
+      *mirrored = (flags & VR_WEAPON_MIRRORED) != 0;
+   }
+   if(still)
+   {
+      *still = (flags & VR_WEAPON_STILL) != 0;
+   }
+
+   return true;
+}
+
+/*
+ * SiN Gold VR: punches thrown by swinging the controllers, while the fists are
+ * out. The renderer counts every swing of each hand; a new count is a new
+ * punch, landed from where the hand was, the way it was going. Only the player
+ * at this machine has controllers, so the counts seen are kept here rather
+ * than in the player. The first look only notes where the counts are, so
+ * nothing thrown before is replayed. vr_punch 0 leaves the fists to the fire
+ * button; 2 says what each punch hit.
+ */
+static cvar_t    *vr_punch = NULL;
+static unsigned   vr_punch_seen[2];
+static qboolean   vr_punch_primed[2];
+
+void Player::VRPunches(void)
+{
+   unsigned    number;
+   float       origin[3];
+   float       dir[3];
+   float       speed;
+   float       yaw;
+   float       s, c;
+   float       head_origin[3];
+   float       head_angles[3];
+   int         hand;
+   Vector      fist;
+   Vector      way;
+   Vector      look;
+   trace_t     trace;
+   const char  *how;
+
+   if(!vr_punch)
+   {
+      vr_punch = gi.cvar("vr_punch", "1", 0);
+   }
+
+   if(entnum != 1)
+   {
+      return;
+   }
+
+   for(hand = 0; hand < 2; hand++)
+   {
+      if(!VR_Punch(hand, &number, origin, dir, &speed))
+      {
+         continue;
+      }
+
+      if(!vr_punch_primed[hand])
+      {
+         vr_punch_primed[hand] = true;
+         vr_punch_seen[hand] = number;
+         continue;
+      }
+
+      if(!number || (number == vr_punch_seen[hand]))
+      {
+         continue;
+      }
+      vr_punch_seen[hand] = number;
+
+      if(!vr_punch->value || !currentWeapon || !currentWeapon->isSubclassOf<Fists>())
+      {
+         continue;
+      }
+
+      yaw = worldangles[YAW] * (M_PI / 180.0f);
+      s = sin(yaw);
+      c = cos(yaw);
+      fist = EyePosition() + Vector(origin[0] * c - origin[1] * s, origin[0] * s + origin[1] * c, origin[2]);
+      way = Vector(dir[0] * c - dir[1] * s, dir[0] * s + dir[1] * c, dir[2]);
+
+      // where the head is looking, which is not where the body faces
+      if(VR_HeadPose(head_origin, head_angles))
+      {
+         Vector(head_angles[0], head_angles[1] + worldangles[YAW], head_angles[2]).AngleVectors(&look, NULL, NULL);
+      }
+      else
+      {
+         v_angle.AngleVectors(&look, NULL, NULL);
+      }
+
+      trace = ((Fists *)currentWeapon)->VRPunch(fist, way, look, speed, &how);
+      ((Fists *)currentWeapon)->VRFeelHit(trace, hand);
+
+      if(vr_punch->value >= 2)
+      {
+         gi.printf("SiN Gold VR: a punch with the %s hand, %.1f m/s - %s, %s\n",
+                   hand == VR_HAND_LEFT ? "left" : "right", speed,
+                   (trace.fraction < 1.0f && trace.ent && trace.ent->entity) ?
+                   trace.ent->entity->getClassname() : "nothing", how);
+      }
+   }
+}
+
+Vector Player::GunPosition(void)
+{
+   Vector   pos;
+
+   if(!VRWeaponPose(&pos, NULL, NULL, NULL))
+   {
+      return Sentient::GunPosition();
+   }
+
+   return pos;
+}
+
+void Player::GetGunOrientation(Vector pos, Vector *forward, Vector *right, Vector *up)
+{
+   Vector   angles;
+
+   if(!VRWeaponPose(NULL, &angles, NULL, NULL))
+   {
+      Sentient::GetGunOrientation(pos, forward, right, up);
+      return;
+   }
+
+   angles.AngleVectors(forward, right, up);
 }
 
 void Player::GetPlayerView(Vector *pos, Vector *angle)

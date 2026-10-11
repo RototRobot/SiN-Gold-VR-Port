@@ -26,6 +26,8 @@
 #include "specialfx.h"
 #include "chaingun.h"
 #include "assaultrifle.h"
+#include "game_vr/vr_link.h"
+#include "player.h"
 //###
 #include "player.h" // added for guided missile
 #include "rocketlauncher.h"
@@ -284,8 +286,22 @@ Vector Weapon::MuzzleOffset()
          if(gi.GetBoneTransform(edict->s.modelindex, groupindex, tri_num, orient, useanim, useframe,
                                 edict->s.scale, trans, offset.vec3()))
          {
+            float    vr_scale;
+            qboolean vr_mirrored = false;
+
+            // SiN Gold VR: the model is in the player's hand, drawn at this size
+            if(owner && owner->isClient() &&
+               ((Player *)(Entity *)owner)->VRWeaponPose(NULL, NULL, &vr_scale, NULL, &vr_mirrored))
+            {
+               offset *= vr_scale;
+               // a left-handed player's weapon is drawn mirrored, barrel and all
+               if(vr_mirrored)
+                  offset[1] = -offset[1];
+               return offset;
+            }
+
             //
-            // we scale the pos by 0.3 because of RF_DEPTHHACK 
+            // we scale the pos by 0.3 because of RF_DEPTHHACK
             //
             offset *= 0.3f;
             if(owner && owner->isClient())
@@ -375,12 +391,20 @@ void Weapon::GetMuzzlePosition(Vector *position, Vector *forward, Vector *right,
    //
    // calculate where this projectile is going to hit
    //
-   end = gunpos + f * 2048;
-   trace = G_FullTrace(gunpos, vec_zero, vec_zero, end, 10, owner, MASK_SHOT, "Weapon::GetMuzzlePosition");
-   dir = trace.endpos - pos;
-   dir.normalize();
-   if(dir*f < 0.707)
+   // SiN Gold VR: a weapon in the hand fires straight down its barrel
+   if(owner->isClient() && ((Player *)(Entity *)owner)->VRWeaponPose(NULL, NULL, NULL, NULL))
+   {
       dir = f;
+   }
+   else
+   {
+      end = gunpos + f * 2048;
+      trace = G_FullTrace(gunpos, vec_zero, vec_zero, end, 10, owner, MASK_SHOT, "Weapon::GetMuzzlePosition");
+      dir = trace.endpos - pos;
+      dir.normalize();
+      if(dir*f < 0.707)
+         dir = f;
+   }
 
    if(position)
    {
@@ -893,6 +917,13 @@ void Weapon::Fire()
    else
       UseAmmo(secondary_ammorequired);
 
+   // SiN Gold VR: the hand holding it feels the shot; a punch is felt when it lands,
+   // and the quantum destabilizer's shot when the charge is let go
+   if(owner && owner->isClient() && !inheritsFrom("Fists") && !inheritsFrom("QuantumDestabilizer"))
+   {
+      VR_Feedback(VR_FEEDBACK_SHOT, VR_HAND_WEAPON, 1.0f);
+   }
+
    weaponstate = WEAPON_FIRING;
 
    CancelEventsOfType(EV_Weapon_DoneFiring);
@@ -1139,24 +1170,79 @@ void Weapon::PickupWeapon(Event *ev)
       sen->giveItem(ammotype.c_str(), startammo);
 }
 
+//
+// SiN Gold VR: the view weapon is held still - it is being placed in the
+// player's hand, or vr_freeze_idle asks for it in play as well. The weapon is
+// on a controller there, which gives it all the movement it needs.
+//
+#define VR_IDLE_BEAT 0.5f
+
+static qboolean vr_said_still = false;
+
+static qboolean vr_hold_still(Sentient *owner)
+{
+   qboolean still = false;
+
+   if(owner && owner->isClient())
+   {
+      ((Player *)(Entity *)owner)->VRWeaponPose(NULL, NULL, NULL, NULL, NULL, &still);
+   }
+
+   // said either way, once each time it changes: it is a question a player
+   // asks of the picture, and the log answers it
+   if(still != vr_said_still)
+   {
+      vr_said_still = still;
+      gi.printf(still ? "SiN Gold VR: the weapon's idle animation is held still\n" :
+                "SiN Gold VR: the weapon's idle animation is running again\n");
+   }
+
+   return still;
+}
+
 void Weapon::ForceIdle()
 {
+   const char *animname;
+
    weaponstate = WEAPON_READY;
 
    if(dualmode)
    {
       if(weaponmode == PRIMARY)
-         RandomAnimate("primaryidle", EV_Weapon_Idle);
+         animname = "primaryidle";
       else
-         RandomAnimate("secondaryidle", EV_Weapon_Idle);
+         animname = "secondaryidle";
    }
    else
    {
       if(owner && (owner->flags & FL_SILENCER) && (silenced))
-         RandomAnimate("silidle", EV_Weapon_Idle);
+         animname = "silidle";
       else
-         RandomAnimate("idle", EV_Weapon_Idle);
+         animname = "idle";
    }
+
+   // SiN Gold VR: the idle animation is where the weapon's breathing comes
+   // from. Held still, it takes the idle pose once and keeps that frame - and
+   // a beat stands in for the animation's end, which is what brings the weapon
+   // back here to reload and to pick its next idle.
+   if(vr_hold_still(owner))
+   {
+      const char *playing = gi.Anim_NameForNum(edict->s.modelindex, edict->s.anim);
+
+      if(!playing || strncmp(playing, animname, strlen(animname)))
+      {
+         RandomAnimate(animname, (Event *)NULL);
+         // the change is pending until the next animated frame, and there
+         // will not be one
+         AnimateFrame();
+      }
+      StopAnimating();
+      CancelEventsOfType(EV_Weapon_Idle);
+      PostEvent(EV_Weapon_Idle, VR_IDLE_BEAT);
+      return;
+   }
+
+   RandomAnimate(animname, EV_Weapon_Idle);
 }
 
 void Weapon::DoneLowering(Event *ev)
@@ -1302,6 +1388,16 @@ qboolean Weapon::CheckReload()
 
 void Weapon::Idle(Event *ev)
 {
+   // SiN Gold VR: the beat that stands in for the idle animation can arrive
+   // while the weapon is firing or reloading, where the animation's own end
+   // never would. It has nothing to say then but "ask again".
+   if((weaponstate != WEAPON_READY) && vr_hold_still(owner))
+   {
+      CancelEventsOfType(EV_Weapon_Idle);
+      PostEvent(EV_Weapon_Idle, VR_IDLE_BEAT);
+      return;
+   }
+
    if(ammo_clip_size && (!ammo_in_clip || level.time > last_attack_time + 2))
    {
       if(CheckReload())

@@ -32,6 +32,10 @@ public:
 
    Fists();
    virtual void      Shoot(Event *ev);
+   trace_t           Strike(Vector start, Vector end);
+   trace_t           VRPunch(Vector fist, Vector dir, Vector look, float speed, const char **how);
+   trace_t           VRSwing(Vector fist, Vector dir, Vector look, const char **how);
+   void              VRFeelHit(trace_t trace, int hand);
    virtual void      SecondaryUse(Event *ev)  override; //###
    virtual void      Archive(Archiver &arc)   override;
    virtual void      Unarchive(Archiver &arc) override;
