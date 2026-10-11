@@ -80,4 +80,7 @@ function(sinvr_game_dll target sources def_file extra_definitions stage_subdir)
 endfunction()
 
 sinvr_game_dll(game_sin "${SINVR_GAME_SIN_SOURCES}" src/code/game/game.def "" sinvr)
-sinvr_game_dll(game_wos "${SINVR_GAME_WOS_SOURCES}" src/code/game2015/game.def "GAMEX86_WOS_EXPORTS" wos)
+# Wages of Sin's goes in sinvr2015: sin.exe adds the 2015 folder - the expansion's
+# data - under any game folder whose name has "2015" in it, and runs as the
+# expansion there (docs/ENGINE_NOTES.md).
+sinvr_game_dll(game_wos "${SINVR_GAME_WOS_SOURCES}" src/code/game2015/game.def "GAMEX86_WOS_EXPORTS" sinvr2015)

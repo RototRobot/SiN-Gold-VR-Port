@@ -7,6 +7,7 @@
 
         ref_vr.dll, openxr_loader.dll   beside sin.exe
         sinvr\gamex86.dll               the mod folder
+        sinvr2015\gamex86.dll           Wages of Sin's, which the engine runs with the 2015 data
 
     and writes two launchers beside sin.exe. Nothing that shipped with the game is
     touched. Every file written is recorded in sinvr\installed-files.txt, and
@@ -59,11 +60,15 @@ if ($Uninstall) {
     }
     Remove-Item $manifest
 
-    if (-not (Get-ChildItem $modDir -Force)) {
-        Remove-Item $modDir
-        Write-Host "removed  sinvr\"
-    } else {
-        Write-Host "kept     sinvr\ - it holds files the game wrote there (configs, saves)"
+    foreach ($folder in @("sinvr2015", "sinvr")) {
+        $path = Join-Path $GameDir $folder
+        if (-not (Test-Path $path)) { continue }
+        if (-not (Get-ChildItem $path -Force)) {
+            Remove-Item $path
+            Write-Host "removed  $folder\"
+        } else {
+            Write-Host "kept     $folder\ - it holds files the game wrote there (configs, saves)"
+        }
     }
     return
 }
@@ -94,12 +99,18 @@ Install-StagedFile "ref_vr.pdb" -Optional
 Install-StagedFile "openxr_loader.dll"
 Install-StagedFile "sinvr\gamex86.dll"
 Install-StagedFile "sinvr\gamex86.pdb" -Optional
+# Wages of Sin: sin.exe adds the expansion's own 2015 folder under any game folder
+# with "2015" in its name, so this one runs the expansion with the VR game module.
+Install-StagedFile "sinvr2015\gamex86.dll"
+Install-StagedFile "sinvr2015\gamex86.pdb" -Optional
 
 # logfile 2 keeps sinvr\qconsole.log written line by line while this is in development.
-$common = "+set game sinvr +set vid_ref vr +set logfile 2"
+$common = "+set vid_ref vr +set logfile 2"
 $launchers = [ordered]@{
-    "SiN VR.bat"              = "$common +set vr_enable 1"
-    "SiN VR (flatscreen).bat" = "$common +set vr_enable 0"
+    "SiN VR.bat"                              = "+set game sinvr $common +set vr_enable 1"
+    "SiN VR (flatscreen).bat"                 = "+set game sinvr $common +set vr_enable 0"
+    "SiN VR - Wages of Sin.bat"               = "+set game sinvr2015 $common +set vr_enable 1"
+    "SiN VR - Wages of Sin (flatscreen).bat"  = "+set game sinvr2015 $common +set vr_enable 0"
 }
 
 foreach ($name in $launchers.Keys) {

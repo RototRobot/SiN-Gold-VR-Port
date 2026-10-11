@@ -31,6 +31,7 @@ param(
     [string]$OutDir,
     [switch]$Vr,
     [string]$Map = "bank",
+    [string]$Game = "sinvr",
     [int]$WaitFrames = 400,
     [int]$TimeoutSeconds = 180,
     [string]$ExtraArgs = "",
@@ -42,7 +43,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$modDir = Join-Path $GameDir "sinvr"
+$modDir = Join-Path $GameDir $Game
 if (-not (Test-Path (Join-Path $modDir "gamex86.dll"))) {
     throw "The mod is not installed in '$GameDir'. Run tools\deploy.ps1 first."
 }
@@ -66,7 +67,7 @@ Set-Content -Path (Join-Path $modDir $cfgName) -Value $lines -Encoding ASCII
 # vr_force_render: the runtime says an untouched headset needs no picture, and an
 # unattended run should exercise the whole path anyway.
 $vrArgs = if ($Vr) { "+set vr_enable 1 +set vr_force_render 1" } else { "+set vr_enable 0" }
-$arguments = "+set game sinvr +set vid_ref vr $vrArgs +set logfile 2 $ExtraArgs +exec $cfgName"
+$arguments = "+set game $Game +set vid_ref vr $vrArgs +set logfile 2 $ExtraArgs +exec $cfgName"
 
 # A level starts on SiN's "PRESS ANY KEY TO CONTINUE" card, and the engine does not
 # run the command buffer while it is up, so an unattended run has to press a key
