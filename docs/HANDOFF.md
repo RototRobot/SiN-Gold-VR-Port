@@ -279,6 +279,7 @@ python -c "from PIL import Image; im = Image.open('sinvr_eye0.tga').convert('L')
 | `src/ref_vr/vr_math.c` | Poses in Quake's terms: angles to axes and back, composing them, taking one relative to another, and reflecting one for the other hand |
 | `src/shared/sinvr_poses.h` | The contract between the two DLLs: the block, its frame of reference |
 | `src/game_vr/vr_link.cpp` | The game module's side of that link. Ours, built into the game DLL |
+| `src/game_vr/vr_game.cpp` | The game module's VR code itself - aim from the hand, swing punches, the idle hold - compiled into both SiN's and Wages of Sin's DLL against each game's own headers (§14) |
 | `src/ref_vr/vr_hook.c` | Patching another module in this process: its imports (the GL and joystick hooks), and single direct calls inside sin.exe |
 | `src/ref_vr/xr_layers.c` | Implicit-layer hygiene for 32-bit processes (shared with xrprobe) |
 | `src/ref_vr/vrlog.c` | `sinvr.log` |
@@ -1149,8 +1150,19 @@ went in, and `ForceIdle`'s idle hold, whose signature reads `ForceIdle()` there,
 **Every fuzzy placement has to be read**: one of them - `ClientThink` taking the step's number out
 of the command - landed inside the comment above the function, and the first desk run showed it:
 the client took 65 steps, the server none, and `cl_showmiss` printed a prediction miss each frame.
-In its place, the server ran all 65 and the misses stopped. From now on a change to the game code
-goes into both copies.
+In its place, the server ran all 65 and the misses stopped.
+
+**One copy of our game code** (same day). Every whole function of ours - the aim from the hand
+(`Player::VRWeaponPose`, `GunPosition`, `GetGunOrientation`), swing punches (`Player::VRPunches`,
+`Fists::VRPunch`, `VRSwing`, `VRFeelHit` and their helpers) and the idle hold
+(`VR_HoldWeaponStill`) - moved out of both game copies into **`src/game_vr/vr_game.cpp`**, which
+`game/CMakeLists.txt` compiles into each game DLL against that game's own headers (the game's source
+folder is on the target's include path). The script that moved them checked that the two copies of
+each block were identical first. What is left in each copy is the ~170 lines that have to sit inside
+Night Dive's own functions (a call, a check, a few lines of `Strike`, `ForceIdle`, `MuzzleOffset`),
+the same in both - so a new feature goes in `vr_game.cpp` once, and only a new hook needs adding to
+both copies. Desk, after: both games walked a pretend metre as 39.4 units with the server running
+every step.
 
 **The menus.** The first run in the headset showed SiN's main menu, whose New Game starts SiN: the
 expansion's menus are not in its pak but loose, in `2015\locale\en\menus` (with its dialogue and
