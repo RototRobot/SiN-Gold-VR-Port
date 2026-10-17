@@ -94,6 +94,7 @@ static struct
 	int keep_count[MAX_MODELS];
 	vr_gl_tracking_t *track[MAX_MODELS];
 	int at_rest[MAX_MODELS];
+	float toward[MAX_MODELS];   /* +1: the copy goes right (-y); -1: left */
 	int plane_ready;   /* the reflecting plane is worked out for the model being drawn */
 	float plane_n[3];  /* and is n.p = plane_d, n pointing to the side that is copied */
 	float plane_d;
@@ -217,8 +218,8 @@ void vr_gl_hide_model_parts_at(const float origin[3], const int (*ranges)[2], in
 	}
 }
 
-void vr_gl_fill_model_at(const float origin[3], float middle, const int (*keep)[2], int keep_count,
-	vr_gl_tracking_t *track, int at_rest)
+static void fill_model(const float origin[3], float middle, const int (*keep)[2], int keep_count,
+	vr_gl_tracking_t *track, int at_rest, float toward)
 {
 	int at;
 
@@ -236,7 +237,20 @@ void vr_gl_fill_model_at(const float origin[3], float middle, const int (*keep)[
 		models.keep_count[at] = keep ? keep_count : 0;
 		models.track[at] = track;
 		models.at_rest[at] = at_rest;
+		models.toward[at] = toward;
 	}
+}
+
+void vr_gl_fill_model_at(const float origin[3], float middle, const int (*keep)[2], int keep_count,
+	vr_gl_tracking_t *track, int at_rest)
+{
+	fill_model(origin, middle, keep, keep_count, track, at_rest, 1.0f);
+}
+
+void vr_gl_fill_model_leftward_at(const float origin[3], float middle, const int (*keep)[2], int keep_count,
+	vr_gl_tracking_t *track, int at_rest)
+{
+	fill_model(origin, middle, keep, keep_count, track, at_rest, -1.0f);
 }
 
 unsigned vr_gl_planes_moved(void)
@@ -373,12 +387,14 @@ static void place_plane(int entry, float middle)
 {
 	vr_gl_tracking_t *t = models.track[entry];
 	float rest[3][3], now[3][3], from_rest[3], q[3], n[3];
+	float toward = models.toward[entry];
 	int i, j;
 
+	/* n points to the side that is copied: +y, the left, unless leftward */
 	models.plane_n[0] = 0.0f;
-	models.plane_n[1] = 1.0f;
+	models.plane_n[1] = toward;
 	models.plane_n[2] = 0.0f;
-	models.plane_d = middle;
+	models.plane_d = toward * middle;
 	models.plane_ready = 1;
 
 	if (!t || models.at_rest[entry] || t->found != 7)
@@ -412,7 +428,7 @@ static void place_plane(int entry, float middle)
 		q[i] = lerp_vertex(t->index[0])[i];
 		for (j = 0; j < 3; ++j)
 		{
-			n[i] += now[j][i] * rest[j][1];
+			n[i] += toward * now[j][i] * rest[j][1];
 			q[i] += now[j][i] * (rest[j][0] * from_rest[0] + rest[j][1] * from_rest[1] + rest[j][2] * from_rest[2]);
 		}
 	}

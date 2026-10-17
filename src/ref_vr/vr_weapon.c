@@ -105,7 +105,10 @@ static const weapon_info_t weapon_table[] = {
 	{ "quantum",   { 20.0f, -30.0f, -40.0f }, 0.30f, 0, 0.35f, 0, { { 0 } }, 0, { 0 }, -35.1f, 1 },
 	{ "spgun",     { 30.0f, -15.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 217, 259 } }, 1, { 60.1f, -21.3f, -35.8f }, -24.25f, 1 },
 	{ "mines",     { 36.0f, -22.0f, -18.0f }, 0.35f, 0, 0.0f },
-	{ "detonator", { 15.0f,  -5.0f, -12.0f }, 0.40f, 0, 0.0f },
+	/* The detonator has a second hand on its box: a left sleeve and glove
+	   coming up from below (vertices 176-217). It is left out, as the long
+	   guns' arms are; the hand on the trigger stays. */
+	{ "detonator", { 15.0f,  -5.0f, -12.0f }, 0.40f, 0, 0.0f, 1, { { 176, 217 } } },
 	/* Two arms like the fists, either side of y = 0 with nothing near it (165
 	   vertices each, y -30..-12.5 and 11.7..28.7), each a stub of forearm and
 	   a clawed hand, x 28-43. Held at the root of the claws. */
@@ -121,7 +124,10 @@ static const weapon_info_t weapon_table[] = {
 	   middle is of the gun's body without the arm. The rocket pack is only a
 	   hand on its remote, kept as it is. Grips are first guesses, for the
 	   grip button to settle. */
-	{ "dualmagnum",  { 52.0f, -31.0f, -31.0f }, 0.35f, 1, 0.0f },
+	/* Each pistol is modelled on its inner side only; the right one's middle
+	   is y = -30.6 and the left one's +30.6, and the gloves and sleeves
+	   (vertices 16-233) are not copied. */
+	{ "dualmagnum",  { 52.0f, -31.0f, -31.0f }, 0.35f, 1, 0.0f, 0, { { 0 } }, 0, { 0 }, -30.6f, 1, 1, { { 16, 233 } } },
 	{ "concussion",  { 35.0f, -27.0f, -45.0f }, 0.35f, 0, 0.30f, 1, { { 63, 133 } }, 1, { 52.7f, -2.8f, -37.2f }, -26.31f, 1 },
 	{ "crossbow",    { 30.0f, -22.0f, -28.0f }, 0.35f, 0, 0.30f, 1, { { 237, 277 } }, 1, { 56.2f, -17.6f, -28.4f }, -22.34f, 1 },
 	{ "flame",       { 43.0f, -24.5f, -36.0f }, 0.35f, 0, 0.30f, 1, { { 45, 76 } }, 1, { 61.2f, -21.1f, -31.1f }, -23.63f, 1 },
@@ -228,6 +234,7 @@ typedef struct
 	cvar_t *fore;                /* vr_fore_<key>: the fore-end, in the model's own units */
 	cvar_t *fill;                /* vr_fill_<key>: whether its missing side is rebuilt */
 	vr_gl_tracking_t track;      /* how the rebuilt side follows the gun as it animates */
+	vr_gl_tracking_t arm_track[2]; /* the same for each half of a two-armed model */
 } weapon_t;
 
 static weapon_t weapons[48];
@@ -1461,6 +1468,8 @@ int vr_weapon_world_aim(float origin[3], float forward[3])
 #define FOREARM_TOWARD_WRIST_X 0.866f
 #define FOREARM_TOWARD_WRIST_Z 0.5f
 
+static void fill_one_arm(const entity_t *e, int hand);
+
 static void keep_one_arm(const entity_t *e, int hand)
 {
 	float plane[4], at[3], n[3];
@@ -1473,6 +1482,7 @@ static void keep_one_arm(const entity_t *e, int hand)
 	plane[2] = sign * left[2];
 	plane[3] = -sign * (left[0] * e->origin[0] + left[1] * e->origin[1] + left[2] * e->origin[2]);
 	vr_gl_clip_model_at(e->origin, plane);
+	fill_one_arm(e, hand);
 
 	/* Only the fists have an upper arm: the mutant hands' arms stop at the
 	   forearm already. */
@@ -1492,6 +1502,39 @@ static void keep_one_arm(const entity_t *e, int hand)
 	vr_gl_clip_model_at(e->origin, plane);
 }
 
+/*
+ * One half of a two-armed model with a side to rebuild - a pistol in each hand:
+ * each half's own middle, the right one's at the table's and the left one's
+ * mirrored to the other side of y = 0, each copied outwards.
+ */
+static void fill_one_arm(const entity_t *e, int hand)
+{
+	const idle_info_t *anims = idle_info(current ? current->key : NULL);
+	int at_rest = 0, k;
+
+	if (!current || !current->info->two_arms || current->info->middle == 0.0f || !current->fill ||
+		current->fill->value == 0.0f || (vr_weapon_fill && vr_weapon_fill->value == 0.0f) || !anims ||
+		e->anim < 0 || e->anim >= 32 || !(anims->steady >> e->anim & 1))
+	{
+		return;
+	}
+
+	for (k = 0; k < anims->count; ++k)
+	{
+		at_rest |= e->anim == anims->map[k][0] || e->anim == anims->map[k][1];
+	}
+	if (hand == LEFT)
+	{
+		vr_gl_fill_model_leftward_at(e->origin, -current->info->middle * e->scale, current->info->keep,
+			current->info->keep_count, &current->arm_track[LEFT], at_rest);
+	}
+	else
+	{
+		vr_gl_fill_model_at(e->origin, current->info->middle * e->scale, current->info->keep,
+			current->info->keep_count, &current->arm_track[RIGHT], at_rest);
+	}
+}
+
 /* The arm built into the weapon's model, left out unless vr_weapon_arm says
    otherwise; and the side of it that was never made, filled in unless
    vr_weapon_fill says otherwise. */
@@ -1503,7 +1546,7 @@ static void hide_modelled_arm(const entity_t *gun)
 	{
 		vr_gl_hide_model_parts_at(gun->origin, current->info->arm, current->info->arm_count);
 	}
-	if (current && current->fill && current->fill->value != 0.0f &&
+	if (current && current->fill && current->fill->value != 0.0f && !current->info->two_arms &&
 		(!vr_weapon_fill || vr_weapon_fill->value != 0.0f) &&
 		anims && gun->anim >= 0 && gun->anim < 32 && (anims->steady >> gun->anim & 1))
 	{

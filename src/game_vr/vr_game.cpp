@@ -511,3 +511,34 @@ qboolean VR_HoldWeaponStill(Sentient *owner)
 
    return still;
 }
+
+// ---------------------------------------------------------------------------
+
+//
+// SiN Gold VR: steering with the weapon hand. A guided missile turns the way
+// the player's angles say, and in VR those are the body's - turned by the
+// stick, never tipped up or down - while the head turns the view on top of
+// them, so steering by the head would turn the picture twice over. The hand
+// that holds the weapon points the missile instead, as a remote would.
+//
+static cvar_t *vr_left_handed_game = NULL;
+
+Vector VR_HandSteering(Player *player, Vector fallback)
+{
+   float origin[3];
+   float angles[3];
+   int   hand;
+
+   if(!vr_left_handed_game)
+   {
+      vr_left_handed_game = gi.cvar("vr_left_handed", "0", 0);
+   }
+   hand = vr_left_handed_game->value ? VR_HAND_LEFT : VR_HAND_RIGHT;
+
+   if(!player || player->entnum != 1 || player->gravaxis || !VR_HandPose(hand, origin, angles))
+   {
+      return fallback;
+   }
+
+   return Vector(angles[0], angles[1] + player->worldangles[YAW], angles[2]);
+}

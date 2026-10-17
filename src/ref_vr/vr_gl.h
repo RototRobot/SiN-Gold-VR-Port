@@ -124,6 +124,12 @@ typedef struct
 void vr_gl_fill_model_at(const float origin[3], float middle, const int (*keep)[2], int keep_count,
 	vr_gl_tracking_t *track, int at_rest);
 
+/* The same, copying the other way: triangles facing right, on the right of
+   y = middle, reflected to the left - for a model whose missing side is its
+   left, such as the left one of a pair of pistols. */
+void vr_gl_fill_model_leftward_at(const float origin[3], float middle, const int (*keep)[2], int keep_count,
+	vr_gl_tracking_t *track, int at_rest);
+
 /* How often a filled model's plane has moved with it, for the log. */
 unsigned vr_gl_planes_moved(void);
 

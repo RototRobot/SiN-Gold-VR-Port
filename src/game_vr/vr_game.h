@@ -15,4 +15,10 @@ extern float vr_strike_scale;
 #define VR_IDLE_BEAT 0.5f
 qboolean VR_HoldWeaponStill(Sentient *owner);
 
+/* Where the hand holding the weapon points, as world angles, for steering
+   something with it - the guided missile. fallback when that hand is not
+   tracked (or the game runs without the VR renderer). */
+class Player;
+Vector VR_HandSteering(Player *player, Vector fallback);
+
 #endif /* VR_GAME_H */
