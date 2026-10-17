@@ -17,6 +17,7 @@
 #include "vr_keys.h"
 #include "vr_poses.h"
 #include "vr_turn.h"
+#include "vr_vignette.h"
 #include "vr_view.h"
 #include "vr_weapon.h"
 #include "vr_xr.h"
@@ -1203,6 +1204,7 @@ static void read_sticks(XrSession session, int menu)
 	if (menu)
 	{
 		/* The player is not moving: the sticks are working the menu. */
+		vr_vignette_motion(0.0f);
 		vr_joy_set(0.0f, 0.0f, 0.0f);
 		vr_weapon_adjust_stick(0.0f);
 		navigate_menu(forward, side);
@@ -1226,7 +1228,16 @@ static void read_sticks(XrSession session, int menu)
 		side = (float)(s * cos(yaw) - f * sin(yaw));
 	}
 
-	vr_joy_set(forward, side, snap_turn(turn));
+	turn = snap_turn(turn);
+	vr_joy_set(forward, side, turn);
+
+	/* The comfort vignette closes in as far as the stick moves the player, or
+	   smoothly turns them; a snap turn gives nothing to feel. */
+	{
+		float moving = sqrtf(forward * forward + side * side);
+
+		vr_vignette_motion(moving > fabsf(turn) ? moving : fabsf(turn));
+	}
 
 	/* Whether the engine is actually reading the stick answers most "why does
 	   this do nothing" questions, so it is said either way, once. */
@@ -1338,6 +1349,7 @@ void vr_input_idle(XrSession session)
 	}
 
 	vr_joy_set(0.0f, 0.0f, 0.0f);
+	vr_vignette_motion(0.0f);
 
 	/* Desk testing: "vr_fake_idle_press 1" presses a button once a second for
 	   as long as the engine is not drawing - an impatient player at the card. */
@@ -1598,6 +1610,7 @@ void vr_input_release(void)
 	}
 	release_buttons();
 	vr_joy_set(0.0f, 0.0f, 0.0f);
+	vr_vignette_motion(0.0f);
 }
 
 void vr_input_destroy(void)

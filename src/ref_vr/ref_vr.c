@@ -27,6 +27,7 @@
 #include "vr_math.h"
 #include "vr_room.h"
 #include "vr_turn.h"
+#include "vr_vignette.h"
 #include "vr_weapon.h"
 #include "vr_gesture.h"
 #include "vr_view.h"
@@ -614,6 +615,7 @@ static int vr_Init(void *hinstance, void *wndproc)
 	vr_weapon_startup();
 	vr_gesture_startup();
 	vr_room_startup();
+	vr_vignette_startup();
 	if (vr_enable->value != 0.0f)
 	{
 		vr_input_startup();
@@ -847,6 +849,9 @@ static void vr_RenderFrame(refdef_t *fd)
 	/* Into the same framebuffer, over the world and under the HUD: where the
 	   controllers are, while a weapon is being placed on one. */
 	vr_weapon_draw_hands(fd);
+
+	/* Over the world and the hands, under the HUD: the comfort vignette. */
+	vr_vignette_draw(g_eye, g_eye_index == 0);
 
 	/* The engine may render from the same refdef again, paused or not. */
 	vr_weapon_after_eye(fd);
