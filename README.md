@@ -4,13 +4,15 @@ A PC VR mod for **SiN Gold**, Ritual Entertainment's 1998 shooter as re-released
 The goal is a native-feeling VR game: stereo rendering in the headset, 6DoF head tracking, roomscale
 movement and tracked motion controllers.
 
-> **Status: early development.** The mod runs the game through its own renderer and game module,
-> renders the world **in stereo with head tracking** through an OpenXR projection layer, keeps the HUD
-> in a readable panel, **plays with the VR controllers**, and **puts the weapon in your hand**: it is
-> drawn where the controller is, it fires down its own barrel, and its muzzle flash, tracers and
-> bullet holes come from there too. **Walking and crouching in your room** move and crouch the player.
+> **Version 1.0.** SiN and its expansion, Wages of Sin, playable in VR: the world **in stereo with
+> head tracking**, the HUD in a readable panel, **the VR controllers** for everything, **the weapon in
+> your hand** - drawn where the controller is, firing down its own barrel, its muzzle flash, tracers
+> and bullet holes coming from there - long guns held in both hands, **punches thrown with your
+> fists**, weapons picked from your shoulders and hip, **walking and crouching in your room**, haptics,
+> snap or smooth turning, and a comfort vignette. Left-handed players get the mirror image of all of it.
 
-**New to the project?** Start with [docs/HANDOFF.md](docs/HANDOFF.md).
+**Just want to play?** See [Installing a release](#installing-a-release). **Working on the mod?** Start
+with [docs/HANDOFF.md](docs/HANDOFF.md).
 
 ## How it works
 
@@ -36,9 +38,26 @@ Background: [docs/ENGINE_NOTES.md](docs/ENGINE_NOTES.md) (how the engine fits to
 
 ## Requirements
 
-- **SiN Gold** from Steam or GOG: the 2020 Night Dive release.
+- **SiN Gold** from Steam or GOG: the 2020 Night Dive release. Wages of Sin comes with it.
 - **Windows 10 or 11** and a PC VR headset with an OpenXR runtime that supports **32-bit**
-  applications, since SiN is a 32-bit game. SteamVR does.
+  applications, since SiN is a 32-bit game. SteamVR does. Tested with an **HP Reverb G2** (SteamVR's
+  Windows Mixed Reality driver) and a **Meta Quest 3** over **Steam Link**.
+
+## Installing a release
+
+1. Download `SiN-Gold-VR-<version>.zip` from the project's Releases page.
+2. Find your SiN Gold folder - on Steam, right-click SiN Gold → Manage → Browse local files: the folder
+   with `sin.exe` in it.
+3. Unzip everything into it, keeping the folders. `ref_vr.dll` and `openxr_loader.dll` end up beside
+   `sin.exe`, with a `sinvr` folder (SiN), a `sinvr2015` folder (Wages of Sin) and four launchers.
+4. Start SteamVR, put the headset on and run **`SiN VR.bat`** or **`SiN VR - Wages of Sin.bat`**. Stand
+   up straight and click the left stick twice to recentre.
+
+The zip has a short read-me with the controls. Nothing that came with the game is changed; to
+uninstall, delete `ref_vr.dll`, `openxr_loader.dll`, the four `SiN VR` launchers and the `sinvr` and
+`sinvr2015` folders. (`sinvr2015\locale` is a link to the game's own `2015\locale`, which Wages of Sin's
+launcher makes the first time it runs so that the expansion's menus are found; deleting the link leaves
+the game's folder alone.)
 
 ## Building
 
@@ -62,7 +81,7 @@ If `cmake` is not on your PATH, the copy bundled with VS 2022 is at
 
 The output goes to `build\win32\stage\Release\`, laid out like the game folder.
 
-## Installing and running
+## Installing from a build
 
 ```
 powershell -ExecutionPolicy Bypass -File tools\deploy.ps1
@@ -73,7 +92,9 @@ By default this installs into the Steam folder; pass `-GameDir <folder>` for ano
 - `ref_vr.dll` and `openxr_loader.dll` beside `sin.exe`
 - `gamex86.dll` into `sinvr\`
 
-It also adds two launchers beside `sin.exe`:
+It also adds four launchers beside `sin.exe`, and links `sinvr2015\locale` to the expansion's
+`2015\locale`. `tools\package.ps1` packs the same files into `dist\SiN-Gold-VR-<version>.zip` for a
+release:
 
 | Launcher | What it does |
 |---|---|
@@ -343,7 +364,7 @@ The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes 
 7. ✅ Roomscale comfort: snap turning, the body following the head through the world, and crouching
    in the room
 8. ✅ Wages of Sin: the same VR, from its own launcher
-9. Release packaging
+9. ✅ Release packaging (1.0.0)
 
 ## Repository layout
 
