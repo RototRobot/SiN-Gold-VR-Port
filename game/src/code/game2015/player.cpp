@@ -5577,7 +5577,7 @@ void Player::SetCameraEntity(Entity *cameraEnt)
 
          //set the missile's velocity and angle to the player view direction
          // SiN Gold VR: or to where the weapon hand points
-         VR_HandSteering(this, v_angle).AngleVectors(&t[0], &t[1], &t[2]);
+         VR_MissileSteering(this, v_angle).AngleVectors(&t[0], &t[1], &t[2]);
          forward[gravity_axis[gravaxis].x] = t[0][0];
          forward[gravity_axis[gravaxis].y] = t[0][1] * gravity_axis[gravaxis].sign;
          forward[gravity_axis[gravaxis].z] = t[0][2] * gravity_axis[gravaxis].sign;
