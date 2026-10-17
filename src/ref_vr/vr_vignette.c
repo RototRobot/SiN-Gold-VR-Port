@@ -4,6 +4,7 @@
 
 #include "ref_vr.h"
 #include "vr_vignette.h"
+#include "vr_xr.h"
 
 /*
  * The comfort vignette: while the stick moves or smoothly turns the player,
@@ -15,7 +16,9 @@
  * It is a ring drawn over each eye after the world (and the hands), under the
  * HUD: clear inside, black outside, centred on the eye's own straight ahead -
  * the eyes' frustums are not symmetrical, so the middle of the picture is not
- * the middle of the view. How far in it comes is vr_vignette, 0 for never.
+ * the middle of the view. How far in it comes is vr_vignette, 0 (the default)
+ * for never. By then ref_gl has set up its 2D, whose viewport vr_gl maps into
+ * the HUD panel, so the whole eye image is asked for here directly.
  */
 
 #define DEG_TO_RAD 0.017453292519943295
@@ -27,6 +30,7 @@
 #define FEATHER 22.0f             /* degrees from clear to black */
 
 static cvar_t *vr_vignette;
+
 static float wanted;     /* how much the stick moves the player, 0-1 */
 static float shown;      /* how far closed the vignette is now, 0-1 */
 static DWORD last_tick;
@@ -34,7 +38,7 @@ static unsigned drawn;
 
 void vr_vignette_startup(void)
 {
-	vr_vignette = vr_cvar("vr_vignette", "0.6", CVAR_ARCHIVE);
+	vr_vignette = vr_cvar("vr_vignette", "0", CVAR_ARCHIVE);
 }
 
 void vr_vignette_motion(float amount)
@@ -120,6 +124,16 @@ void vr_vignette_draw(const vr_eye_t *eye, int first_eye)
 	glPushMatrix();
 	glLoadIdentity();
 
+	{
+		int width = 0, height = 0;
+
+		vr_xr_eye_size(&width, &height);
+		if (width > 0 && height > 0)
+		{
+			glViewport(0, 0, width, height);
+		}
+	}
+	glDisable(GL_SCISSOR_TEST);
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
 	glDisable(GL_TEXTURE_2D);

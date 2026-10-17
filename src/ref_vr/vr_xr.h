@@ -57,6 +57,9 @@ void vr_xr_end_eye(void);
    none, in which case the theatre screen should show this frame. */
 int vr_xr_end_stereo_frame(void);
 
+/* The size of the eye images being rendered into, in pixels. */
+void vr_xr_eye_size(int *width, int *height);
+
 /*
  * Measures the head afresh on the next stereo frame, so that where the player
  * is standing and facing now becomes where the game puts their eyes. Done by

@@ -905,6 +905,12 @@ void vr_xr_input(void)
 	vr_input_frame(xr.session);
 }
 
+void vr_xr_eye_size(int *width, int *height)
+{
+	*width = xr.eye[0].width;
+	*height = xr.eye[0].height;
+}
+
 int vr_xr_stereo_possible(void)
 {
 	return xr.started && xr.running && !xr.failed && !xr.stereo_failed;
