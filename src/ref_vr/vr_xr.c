@@ -137,6 +137,11 @@ static void report_layer(const char *library, const char *reason)
 	vr_printf("VR: switched off an OpenXR layer a 32-bit game cannot load (%s): %s", reason, library);
 }
 
+static void report_runtime(const char *manifest, const char *what)
+{
+	vr_printf("VR: %s (it was %s)", what, manifest);
+}
+
 /* ------------------------------------------------------------------------- */
 /* Render targets                                                             */
 /* ------------------------------------------------------------------------- */
@@ -450,6 +455,7 @@ static int xr_start(void)
 		return 0;
 	}
 
+	xr_fix_runtime_override(report_runtime);
 	xr_disable_unloadable_implicit_layers(report_layer);
 
 	strcpy(instance_info.applicationInfo.applicationName, "SiN Gold VR");

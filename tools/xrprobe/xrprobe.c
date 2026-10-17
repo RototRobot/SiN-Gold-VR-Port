@@ -112,6 +112,8 @@ static int list_extensions(void)
 	return have_gl;
 }
 
+static int no_gl; /* "xrprobe nogl": an instance without OpenGL, to tell a graphics refusal from any other */
+
 static XrInstance create_instance(XrVersion api, XrResult *result)
 {
 	const char *extensions[] = { XR_KHR_OPENGL_ENABLE_EXTENSION_NAME };
@@ -123,7 +125,7 @@ static XrInstance create_instance(XrVersion api, XrResult *result)
 	strcpy(ci.applicationInfo.engineName, "SiN");
 	ci.applicationInfo.engineVersion = 113;
 	ci.applicationInfo.apiVersion = api;
-	ci.enabledExtensionCount = 1;
+	ci.enabledExtensionCount = no_gl ? 0 : 1;
 	ci.enabledExtensionNames = extensions;
 
 	*result = xrCreateInstance(&ci, &instance);
@@ -198,13 +200,62 @@ static void probe_system(XrInstance instance)
 	}
 }
 
-int main(void)
+/* "xrprobe variants": an instance asked for every way round, to see which, if
+   any, a runtime accepts - versions, names, with and without OpenGL. */
+static void try_variants(void)
 {
+	static const struct { const char *app, *engine; } names[] = {
+		{ "SiN Gold VR", "SiN" }, { "xrprobe", "" }, { "hello_xr", "OpenXR Sample" }
+	};
+	static const XrVersion versions[] = { XR_API_VERSION_1_0, XR_API_VERSION_1_1 };
+	const char *gl[] = { XR_KHR_OPENGL_ENABLE_EXTENSION_NAME };
+	int n, v, g;
+
+	for (n = 0; n < 3; ++n)
+	{
+		for (v = 0; v < 2; ++v)
+		{
+			for (g = 0; g < 2; ++g)
+			{
+				XrInstanceCreateInfo ci = { XR_TYPE_INSTANCE_CREATE_INFO };
+				XrInstance instance = XR_NULL_HANDLE;
+				XrResult r;
+
+				strcpy(ci.applicationInfo.applicationName, names[n].app);
+				strcpy(ci.applicationInfo.engineName, names[n].engine);
+				ci.applicationInfo.applicationVersion = 1;
+				ci.applicationInfo.apiVersion = versions[v];
+				ci.enabledExtensionCount = g;
+				ci.enabledExtensionNames = gl;
+				r = xrCreateInstance(&ci, &instance);
+				printf("  %-12s %-14s api 1.%d %-7s -> %d\n", names[n].app, names[n].engine, v, g ? "opengl" : "none",
+					(int)r);
+				if (XR_SUCCEEDED(r))
+				{
+					xrDestroyInstance(instance);
+				}
+			}
+		}
+	}
+}
+
+int main(int argc, char **argv)
+{
+	no_gl = argc > 1 && strcmp(argv[1], "nogl") == 0;
+	if (argc > 1 && strcmp(argv[1], "variants") == 0)
+	{
+		printf("process: %u-bit\n", (unsigned)(sizeof(void *) * 8));
+		xr_fix_runtime_override(report_layer);
+	xr_disable_unloadable_implicit_layers(report_layer);
+		try_variants();
+		return 0;
+	}
 	XrInstanceProperties ip = { XR_TYPE_INSTANCE_PROPERTIES };
 	XrInstance instance;
 	XrResult r;
 
 	printf("process: %u-bit\n", (unsigned)(sizeof(void *) * 8));
+	xr_fix_runtime_override(report_layer);
 	xr_disable_unloadable_implicit_layers(report_layer);
 	list_layers();
 

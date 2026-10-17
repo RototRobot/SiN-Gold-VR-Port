@@ -105,6 +105,76 @@ static unsigned pe_machine(const char *path)
 	return header[pe + 4] | (header[pe + 5] << 8);
 }
 
+/* The machine type of a manifest's runtime library, or 0 if it cannot be read. */
+static unsigned manifest_machine(const char *manifest)
+{
+	char library[MAX_PATH], full[2 * MAX_PATH];
+	const char *slash;
+	char *json = read_file(manifest);
+	unsigned machine = 0;
+
+	if (json && json_string(json, "library_path", library, sizeof(library)))
+	{
+		if ((library[0] && library[1] == ':') || (library[0] == '\\' && library[1] == '\\'))
+		{
+			snprintf(full, sizeof(full), "%s", library);
+		}
+		else
+		{
+			slash = strrchr(manifest, '\\');
+			if (!slash)
+			{
+				slash = strrchr(manifest, '/');
+			}
+			snprintf(full, sizeof(full), "%.*s%s", slash ? (int)(slash - manifest) + 1 : 0, manifest, library);
+		}
+		machine = pe_machine(full);
+	}
+
+	free(json);
+	return machine;
+}
+
+int xr_fix_runtime_override(xr_layer_report_t report)
+{
+	char manifest[MAX_PATH], sibling[MAX_PATH];
+	char *at;
+	DWORD length = GetEnvironmentVariableA("XR_RUNTIME_JSON", manifest, sizeof(manifest));
+
+	if (length == 0 || length >= sizeof(manifest) || manifest_machine(manifest) == IMAGE_FILE_MACHINE_I386)
+	{
+		return 0;
+	}
+
+	/* its 32-bit sibling, if it has one by the usual name */
+	strcpy(sibling, manifest);
+	at = strstr(sibling, "win64");
+	if (!at)
+	{
+		at = strstr(sibling, "Win64");
+	}
+	if (at)
+	{
+		memcpy(at + 3, "32", 2);
+		if (manifest_machine(sibling) == IMAGE_FILE_MACHINE_I386)
+		{
+			SetEnvironmentVariableA("XR_RUNTIME_JSON", sibling);
+			if (report)
+			{
+				report(manifest, "XR_RUNTIME_JSON names a runtime that is not 32-bit - using its 32-bit one");
+			}
+			return 1;
+		}
+	}
+
+	SetEnvironmentVariableA("XR_RUNTIME_JSON", NULL);
+	if (report)
+	{
+		report(manifest, "XR_RUNTIME_JSON names a runtime that is not 32-bit - using the registry's instead");
+	}
+	return 1;
+}
+
 int xr_disable_unloadable_implicit_layers(xr_layer_report_t report)
 {
 	static const HKEY roots[] = { HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER };
