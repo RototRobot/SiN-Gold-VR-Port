@@ -122,23 +122,10 @@ if (-not (Test-Path $link)) {
     Write-Host "linked   sinvr2015\locale -> 2015\locale"
 }
 
-# logfile 2 keeps sinvr\qconsole.log written line by line while this is in development.
-$common = "+set vid_ref vr +set logfile 2"
-$launchers = [ordered]@{
-    "SiN VR.bat"                              = "+set game sinvr $common +set vr_enable 1"
-    "SiN VR (flatscreen).bat"                 = "+set game sinvr $common +set vr_enable 0"
-    "SiN VR - Wages of Sin.bat"               = "+set game sinvr2015 $common +set vr_enable 1"
-    "SiN VR - Wages of Sin (flatscreen).bat"  = "+set game sinvr2015 $common +set vr_enable 0"
-}
-
+. (Join-Path $PSScriptRoot "launchers.ps1")
+$launchers = Get-SinVrLaunchers
 foreach ($name in $launchers.Keys) {
-    $lines = @(
-        "@echo off",
-        "rem Written by SiN Gold VR (tools\deploy.ps1): starts SiN through the VR renderer and mod.",
-        "cd /d `"%~dp0`"",
-        "start `"`" sin.exe $($launchers[$name]) %*"
-    )
-    Set-Content -Path (Join-Path $GameDir $name) -Value $lines -Encoding ASCII
+    Set-Content -Path (Join-Path $GameDir $name) -Value $launchers[$name] -Encoding ASCII
     $installed.Add($name)
     Write-Host "wrote    $name"
 }

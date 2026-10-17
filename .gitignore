@@ -20,3 +20,6 @@ CMakeUserPresets.json
 
 # Logs
 *.log
+
+# Release zips (tools/package.ps1)
+/dist/
