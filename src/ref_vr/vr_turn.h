@@ -20,6 +20,10 @@ int vr_turn_available(void);
    way the engine's yaw grows. */
 void vr_turn_by(float degrees);
 
+/* The client's own view yaw, the one the stick and snap turns change; 0 if
+   it could not be found. */
+float vr_turn_client_yaw(void);
+
 /* Once a frame, headset or not. Desk testing: "vr_fake_snap <degrees>" turns
    the player that much once, the way a snap does, with no controllers. */
 void vr_turn_frame(void);

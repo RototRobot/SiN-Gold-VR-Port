@@ -90,6 +90,7 @@ typedef const sinvr_poses_t *(*sinvr_poses_fn)(int version);
 #define SINVR_FEEDBACK_SHOT 1
 #define SINVR_FEEDBACK_HIT 2
 #define SINVR_FEEDBACK_CHARGE 3 /* a weapon being charged, strength how far: sent every tenth of a second */
+#define SINVR_FEEDBACK_HEAD_STEERS 4 /* the view is a camera the head steers (a guided missile): sent each frame */
 #define SINVR_HAND_WEAPON (-1)
 
 typedef void (*sinvr_feedback_fn)(int kind, int hand, float strength);

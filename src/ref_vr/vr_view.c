@@ -3,6 +3,7 @@
 #include <math.h>
 #include <string.h>
 
+#include "vr_turn.h"
 #include "vr_view.h"
 
 #define PITCH 0
@@ -53,6 +54,17 @@ static DWORD g_body_tick;
 
 #define BODY_STALE_MS 250
 
+/* The head steering a camera: since when, and the body's yaw it was held at
+   with the client's own yaw then. */
+static DWORD g_steer_tick;
+static int g_steering;
+static float g_steer_body_yaw;
+static float g_steer_client_yaw;
+
+#define STEER_STALE_MS 300
+
+static float steered_body_yaw(float camera_yaw);
+
 /* Where the last eye was drawn from, and where the engine had the view. */
 static float g_last_eye[3];
 static float g_last_engine[3];
@@ -65,6 +77,25 @@ static void quake_forward(const float q[4], float forward[3])
 
 	quat_rotate(q, xr_forward, v);
 	xr_to_quake(v, forward);
+}
+
+void vr_view_head_steers(void)
+{
+	g_steer_tick = GetTickCount();
+}
+
+static float steered_body_yaw(float camera_yaw)
+{
+	int steering = g_steer_tick && GetTickCount() - g_steer_tick < STEER_STALE_MS;
+
+	if (steering && !g_steering)
+	{
+		g_steer_body_yaw = g_body_yaw;
+		g_steer_client_yaw = vr_turn_client_yaw();
+	}
+	g_steering = steering;
+
+	return steering ? g_steer_body_yaw + vr_turn_client_yaw() - g_steer_client_yaw : camera_yaw;
 }
 
 void vr_view_recenter(const float position[3], const float orientation[4])
@@ -114,7 +145,7 @@ void vr_view_apply(refdef_t *fd, const vr_eye_t *eye, float units_per_metre, vr_
 	static const float xr_right[3] = { 1.0f, 0.0f, 0.0f };
 	static const float xr_up[3] = { 0.0f, 1.0f, 0.0f };
 	float v[3], forward[3], right[3], up[3], offset[3];
-	float body_yaw = fd->viewangles[YAW];
+	float body_yaw = steered_body_yaw(fd->viewangles[YAW]);
 	/* The recentred head faces the way the body does, so the tracking space
 	   turns by the difference between the two. */
 	double turn = (body_yaw - g_origin_yaw) * RAD_PER_DEG;
@@ -123,7 +154,10 @@ void vr_view_apply(refdef_t *fd, const vr_eye_t *eye, float units_per_metre, vr_
 	double sin_pitch;
 	float height;
 
-	g_body_yaw = body_yaw;
+	if (!g_steering)
+	{
+		g_body_yaw = body_yaw;
+	}
 	g_body_tick = GetTickCount();
 
 	memcpy(saved->vieworg, fd->vieworg, sizeof(saved->vieworg));

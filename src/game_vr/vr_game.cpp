@@ -515,15 +515,16 @@ qboolean VR_HoldWeaponStill(Sentient *owner)
 // ---------------------------------------------------------------------------
 
 //
-// SiN Gold VR: steering with the weapon hand. A guided missile turns the way
-// the player's angles say, and in VR those are the body's - turned by the
-// stick, never tipped up or down - while the head turns the view on top of
-// them, so steering by the head would turn the picture twice over. The hand
-// that holds the weapon points the missile instead, as a remote would.
+// SiN Gold VR: steering a guided missile. It turns the way the player's angles
+// say, and in VR those are the body's - turned by the stick, never tipped up
+// or down. vr_missile_steer 1 points it with the hand that holds the weapon,
+// as a remote would; 2 with the head, and the renderer is told so that it
+// keeps the picture on the head rather than on the camera turned by it.
 //
 static cvar_t *vr_left_handed_game = NULL;
+static cvar_t *vr_missile_steer = NULL;
 
-Vector VR_HandSteering(Player *player, Vector fallback)
+Vector VR_MissileSteering(Player *player, Vector fallback)
 {
    float origin[3];
    float angles[3];
@@ -532,12 +533,29 @@ Vector VR_HandSteering(Player *player, Vector fallback)
    if(!vr_left_handed_game)
    {
       vr_left_handed_game = gi.cvar("vr_left_handed", "0", 0);
+      vr_missile_steer = gi.cvar("vr_missile_steer", "1", CVAR_ARCHIVE);
    }
-   hand = vr_left_handed_game->value ? VR_HAND_LEFT : VR_HAND_RIGHT;
 
-   if(!player || player->entnum != 1 || player->gravaxis || !VR_HandPose(hand, origin, angles))
+   if(!player || player->entnum != 1 || player->gravaxis || !vr_missile_steer->value)
    {
       return fallback;
+   }
+
+   if(vr_missile_steer->value >= 2)
+   {
+      if(!VR_HeadPose(origin, angles))
+      {
+         return fallback;
+      }
+      VR_Feedback(VR_FEEDBACK_HEAD_STEERS, VR_HAND_WEAPON, 1.0f);
+   }
+   else
+   {
+      hand = vr_left_handed_game->value ? VR_HAND_LEFT : VR_HAND_RIGHT;
+      if(!VR_HandPose(hand, origin, angles))
+      {
+         return fallback;
+      }
    }
 
    return Vector(angles[0], angles[1] + player->worldangles[YAW], angles[2]);

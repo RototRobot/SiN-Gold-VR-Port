@@ -8,6 +8,7 @@
 #include "vr_gl.h"
 #include "vr_hook.h"
 #include "vr_input.h"
+#include "vr_view.h"
 #include "vr_math.h"
 #include "vr_poses.h"
 #include "vr_weapon.h"
@@ -1017,6 +1018,10 @@ void vr_weapon_feedback(int kind, int hand, float strength)
 		{
 			vrlog("VR: the game sends its shots - the %s hand feels them", hand_name(h));
 		}
+	}
+	else if (kind == SINVR_FEEDBACK_HEAD_STEERS)
+	{
+		vr_view_head_steers();
 	}
 	else if (kind == SINVR_FEEDBACK_CHARGE)
 	{

@@ -73,6 +73,11 @@ void vr_turn_frame(void)
 	vr_cvar_set("vr_fake_snap", "");
 }
 
+float vr_turn_client_yaw(void)
+{
+	return sin_yaw ? *sin_yaw : 0.0f;
+}
+
 void vr_turn_by(float degrees)
 {
 	/* No wrapping: the client's own turning never wraps it either, and the

@@ -77,4 +77,14 @@ int vr_view_body_yaw(float *yaw);
 /* For the log: the last eye's view origin, and the engine's under it. */
 void vr_view_last(float engine[3], float eye[3]);
 
+/*
+ * The view is a camera the head steers - a guided missile with
+ * vr_missile_steer 2: the camera turns to wherever the head points, and
+ * adding the head's turn to the camera's would turn the picture twice. For
+ * as long as this keeps being said (each frame), the view's yaw is the
+ * body's as it was before, carried by any turning since, plus the head's:
+ * where the head points, which is where the camera is going.
+ */
+void vr_view_head_steers(void);
+
 #endif /* VR_VIEW_H */

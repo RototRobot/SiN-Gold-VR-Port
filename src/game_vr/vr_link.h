@@ -70,6 +70,7 @@ int VR_TrackingChanged(void);
 #define VR_FEEDBACK_SHOT 1
 #define VR_FEEDBACK_HIT 2
 #define VR_FEEDBACK_CHARGE 3
+#define VR_FEEDBACK_HEAD_STEERS 4
 #define VR_HAND_WEAPON (-1)
 void VR_Feedback(int kind, int hand, float strength);
 
