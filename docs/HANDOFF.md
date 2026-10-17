@@ -1211,3 +1211,20 @@ in alphabetical order. Grips are first guesses. Desk, on `2015dm1` with `give`/`
 magnums, concussion gun, plasma bow, flamethrower and informer gun drawn in the hand, the arms gone,
 the far side rebuilt; the missile launcher, IP36 and stinger pack would not be switched to there, so
 they are for the headset.
+
+**After the owner's first look** (2026-10-17):
+
+- *The dual magnums had no far sides.* Each pistol is modelled on its inner side only, so each half of
+  the two-armed model is filled across its own middle (y = -30.6 for the right, +30.6 for the left),
+  outwards: `fill_one_arm`, run from `keep_one_arm`, and `vr_gl_fill_model_leftward_at`, which copies
+  right-facing triangles to the left (the plane's normal points to the copied side, so the tracking
+  carries it either way). The gloves and sleeves, 16-233, are kept. Desk: both pistols solid from in
+  front and turned outwards.
+- *The detonator showed a second hand on its box* - a left sleeve and glove from below, vertices
+  176-217 of `view_detonator.def`; hidden, as the long guns' arms are.
+- *The guided missile only turned left and right.* It steers by the player's angles, which in VR are
+  the body's: turned by the stick, never tipped. Steering by the head would turn the picture twice -
+  the renderer adds the head to the camera's angles - so `VR_HandSteering` (vr_game.cpp) points it
+  with the weapon hand, in WoS's `Player` camera code.
+- *The stinger pack fired where the body faced.* Its `Shoot` uses the owner's orientation for a
+  client; with a weapon in the hand it now takes `GetGunOrientation`, the hand on the remote.
