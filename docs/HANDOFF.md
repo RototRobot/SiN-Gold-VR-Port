@@ -305,8 +305,18 @@ The short version for AI tools is [AGENTS.md](../AGENTS.md).
 
 **The engine and the renderer**
 
-- **Only the video menu is affected by `vid_ref vr`.** Everywhere else `"vr"` behaves like `"gl"`. *Applying* video settings rewrites `vid_ref` to
-  `gl`/`soft` for that session; the launchers set it back on the next start.
+- **Only the video menu is affected by `vid_ref vr`.** Everywhere else `"vr"` behaves like `"gl"`.
+- **`ref_vr` write-protects `vid_ref` while it is loaded** (`CVAR_NOSET`, cleared in Shutdown), so only the
+  command line can choose the renderer. Two things used to set it to `gl` behind the mod's back:
+  - applying the video settings;
+  - choosing a player (1.0.0 bug report). SiN Gold asks for a name on the first start of Wages of Sin,
+    then runs `exec players/<name>/config.cfg` and `vid_restart`. With no profile in `sinvr2015`, the search
+    path found the player's flat one in `2015\players`, with `vid_ref "gl"` in it. The game dropped to the
+    monitor, and the player reported `GLimp_EndFrame() - SwapBuffers() failed!`.
+
+  Now the config's line prints "vid_ref is write protected." and `vid_restart` reloads `ref_vr`.
+  To test it at the desk, rename `sinvr2015\players` and launch the game; the name prompt appears
+  on a profile-less start.
 - **`gi.dprintf` in the game DLL prints only with `developer 1`.** Use `gi.printf` for anything that must show.
 - **`DrawFadeScreen` (slot `+0x40`) runs after every world view.** It is probably SiN's full-screen blend, not a menu fade. Several slot names are
   still guesses ([ENGINE_NOTES](ENGINE_NOTES.md)).

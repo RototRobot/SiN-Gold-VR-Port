@@ -592,6 +592,18 @@ still ahead.
 
 - ~~Does a pass-through `ref_vr.dll` run identically, and does the video menu leave `vid_ref vr` alone?~~
   Yes, except that *applying* video settings rewrites `vid_ref`.
+- **Choosing a player** (the name prompt, `menu_changeplayer`) queues these commands, as strings at
+  sin.exe file offset 0x13ECC0:
+  - `exec default.cfg`
+  - `exec players/<name>/config.cfg`
+  - `menu_changeplayer`
+  - `vid_restart`
+
+  The config is found through the search path, so a game dir without the profile reads the base data's
+  one (`2015\players\blade\config.cfg` under `sinvr2015`).
+- **`Cvar_Set2` (sin.exe 0x480620 area, observed at 0x4806E9)** refuses a non-forced set of a cvar with
+  flag 8 (`CVAR_NOSET`, at cvar_t +0x0C) and prints "%s is write protected.". This matches Quake 2.
+  `ref_vr` uses it to keep `vid_ref` (verified 2026-10-18 by replaying the first-run name prompt).
 - ~~Does a source-built `gamex86.dll` run from a mod folder (`+set game sinvr`)?~~ Yes. WoS still needs its
   own plan because its game dir is `2015`.
 - ~~Observe `cl_stereo 1` at runtime.~~ Done: see "The stereo path confirmed at runtime" above.

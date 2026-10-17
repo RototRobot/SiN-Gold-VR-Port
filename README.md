@@ -339,8 +339,8 @@ New to the code? Start with [docs/HANDOFF.md](docs/HANDOFF.md). Background:
 
 ## Known limitations
 
-- **Do not apply changes in the game's video options** while playing through the mod: applying them
-  switches the renderer back to `gl`, which takes VR away until the next start.
+- **Leave the game's video options alone** while playing through the mod. They were made for a
+  monitor. The mod keeps itself loaded when they are applied, but they have not been tested in VR.
 - **Weapon grips start from a guess.** Settle the ones you use with the grip button.
 - **The rebuilt sides of the guns are mirror images.** Details that are not symmetrical - an ejection
   port, a label - appear on both sides. They are only there while a gun idles or fires; raising,
@@ -384,6 +384,10 @@ Bindings. The headset also has to be awake for the controllers to work.
 
 **Wages of Sin's New Game starts SiN.**
 Start it with `SiN VR - Wages of Sin.bat` once, which links its menus into place.
+
+**The game drops to the monitor after you enter a name, or shows `GLimp_EndFrame() - SwapBuffers() failed!`.**
+This happened in 1.0.0 on the first start of Wages of Sin if you had played it before without the mod. Update to
+1.0.1 or later.
 
 **Reporting a bug.**
 Send `sinvr.log` from beside `sin.exe` and `qconsole.log` from `sinvr\` (or `sinvr2015\`).

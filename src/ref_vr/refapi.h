@@ -68,6 +68,7 @@ enum
 #define PRINT_DEVELOPER 1
 
 #define CVAR_ARCHIVE 1
+#define CVAR_NOSET 8 /* sin.exe's Cvar_Set refuses it: "%s is write protected." */
 
 typedef struct cvar_s
 {

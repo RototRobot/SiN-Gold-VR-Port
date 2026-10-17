@@ -77,6 +77,7 @@ static cvar_t *vr_dump_eye;
 static cvar_t *vr_screen_distance;
 static cvar_t *vr_screen_width;
 static cvar_t *cl_stereo;
+static cvar_t *vid_ref;
 
 /* The frame in progress. */
 static int g_pass;                 /* BeginFrame calls since the last EndFrame */
@@ -404,6 +405,25 @@ static void register_cvars(void)
 	vr_screen_distance = cvar_get("vr_screen_distance", "2.5", CVAR_ARCHIVE);
 	vr_screen_width = cvar_get("vr_screen_width", "2.4", CVAR_ARCHIVE);
 	cl_stereo = cvar_get("cl_stereo", "0", 0);
+	vid_ref = cvar_get("vid_ref", "vr", 0);
+}
+
+/*
+ * While this renderer is loaded, nothing but the command line may change
+ * vid_ref. Choosing a player execs players/<name>/config.cfg and then
+ * vid_restart, and the game's search path finds that file in the player's
+ * ordinary profile when the mod's has none - in 2015\players for Wages of Sin,
+ * where SiN Gold asks for the name on the first start - with vid_ref "gl" in it,
+ * which put the player back on the desktop. Applying the video options set it
+ * the same way. Write-protected, the config's line is refused and vid_restart
+ * brings this renderer back.
+ */
+static void protect_vid_ref(int protect)
+{
+	if (vid_ref)
+	{
+		vid_ref->flags = protect ? (vid_ref->flags | CVAR_NOSET) : (vid_ref->flags & ~CVAR_NOSET);
+	}
 }
 
 cvar_t *vr_cvar(const char *name, const char *value, int flags)
@@ -599,6 +619,7 @@ static int vr_Init(void *hinstance, void *wndproc)
 
 	record_call(RE_INIT);
 	register_cvars();
+	protect_vid_ref(1);
 
 	/* ref_gl asks for a quad-buffer pixel format when cl_stereo is set, and
 	   switches cl_stereo off when it cannot have one. Keep it off until Init
@@ -697,6 +718,7 @@ static void vr_Shutdown(void)
 
 	record_call(RE_SHUTDOWN);
 	stop_idle_timer();
+	protect_vid_ref(0);
 
 	/* sin.exe's calls into this DLL go back to where they went before. */
 	vr_room_uninstall();

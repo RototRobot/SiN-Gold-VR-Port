@@ -78,8 +78,8 @@ IF SOMETHING GOES WRONG
 - Nothing in the headset: is SteamVR running and showing the headset? Start it before the game.
 - sinvr.log, beside sin.exe, says what the VR side did; sinvr\qconsole.log is the game's console.
   Both are worth attaching to a bug report.
-- Do not apply changes in the game's video options while playing through the mod: applying them
-  switches the VR renderer off until the next start.
+- Leave the game's video options alone while playing through the mod: they were made for a
+  monitor, and have not been tested in VR.
 
 
 SiN is by Ritual Entertainment. SiN Gold is by Night Dive Studios. This is a fan mod, not affiliated
