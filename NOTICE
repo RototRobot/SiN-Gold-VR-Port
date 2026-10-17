@@ -1,0 +1,11 @@
+SiN Gold VR
+Copyright 2026 RototRobot
+
+This product includes software developed by RototRobot, released under the Apache License,
+Version 2.0 (see LICENSE): everything in this repository outside game/.
+
+The game source in game/ is Copyright 2020 Night Dive Studios and is not covered by the Apache
+License; it is used under Night Dive Studios' own licence (game/license.txt). See
+THIRD_PARTY_NOTICES.md.
+
+This mod was made with heavy AI (Claude) assistance.

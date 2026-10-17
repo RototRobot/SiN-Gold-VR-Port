@@ -63,7 +63,9 @@ $licences = Join-Path $work "SiN Gold VR licences"
 Copy-Item (Join-Path $root "game\license.txt") (Join-Path $licences "Night Dive game source licence (gamex86.dll).txt")
 $ownLicence = Join-Path $root "LICENSE"
 if (Test-Path $ownLicence) {
-    Copy-Item $ownLicence (Join-Path $licences "SiN Gold VR licence (ref_vr.dll and the mod's code).txt")
+    Copy-Item $ownLicence (Join-Path $licences "SiN Gold VR licence - Apache 2.0 (ref_vr.dll and the mod's code).txt")
+    Copy-Item (Join-Path $root "NOTICE") (Join-Path $licences "NOTICE.txt")
+    Copy-Item (Join-Path $root "THIRD_PARTY_NOTICES.md") (Join-Path $licences "THIRD_PARTY_NOTICES.md")
 } else {
     Write-Warning "No LICENSE at the repository root: the zip has no licence for the mod's own code."
 }
