@@ -143,3 +143,25 @@ exist on that controller - SteamVR returns `XR_ERROR_PATH_UNSUPPORTED` (-22) and
 its own for that controller, with no further word. The left-handed swap hit this: `/user/hand/right/input/x/click`
 does not exist on the HP Reverb G2 controller (or Touch), whose right hand has A and B. Check the log's
 `bindings suggested for` / `would not take bindings for` lines after changing a table.
+
+## Quest 3 over Steam Link: XR_RUNTIME_JSON is set to the 64-bit runtime (2026-10-17)
+
+The owner's Quest 3, streamed through Steam Link, gave `xrCreateInstance failed: -51`
+(`XR_ERROR_RUNTIME_UNAVAILABLE`) from the game every time - while `xrprobe`, with the same
+application info, API 1.0 and OpenGL, created instances happily. SteamVR wrote no `xrclient_sin.txt` for
+the failures. With `XR_LOADER_DEBUG=all` in the game's own environment the loader said why:
+`using environment variable override runtime file ...\SteamVR\steamxr_win64.json`, then `vrclient_x64.dll
+... error 193: not a valid Win32 application`. Nothing in the user's or the machine's environment sets
+`XR_RUNTIME_JSON`, and `xrprobe` - which does not load Steam - never saw it; the game loads
+`steam_api.dll`, and with SteamVR streaming to a Quest the variable turns up in its process naming the
+64-bit manifest, whatever the registry's 32-bit view (`steamxr_win32.json`, correct) says.
+
+`xr_fix_runtime_override` (`xr_layers.c`, called before the first OpenXR call by `vr_xr.c` and
+`xrprobe`) checks the manifest the variable names: if its library is not 32-bit it swaps in the
+`win32` sibling (`steamxr_win64.json` -> `steamxr_win32.json`) when that one's library is, and otherwise
+drops the variable so the registry's runtime is used. With it the Quest 3 session starts: the runtime
+calls itself `SteamVR/OpenXR in Meta compatibility mode 2.18.4`, the system `oculus`.
+
+Also seen on the way: `xrprobe` asks for API 1.1 first, which SteamVR refuses from a 32-bit process
+(`-4`, `XR_ERROR_API_VERSION_UNSUPPORTED`); `xrprobe variants` now tries 1.0 and 1.1, three sets of
+names, with and without OpenGL, and prints each result.
