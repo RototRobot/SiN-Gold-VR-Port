@@ -447,7 +447,7 @@ Still to do, in the order it matters:
 **Content and release**
 
 - ~~Wages of Sin's deployment~~: `sinvr2015` (§14).
-- The licence for the mod's own code (`src/`, `tools/`, `cmake/`) has not been chosen.
+- The mod's own code is under the Apache License 2.0 (`LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md`); `game/` stays under Night Dive's licence.
 
 ## 11. Controller input
 

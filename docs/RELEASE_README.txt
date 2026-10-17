@@ -5,6 +5,8 @@ A PC VR mod for SiN Gold (Night Dive Studios' re-release of Ritual's 1998 shoote
 expansion, Wages of Sin: stereo 3D, head and hand tracking, the weapon in your hand, punching with
 your fists, walking and crouching in your room, and a comfort vignette.
 
+This mod was made with heavy AI (Claude) assistance.
+
 It changes nothing that ships with the game: it adds its own files beside it, and the game without
 the mod is just as it was.
 
@@ -81,5 +83,6 @@ IF SOMETHING GOES WRONG
 
 
 SiN is by Ritual Entertainment. SiN Gold is by Night Dive Studios. This is a fan mod, not affiliated
-with either. The game logic here is built from Night Dive's released source, used under their
-licence (see "SiN Gold VR licences"), and is for use with SiN Gold only.
+with either. The mod's own code is under the Apache License 2.0; the game logic (gamex86.dll) is built
+from Night Dive's released source and is under their licence, for use with SiN Gold only. See the
+"SiN Gold VR licences" folder.

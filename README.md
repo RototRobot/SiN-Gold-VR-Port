@@ -1,232 +1,221 @@
 # SiN Gold VR
 
-A PC VR mod for **SiN Gold**, Ritual Entertainment's 1998 shooter as re-released by Night Dive Studios.
-The goal is a native-feeling VR game: stereo rendering in the headset, 6DoF head tracking, roomscale
-movement and tracked motion controllers.
+A virtual reality mod for **SiN Gold** (PC, Steam or GOG) and its expansion **Wages of Sin**, adding
+stereoscopic rendering, 6DoF head tracking and motion controllers: the weapon in your hand, long guns
+held in both hands, punches thrown with your own fists, and walking and crouching in your room.
 
-> **Version 1.0.** SiN and its expansion, Wages of Sin, playable in VR: the world **in stereo with
-> head tracking**, the HUD in a readable panel, **the VR controllers** for everything, **the weapon in
-> your hand** - drawn where the controller is, firing down its own barrel, its muzzle flash, tracers
-> and bullet holes coming from there - long guns held in both hands, **punches thrown with your
-> fists**, weapons picked from your shoulders and hip, **walking and crouching in your room**, haptics,
-> snap or smooth turning, and a comfort vignette. Left-handed players get the mirror image of all of it.
+It runs as a renderer the engine loads (`ref_vr.dll`) over the game's own OpenGL renderer, with game
+logic built from Night Dive Studios' released source. Nothing that ships with the game is changed.
 
-**Just want to play?** See [Installing a release](#installing-a-release). **Working on the mod?** Start
-with [docs/HANDOFF.md](docs/HANDOFF.md).
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-## How it works
+> [!NOTE]
+> **This mod was made with heavy AI (Claude) assistance.** I want to be upfront
+> about that.
 
-SiN runs on a modified Quake II engine. The engine (`sin.exe`) and its OpenGL renderer (`ref_gl.dll`)
-are closed source. The game logic was released as source by Night Dive Studios in 2020, and is in
-[`game/`](game). The mod works within that split, and replaces nothing that ships with the game:
+> [!WARNING]
+> **This is version 1.0.** Both campaigns are playable from start to finish in VR, but expect rough
+> edges. Bug reports with logs are very welcome; see [Troubleshooting](#troubleshooting).
 
-- **`ref_vr.dll`** is a renderer the engine loads when started with `+set vid_ref vr`. It loads the
-  stock `ref_gl.dll`, passes the engine's calls through to it, and adds the VR side over OpenXR. The
-  world is rendered twice per frame through the engine's own stereo loop, once into each eye's
-  headset buffer, with the view taken from the headset. The HUD, crosshair and console go into a
-  panel in front of you rather than across the whole field of view.
-- **`sinvr\gamex86.dll`** is the game logic, built from Night Dive's source. It is where VR gameplay
-  changes (aiming, comfort) will go. The engine loads it for `+set game sinvr`.
+> [!IMPORTANT]
+> **Windows may block this mod from running.**
+>
+> **Smart App Control** (Windows 11) refuses unsigned code outright. This mod is unsigned, so on a
+> machine where SAC is enforced the game will start and the VR renderer will not load. SAC has no
+> exclusion list; the only option is to turn it off:
+> `Windows Security → App & browser control → Smart App Control → Off`.
+>
+> Ordinary antivirus may also object: a renderer DLL that patches the running game looks a lot like
+> what malware does. An exclusion for the game folder fixes that.
 
-The client that reads input is closed, so the controllers reach the game the way a player's own key
-binds and joystick would: buttons run console commands, and the thumbsticks arrive as a joystick the
-engine polls for itself.
+---
 
-Background: [docs/ENGINE_NOTES.md](docs/ENGINE_NOTES.md) (how the engine fits together),
-[docs/OPENXR_NOTES.md](docs/OPENXR_NOTES.md) (the 32-bit OpenXR path) and
-[docs/Q2VR_REFERENCE.md](docs/Q2VR_REFERENCE.md) (lessons taken from Quake II VR ports).
+## About the game
+
+**SiN** (Ritual Entertainment, 1998) is a Quake II engine shooter: Colonel John Blade, HardCorps, a
+city run by SinTEK and the mutagen U4. **SiN Gold** is Night Dive Studios' 2020 re-release, with the
+expansion **Wages of Sin** (2015, Inc.) in the same package, and Night Dive released its game logic as
+source.
+
+It was never made for VR - one camera, a flat HUD, weapons built to be seen from one angle on a
+monitor - but it fits well. Its levels are built at human scale, its guns are big and readable, and its
+fists, mutant hands and long guns map naturally onto two tracked hands.
+
+---
 
 ## Requirements
 
-- **SiN Gold** from Steam or GOG: the 2020 Night Dive release. Wages of Sin comes with it.
-- **Windows 10 or 11** and a PC VR headset with an OpenXR runtime that supports **32-bit**
-  applications, since SiN is a 32-bit game. SteamVR does. Tested with an **HP Reverb G2** (SteamVR's
-  Windows Mixed Reality driver) and a **Meta Quest 3** over **Steam Link**.
+- **SiN Gold** for PC: the Steam or the GOG release (the 2020 Night Dive version). Wages of Sin comes
+  with it.
+- A PC VR headset with two tracked motion controllers
+- **SteamVR** installed and running (its OpenXR runtime is what runs the mod: SiN is a 32-bit game, and
+  SteamVR's runtime supports 32-bit applications)
+- Windows 10 or 11
 
-## Installing a release
+Developed and tested on an **HP Reverb G2**, and tested on a **Meta Quest 3** over **Steam Link**.
+Bindings are suggested for HP Reverb G2, Windows Mixed Reality, Oculus Touch and Valve Index
+controllers. Nothing is specific to one headset: field of view, eye separation and render resolution
+all come from the runtime.
 
-1. Download `SiN-Gold-VR-<version>.zip` from the project's Releases page.
-2. Find your SiN Gold folder - on Steam, right-click SiN Gold → Manage → Browse local files: the folder
-   with `sin.exe` in it.
-3. Unzip everything into it, keeping the folders. `ref_vr.dll` and `openxr_loader.dll` end up beside
-   `sin.exe`, with a `sinvr` folder (SiN), a `sinvr2015` folder (Wages of Sin) and four launchers.
-4. Start SteamVR, put the headset on and run **`SiN VR.bat`** or **`SiN VR - Wages of Sin.bat`**. Stand
-   up straight and click the left stick twice to recentre.
+---
 
-The zip has a short read-me with the controls. Nothing that came with the game is changed; to
-uninstall, delete `ref_vr.dll`, `openxr_loader.dll`, the four `SiN VR` launchers and the `sinvr` and
-`sinvr2015` folders. (`sinvr2015\locale` is a link to the game's own `2015\locale`, which Wages of Sin's
-launcher makes the first time it runs so that the expansion's menus are found; deleting the link leaves
-the game's folder alone.)
+## Features
 
-## Building
+### Rendering
 
-You need:
+- **True stereo, both eyes every frame**, through the engine's own two-pass stereo loop and an OpenXR
+  projection layer.
+- **Per-eye asymmetric projection** from the runtime, and SteamVR's recommended resolution
+  (`vr_resolution` scales it).
+- **The HUD, crosshair and console in a panel** at a comfortable distance, the same in both eyes.
+- **Menus and loading screens on a virtual screen** that comes up in front of you.
+- **No view bob, roll or kick**: only your head moves the camera.
 
-- **Visual Studio 2022**, or its Build Tools, with *Desktop development with C++*. That includes CMake.
-- **Python 3**. The OpenXR loader generates some of its source while it builds.
-- **The OpenXR SDK source.** By default the build uses `..\OpenXR-SDK-Source-release-1.1.63` beside this repository.
-  If that folder is missing, it fetches the pinned release from GitHub instead. Pass `-DSINVR_OPENXR_SDK=<path>` to use
-  another copy.
+### Hands and weapons
 
-Then run:
+- **The weapon in your hand**: drawn where the controller is, firing down its own barrel, with its
+  muzzle flash, tracers, shell cases and bullet holes coming from there.
+- **The missing sides of the guns rebuilt.** SiN's view models were only modelled on the side the
+  original camera saw; the other side is now that side reflected, following the gun through its
+  firing animation.
+- **Two hands on long guns**: grip the fore-end with your other hand to aim with both. The arms SiN
+  built into the models are taken out and your own hand is drawn instead.
+- **Set each weapon's grip in the headset**: hold the grip button and place the weapon in your hand.
+- **Punch with your fists** (and the mutant hands): a swing lands where your fist goes, harder the
+  faster you swing, with a little aim assist.
+- **Pick weapons from your body**: reach over a shoulder for the next or previous weapon, to your hip
+  for the magnum, both hands up for the fists.
+- **Haptics** for shots, punches and the quantum destabilizer's charge.
+- **Left-handed mode**: the mirror image of all of it.
+- **Wages of Sin's own weapons** too: the dual magnums in both hands, a guided missile steered with
+  your hand or your head, and the rest.
+
+### Movement and comfort
+
+- **Roomscale**: walk around your room and the player follows, stopped by walls and climbing stairs;
+  turns pivot on you.
+- **Physical crouch**: crouch for real to crouch, and your view stays out of the ceiling.
+- **Smooth or snap turning**, and movement towards where you look or where your hand points.
+- **An optional comfort vignette** that narrows the view while the stick moves you.
+
+---
+
+## Installation
+
+### 1. Copy the files
+
+Download `SiN-Gold-VR-<version>.zip` from the Releases page and unzip everything into the folder that
+contains `sin.exe`, keeping the folders. Steam's default:
 
 ```
-cmake --preset win32
-cmake --build --preset release
+C:\Program Files (x86)\Steam\steamapps\common\SiN 1\
 ```
 
-If `cmake` is not on your PATH, the copy bundled with VS 2022 is at
-`C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`.
+(On Steam: right-click SiN Gold → Manage → Browse local files.)
 
-The output goes to `build\win32\stage\Release\`, laid out like the game folder.
+| File | What it is |
+|---|---|
+| `ref_vr.dll` | The VR renderer, which loads the game's own `ref_gl.dll` |
+| `openxr_loader.dll` | The OpenXR loader, 32-bit |
+| `sinvr\gamex86.dll` | SiN's game logic, with the VR changes |
+| `sinvr2015\gamex86.dll` | Wages of Sin's game logic, with the VR changes |
+| `SiN VR*.bat` | The launchers (below) |
+| `SiN Gold VR - Read Me.txt`, `SiN Gold VR licences\` | A short read-me, and the licences |
 
-## Installing from a build
+### 2. Start the game
 
-```
-powershell -ExecutionPolicy Bypass -File tools\deploy.ps1
-```
-
-By default this installs into the Steam folder; pass `-GameDir <folder>` for another location. It copies:
-
-- `ref_vr.dll` and `openxr_loader.dll` beside `sin.exe`
-- `gamex86.dll` into `sinvr\`
-
-It also adds four launchers beside `sin.exe`, and links `sinvr2015\locale` to the expansion's
-`2015\locale`. `tools\package.ps1` packs the same files into `dist\SiN-Gold-VR-<version>.zip` for a
-release:
+Start SteamVR and put the headset on, then run a launcher from the game folder:
 
 | Launcher | What it does |
 |---|---|
-| `SiN VR.bat` | VR on: the world is drawn in stereo in the headset, menus on a virtual screen. Start SteamVR first. |
-| `SiN VR (flatscreen).bat` | The same mod with VR off. Use it to check that the pass-through changes nothing. |
-| `SiN VR - Wages of Sin.bat` | The expansion, Wages of Sin, in VR - everything above works there too. |
-| `SiN VR - Wages of Sin (flatscreen).bat` | The expansion through the mod with VR off. |
+| `SiN VR.bat` | SiN in VR |
+| `SiN VR - Wages of Sin.bat` | Wages of Sin in VR; its New Game also offers the original SiN |
+| `SiN VR (flatscreen).bat` | The same mod with VR off |
+| `SiN VR - Wages of Sin (flatscreen).bat` | The same, for Wages of Sin |
 
-**From Steam's Play button instead.** In the Steam library, right-click SiN Gold → Properties →
-Launch Options, and enter:
+**Or from Steam's Play button:** right-click SiN Gold → Properties → Launch Options:
 
 ```
 +set game sinvr2015 +set vid_ref vr +set vr_enable 1
 ```
 
-Steam puts these after its own arguments for whichever entry is played - "Play" adds nothing,
-"Play Wages of SiN" adds `+set game 2015` - so either one starts the mod's Wages of Sin folder, and
-its New Game asks which adventure: Wages of Sin or the original Sin. (The same options with `sinvr`
-in place of `sinvr2015` start only SiN, from either entry.) Empty the box to play without VR again.
-It also takes over the "Play CTF" entry while it is set.
+Steam adds these after its own arguments, so both "Play" and "Play Wages of SiN" then start the mod's
+Wages of Sin, whose New Game asks which adventure to play. Run `SiN VR - Wages of Sin.bat` once first:
+it links `sinvr2015\locale` to the game's own `2015\locale`, which is where the expansion's menus and
+dialogue are found. Empty the box to play without VR again.
 
-Wages of Sin keeps its own settings (`sinvr2015\players\blade\config.cfg`), separate from SiN's: a
-weapon's grip, left-handed mode and the rest are set for each game on its own.
+When the game starts, **stand up straight and click the left stick twice** to recentre: forward and
+your crouching height are measured from there.
 
-`tools\deploy.ps1 -Uninstall` removes exactly what was installed. Launching SiN from Steam as normal is
-unaffected either way.
+---
 
 ## Controls
 
-| Control (Reverb G2) | Does |
+Defaults for right-handed play, on Touch-style controllers (Reverb G2, Quest, Rift). With
+`vr_left_handed 1` each hand takes the other's buttons and stick.
+
+| Control | Action |
 |---|---|
-| Left stick | Move and strafe - forward is where you are looking (`vr_move_dir`) |
-| Right stick, left/right | Turn - smoothly, or `vr_snap_angle` degrees a push with `vr_snap_turn 1` |
+| Left stick | Move and strafe; forward is where you look (`vr_move_dir`) |
+| Left stick, click twice | Recentre |
+| Right stick | Turn: smoothly, or `vr_snap_angle` degrees a push with `vr_snap_turn 1` |
+| Right stick, click | The game menu (Escape) |
 | Right trigger | Fire |
 | Left trigger | Use |
-| Right **A** | Jump |
-| Left **X** | Crouch |
-| Right **B** | Next weapon, with `vr_weapon_buttons 1` (off by default: the shoulders do it) |
-| Left **Y** | Previous weapon, with `vr_weapon_buttons 1` |
-| Left grip | Run - or, with your left hand at a rifle's fore-end, hold it in both hands (see below) |
-| Right stick, click | Opens and closes the game menu (Escape) |
-| Right stick, up/down, while adjusting a weapon | Makes it bigger or smaller |
-| Right grip, held | Lets go of the weapon so you can take it another way - see below |
-| Right hand over your right shoulder, right grip | Next weapon |
-| Right hand over your left shoulder, right grip | Previous weapon |
+| A | Jump |
+| X | Crouch |
+| Left grip | Run; at a long gun's fore-end, hold it in both hands |
+| Right grip, held | Let go of the weapon to set how it sits in your hand; the right stick sizes it |
+| Right hand over your right / left shoulder, right grip | Next / previous weapon |
 | Right hand at your right hip, right grip | The magnum |
-| Both hands up at your shoulders, both grips together | The fists |
-| Swing a fist, with the fists out | Punches with that hand, where the fist is - the trigger still punches too |
-| Any button, on "PRESS ANY KEY TO CONTINUE" | Continues |
-| Left stick, click twice | Recentre: the way you are standing and facing becomes forward |
-| Walk in your room | Walks the player, stopped by walls like any other movement |
-| Crouch in your room | Crouches the player, once your head is `vr_crouch_depth` below where you recentred |
+| Both hands at your shoulders, both grips | The fists |
+| Swing a fist | Punch with that hand |
+| Walk / crouch in your room | Walk / crouch |
 
-On the Reverb G2 the two **menu** buttons never reach the game: SteamVR keeps them for its own
-dashboard, and a press takes the input focus away instead. So the menu is on the right stick's click.
-They are still bound, for controllers whose runtime does pass them on. The Windows button beside them
-is the runtime's own and is never offered to an application at all.
+B and Y cycle weapons too with `vr_weapon_buttons 1`. In a menu, on the loading screen or with the
+console up, the sticks are the arrow keys, the trigger is Enter and anything else is Escape.
 
-**Left-handed.** `vr_left_handed 1` puts the weapon in the left hand and gives each hand the other's
-buttons and stick: fire is the left trigger, use the right, the menu is the left stick's click, and so
-on down the table. The weapon is drawn mirrored down its own middle, so the side of it that was
-modelled is the side you see and the barrel it fires from moves with it. What a weapon remembers about
-how you hold it is kept as the right hand would hold it and mirrored as it is used, so a weapon you
-have settled in one mode is settled in the other too. The setting is read when the renderer starts:
-set it and run `vid_restart`, or set it before launching.
+### Setting a weapon in your hand
 
-**Putting a weapon where you want it.** Every weapon starts from a measured guess at where your hand
-holds it and how big it should be. To change one, hold it and **squeeze the grip of the hand it is in**
-(the right, or the left if you are left-handed): after a moment the weapon stops following your hand
-and hangs in the air. **Your controllers appear while you do it**: a cross where each hand is holding,
-its arms along the way the hand is turned, and a line out of the front of the controller showing where
-it points. Line the cross up with the part of the gun you want in your hand and the line up with the
-barrel. The weapon also stops breathing while you do this - its idle animation is held still, so the
-only thing moving is your hand. Move your hand to hold it the way you want - and push that hand's
-stick up or down to make it bigger or smaller - then let go of the grip.
-It is remembered for that weapon, and kept between sessions. `vr_weapon_reset 1` in the console puts
-the weapon you are holding back to its first guess.
+Every weapon starts from a measured guess at where your hand holds it. To change it, hold the weapon
+and **squeeze and hold the grip of that hand**: the weapon stops following your hand and your
+controllers appear - a cross where each hand holds and a line along where it points. Move your hand to
+hold it the way you want, push the stick up or down to resize it, then let go. It is remembered per
+weapon. With the gun hand's grip held, squeezing the other hand's grip sets the fore-end there.
+`vr_weapon_reset 1` puts the weapon in hand back to its first guess.
 
-**Reaching for a weapon.** The shoulders and the hip on your gun side are measured from your head, so
-they fit your height and turn with you, and the controller gives a light tap when your hand gets there.
-Reach over your gun hand's own shoulder and squeeze its grip for the next weapon, over the other
-shoulder for the previous one; squeeze it at your gun-side hip to draw the magnum. Put both hands up at
-your shoulders and squeeze both grips together for the fists - one hand's grip waits a third of a
-second for the other. Left-handed, all of it is the mirror image. Anywhere else the grips do what they
-always did: the gun hand's adjusts the weapon when held, the other hand's runs or steadies a rifle.
+### Two hands on a long gun
 
-**Walking and crouching in your room.** Step, lean or walk in your room and the player goes with
-you: the body - what the game collides with - follows your head, through the world's own movement, so
-walls stop it, stairs are climbed and turns pivot on you. Lean over something and your head can go
-`vr_lean` (30 cm) past where your body is stopped; push it further, into a wall, and the room slides
-instead, so you never see through. Duck down, about 35 cm from where you were standing, and the player
-crouches: you fit under what a crouch fits under, and your eye stays below whatever is over you. The
-crouch button still works as it always did, dropping you as far as SiN's own crouch. **Recentre
-standing up straight** - two clicks of the left stick - since the crouch is measured from there. The
-body follows a point just behind and below your eyes, where your neck is, so nodding or looking at
-the floor does not shuffle you about.
+Put your other hand on the front of the gun - the fore-end, where SiN's own model had its left hand -
+and squeeze that hand's grip: the gun lies along the line from your gun hand to the other, and you aim
+with both. Let go and it follows the gun hand alone.
 
-**Two hands on a long weapon.** Put your other hand where you would hold the front of the gun - the
-fore-end, where SiN's own model had its left hand (on the rocket launcher, the handle out on its left
-side; on the chaingun, the outside of the loop handle round its left side), or about 30 cm ahead of
-your gun hand along the barrel on the quantum destabilizer - and **squeeze that hand's grip**. The gun hand
-stays where it is and the weapon swings to lie along the line from it to your other hand, so you aim
-with both; it keeps the gun hand's roll. While you hold it, the hand you see stays on the fore-end
-however your real hand moves. Let go of the grip and it follows the gun hand alone again. Squeezed anywhere else, that grip still runs, as before. It works on the shotgun, assault rifle,
-chaingun, rocket launcher, sniper rifle, pulse rifle, quantum destabilizer and spear gun; the magnum,
-the fists and the mines stay one-handed. With `vr_show_hands 2` (or while adjusting) the fore-end
-shows as a small cyan cross, bright while it is held.
+---
 
-To move the fore-end, adjust the weapon as above - squeeze and hold the gun hand's grip until it
-hangs in the air - then put your other hand where the fore-end should be and squeeze *its* grip: the
-fore-end moves there. Let go of both. It is kept on the model, so it stays put if you move or resize
-the grip afterwards, and `vr_weapon_reset 1` forgets it along with the grip.
+## Configuration
 
-**Every weapon, for testing.** A save called `vrtest` is on SiN's training level with every weapon and
-plenty of ammunition: open the console and type `load vrtest`. In any single-player game, the console
-command `wuss` gives every weapon too.
+Every setting is a console variable, changed in the console (`~`) or in the config with the game
+closed, and saved in `sinvr\players\blade\config.cfg` (`sinvr2015\players\blade\config.cfg` for Wages of
+Sin - the two games keep their own). Each button is a cvar too (`vr_bind_fire`, `vr_bind_jump` and so
+on), bindable to any console command.
 
-In a menu, on the loading screen or with the console up, the controllers turn into a keyboard instead:
-the sticks are the arrow keys, the trigger is Enter, and anything else is Escape. The mod knows which
-it is from the engine, so the player does not move while a menu is open.
+### The settings most worth knowing
 
-Other headsets get the same layout where their controllers have the buttons for it; Touch and Index
-controllers are covered, and anything else falls back to trigger, menu and the sticks.
+| Setting | Default | What it does |
+|---|---|---|
+| `vr_left_handed` | `0` | The weapon in the left hand, mirrored, with the hands' buttons swapped. Takes effect at the next start (or `vid_restart`) |
+| `vr_snap_turn` / `vr_snap_angle` | `0` / `45` | Turn in steps of that many degrees instead of smoothly |
+| `vr_move_dir` | `1` | Forward is where `1` your head, `2` your moving hand, `0` your body faces |
+| `vr_vignette` | `0` | Comfort vignette while the stick moves you: `0.6` is a good start, `1` a narrow window |
+| `vr_roomscale` | `1` | Walking in your room walks the player |
+| `vr_crouch` / `vr_crouch_depth` | `1` / `0.35` | Crouching in your room crouches, this many metres down |
+| `vr_resolution` | `1` | Render size against the runtime's recommendation |
+| `vr_haptics` | `1` | Controller buzzes |
+| `vr_punch_full` | `4` | Swing speed (m/s) for a full-strength punch |
+| `vr_missile_steer` | `1` | Wages of Sin's guided missile: `1` your hand steers, `2` your head |
+| `vr_weapon_fill` | `1` | Rebuild the guns' missing sides (`vr_fill_<weapon>` per gun) |
 
-Each one is a cvar, so it can be rebound to any console command without rebuilding: `vr_bind_fire`,
-`vr_bind_use`, `vr_bind_jump`, `vr_bind_crouch`, `vr_bind_weapon_next`, `vr_bind_weapon_prev`,
-`vr_bind_run`, `vr_bind_menu`. A `+command` is released as its `-command`, exactly as a key bind would
-be. A binding of `key:escape`, `key:enter`, `key:up`, `key:down`, `key:left` or `key:right` taps that key
-instead of running a command, which is how the menu button works - SiN's menu has no console command,
-only the escape key. Setting a binding to nothing unbinds it.
-
-These console variables control the mod:
+### Every setting
 
 | Cvar | Default | Meaning |
 |---|---|---|
@@ -275,112 +264,161 @@ These console variables control the mod:
 | `vr_weapon_reset` | 0 | Set it to 1 to forget the setting for the weapon in hand. Clears itself. |
 | `vr_crosshair` | 1 | SiN's crosshair follows the gun while it is in the hand. 0 leaves it out; 2 leaves it in the middle of the view, where SiN draws it. |
 | `vr_client_bullets` | 0 | 1 puts back the client's own bullet impacts, which are drawn from the eye rather than from the barrel. |
+
+### For testing
+
+| Cvar | Default | Meaning |
+|---|---|---|
 | `vr_force_render` | 0 | Draw for the headset even while the runtime says it is idle. For testing with the headset off. |
 | `vr_dump_eye` | 0 | Set it to 1 to write the next frame's two eye images beside `sin.exe`, for checking a build at the desk. |
 | `vr_fake_step` | empty | For testing at the desk: `"1 0 0"` moves the head a metre forward at once (x forward, y left, z up), `"1 0 0 2"` over two seconds, which is walking; `"0"` only says in `sinvr.log` where the body and view are. |
 | `vr_trace` | 1 | Record the renderer calls of each new kind of frame in `sinvr.log`. |
 
-While stereo is on, the mod sets `cl_stereo 1`, `cl_stereo_separation 0`, and switches off view bob
-and roll (`bob_up`, `bob_pitch`, `bob_roll`, `run_pitch`, `run_roll`, `sv_rollangle`), which move the
-camera without the head moving.
+---
 
-The renderer writes `sinvr.log` beside `sin.exe`, and the game console log goes to `sinvr\qconsole.log`.
+## Building from source
 
-**Known issues**
+### Prerequisites
 
-- Do not apply changes in the game's video options while running through the mod. Applying them
-  resets `vid_ref` to `gl`, which swaps the VR renderer out.
-- Every weapon's place in the hand starts from a guess measured off the model. Settle the ones you use
-  with the grip button, as above.
-- The crosshair follows the gun rather than the head: it is SiN's own crosshair, drawn in the direction
-  the weapon points, and both eyes see it at the same angle, so it sits out there like a red dot rather
-  than on a pane of glass. Point the gun away from where you are looking and it leaves the view, which
-  is what it should do.
-- **Punching**: a swing counts when the fist goes past `vr_punch_speed` the way the controller points -
-  knuckles first, so a jab, a hook and an uppercut all count and pulling your arm back never does. It
-  lands on whatever your fist runs into, out to about 40 cm past it; failing that, on the enemy within
-  the fists' own reach (about 1.6 m, the same as the trigger's punch) nearest where you are looking or
-  where your fist was headed, if there is nothing solid in between; and failing that, on the wall your
-  swing went into, or on nothing. A fist that has gone through a wall hits the wall where your arm went
-  in. The controller buzzes when a punch connects.
-- **The guns' right sides are rebuilt, not original.** SiN's view models were only ever meant to be seen
-  from behind and to the left, so most of each gun's right side was never modelled - from the right a
-  gun used to be a few floating slivers. The right side is now the left side reflected across the
-  gun's middle, texture and all. It is solid and looks right from a distance; up close, details that
-  are not symmetrical - an ejection port, a label - appear on both sides. The chaingun is left as it
-  was, having a box on its left side only; `vr_fill_<weapon> 0` does the same for any other that looks
-  wrong. The magnum's own hand and a sleeve along the pulse rifle's top are not copied. The rebuilt side
-  follows the gun through its firing animation, and is only there while the gun is idling or firing: raising, lowering, reloading and changing mode turn
-  the gun in ways a mirror image would follow the wrong way, so for those moments it is the gun as
-  built.
-- Most of SiN's two-handed weapons modelled a left arm reaching in to the fore-end, all one piece with
-  the gun. That arm is left out now (`vr_weapon_arm 1` puts it back), and your other hand is drawn
-  where it really is instead, as the fists' arm for that hand - a fist, since that is the only hand
-  model the game has, which also means it holds the fore-end as a fist. It sits the way the fists do,
-  so settling the fists with the grip button settles it too. The quantum destabilizer never had a
-  modelled hand; the magnum and the mines keep theirs, which is the gun hand.
-- The weapon's idle animation is what makes it breathe and sway. A weapon on a controller already
-  moves with the hand, so it is drawn held on the first frame of its main idle (`vr_weapon_idle 1` lets
-  it play). Only the idle is held: firing, reloading and putting the weapon away animate as they always
-  did, and the muzzle stays where the model has it. The rebuilt right side of a gun needs this - it is
-  a reflection, so a swaying gun's two sides would sway opposite ways.
-- A mirrored weapon - left-handed mode - is lit as its mirror image was: SiN shades a model from its
-  own list of normals, which the mirror does not reach, so the light on the gun falls where it would
-  have fallen in the right hand. Nothing else about it is out of place, and the fists, having an arm
-  each side already, are not mirrored at all.
-- The weapon is put into the frame by sin.exe itself, through two calls this mod redirects, which is
-  what carries its muzzle flash, tracers and shell cases along with it. Both are checked against the
-  Steam build before anything is changed, so another build of `sin.exe` is left alone - the weapon then
-  still goes to the hand, but its effects stay at the eye.
-- **Crouching is measured from where you recentred.** Recentre while sitting or stooping and standing
-  up straight only makes you taller; recentre bent over and a smaller duck crouches. Recentre standing
-  up straight. Playing seated, crouch with the button (`vr_crouch 0` if a lean forward ever crouches you).
-- A step the world refuses - a wall, a railing - is kept between your head and your body, up to
-  `vr_lean`, and anything past that slides the room. Stand back up, or step back, and the body is
-  under you again. Steps are taken only on foot: in a vehicle, while dead or with the console or a
-  menu up, the view still follows your head but the body stays put.
-- **The controllers only work while the headset is awake.** OpenXR gives an application controller input
-  only while it has the input focus, and SteamVR takes the focus away when the headset goes to sleep -
-  put it down on a desk and the game stops hearing the controllers. For testing with the headset off your
-  head, stop it sleeping: turn off SteamVR's option to pause VR when the headset is idle, or cover the
-  proximity sensor between the lenses.
-- **Raising `vr_resolution` in the middle of a session can be refused** after it has been lowered in
-  the same session - SteamVR will not make the bigger buffers, even at 1. The picture stays at the last
-  size that worked, the console says so, and `vid_restart` makes them afresh at the size asked for.
-  Setting it once and restarting never runs into this.
-- Head poses are measured from where you were when you put the headset on. `vr_recenter 1` in the
-  console does it again if you end up off-centre.
+- **Visual Studio 2022** (or Build Tools) with *Desktop development with C++*, which includes CMake.
+- **Python 3**: the OpenXR loader generates some of its source while it builds.
+- **The OpenXR SDK source.** By default the build uses `..\OpenXR-SDK-Source-release-1.1.63` beside
+  this repository, and fetches the pinned release from GitHub if it is missing. Pass
+  `-DSINVR_OPENXR_SDK=<path>` to use another copy.
 
-## Roadmap
+Everything is built **32-bit**: `sin.exe` is a 32-bit process, and the game DLL has to match its ABI.
 
-1. ✅ Pass-through renderer, game DLL built from source, and a 32-bit OpenXR loader
-2. ✅ Virtual screen in the headset, from an OpenXR session on SiN's own GL context
-3. ✅ Stereo rendering and head-tracked views, driven by the engine's own two-pass stereo loop
-4. ✅ HUD, crosshair and console in a panel at a comfortable distance
-5. ✅ Motion controller input: sticks to move and turn, buttons bound to commands
-6. ✅ Tracked hands: the weapon is drawn in the hand, fires down its own barrel, and carries its
-   effects with it; each weapon's grip can be set in the headset, long weapons can be held in both
-   hands, and left-handed players get the mirror image of all of it
-7. ✅ Roomscale comfort: snap turning, the body following the head through the world, and crouching
-   in the room
-8. ✅ Wages of Sin: the same VR, from its own launcher
-9. ✅ Release packaging (1.0.0)
+### Build
 
-## Repository layout
+```bat
+cmake --preset win32
+cmake --build --preset release
+```
+
+The output goes to `build\win32\stage\Release\`, laid out like the game folder.
+
+### Install or package
+
+```bat
+powershell -ExecutionPolicy Bypass -File tools\deploy.ps1     :: into the Steam folder (-GameDir for another; -Uninstall removes it)
+powershell -ExecutionPolicy Bypass -File tools\package.ps1    :: the release zip, in dist\
+powershell -ExecutionPolicy Bypass -File tools\desk-test.ps1 -Vr -OutDir <folder>   :: an unattended test run
+```
+
+### How it works
+
+SiN runs on a modified Quake II engine. The engine (`sin.exe`) and its OpenGL renderer (`ref_gl.dll`)
+are closed source; the game logic was released by Night Dive Studios and is in [`game/`](game).
+
+- **`ref_vr.dll`** is a renderer the engine loads for `+set vid_ref vr`. It loads the stock
+  `ref_gl.dll`, passes the engine's calls through, and adds the VR side over OpenXR: each eye rendered
+  through the engine's own stereo loop, the 2D in a panel, the controllers as console commands and an
+  emulated joystick, and a few calls inside `sin.exe` redirected so the weapon, its effects and the
+  player's movement follow the headset and hands.
+- **`gamex86.dll`**, built from Night Dive's source for SiN (`sinvr`) and Wages of Sin (`sinvr2015`),
+  takes aim from the hand, swing punches, roomscale steps and the rest. The mod's own game code is in
+  `src/game_vr/`, shared by both; the game copies only call into it.
+
+New to the code? Start with [docs/HANDOFF.md](docs/HANDOFF.md). Background:
+[docs/ENGINE_NOTES.md](docs/ENGINE_NOTES.md), [docs/OPENXR_NOTES.md](docs/OPENXR_NOTES.md) and
+[docs/Q2VR_REFERENCE.md](docs/Q2VR_REFERENCE.md).
+
+### Layout
 
 | Path | Contents |
 |---|---|
-| `src/ref_vr/` | The VR renderer DLL |
-| `game/` | Night Dive's SiN Gold game source (SiN and Wages of Sin) plus the CMake build |
-| `tools/` | `deploy.ps1`, `desk-test.ps1` (an unattended run), and `xrprobe` (an OpenXR diagnostic) |
-| `cmake/` | Build helpers (the OpenXR loader) |
-| `docs/` | Research notes |
+| `src/ref_vr` | The VR renderer: OpenXR, stereo, HUD panel, input, weapons and hands, roomscale, vignette |
+| `src/game_vr` | The mod's game code, shared by SiN and Wages of Sin, and the link to the renderer |
+| `src/shared` | The contract between the renderer and the game DLL |
+| `game` | Night Dive's SiN Gold game source (SiN and Wages of Sin) and its CMake build |
+| `tools` | Install, package and test scripts, and `xrprobe` (an OpenXR diagnostic) |
+| `cmake` | Build helpers (the OpenXR loader) |
+| `docs` | The handoff, research notes and the release read-me |
 
-## Credits and licences
+---
 
-- **SiN** is by Ritual Entertainment. The **game source** in `game/` is © 2020 Night Dive Studios, used under
-  their licence ([game/license.txt](game/license.txt)): non-commercial use with SiN Gold only.
-- **OpenXR** is by the Khronos Group. The loader is built from their SDK (Apache-2.0).
-- **Design reference:** Team Beef's Quake2Quest and GameOrDie007's Quake II PCVR port. They were studied
-  for design only, and no code from them is included.
-- The mod's own code (`src/`, `tools/`, `cmake/`) is under a licence still to be decided.
+## Known limitations
+
+- **Do not apply changes in the game's video options** while playing through the mod: applying them
+  switches the renderer back to `gl`, which takes VR away until the next start.
+- **Weapon grips start from a guess.** Settle the ones you use with the grip button.
+- **The rebuilt sides of the guns are mirror images.** Details that are not symmetrical - an ejection
+  port, a label - appear on both sides. They are only there while a gun idles or fires; raising,
+  lowering and reloading show the gun as built. `vr_fill_<weapon> 0` turns one off.
+- **Your other hand is a fist** on a long gun: it is the only hand model the game has.
+- **A left-handed weapon is lit as its mirror image** was.
+- **Crouching is measured from where you recentred.** Recentre standing up straight; seated, crouch with
+  the button (and `vr_crouch 0` if leaning forward ever crouches you).
+- **The controllers only work while the headset is awake**: SteamVR takes input away from a headset
+  that sleeps.
+- **The menus are SiN's own 640×480 screens**, on a virtual screen.
+
+---
+
+## Uninstalling
+
+Clear the Steam launch option if you set it, then delete from the game folder:
+
+```
+ref_vr.dll   openxr_loader.dll   SiN VR*.bat   SiN Gold VR - Read Me.txt   SiN Gold VR licences\
+sinvr\   sinvr2015\   sinvr.log
+```
+
+`sinvr2015\locale` is only a link to the game's own `2015\locale`: deleting it leaves the game's folder
+alone. The game's own files were never changed.
+
+---
+
+## Troubleshooting
+
+**The game runs on the monitor but nothing appears in the headset.**
+Start SteamVR first and check it shows the headset. `sinvr.log` beside `sin.exe` says what the VR side
+did, and says plainly when something fails.
+
+**The view is offset or facing the wrong way.**
+Click the left stick twice to recentre, standing up straight.
+
+**Controller buttons do nothing, or the wrong thing.**
+SteamVR may have kept an older or custom binding: SteamVR → Settings → Controllers → Manage Controller
+Bindings. The headset also has to be awake for the controllers to work.
+
+**Wages of Sin's New Game starts SiN.**
+Start it with `SiN VR - Wages of Sin.bat` once, which links its menus into place.
+
+**Reporting a bug.**
+Send `sinvr.log` from beside `sin.exe` and `qconsole.log` from `sinvr\` (or `sinvr2015\`).
+
+---
+
+## Licence
+
+This project's own code (`src/`, `tools/`, `cmake/`, the build files and the documentation) is
+released under the **Apache License 2.0**. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Not covered by it, see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md):
+
+- **The SiN Gold game source** in `game/` (and the `gamex86.dll` built from it) is © 2020 Night Dive
+  Studios, used under their licence ([game/license.txt](game/license.txt)): non-commercial use, with
+  SiN Gold only.
+- **The OpenXR loader** (Apache 2.0, © The Khronos Group). `openxr_loader.dll` is built unmodified from
+  the OpenXR SDK.
+
+SiN and SiN Gold are © their owners. This mod is unofficial, not affiliated with or endorsed by Ritual
+Entertainment, Night Dive Studios, Activision or their successors, contains no game data, and needs a
+legitimate copy of the game.
+
+---
+
+> [!IMPORTANT]
+> ## Thanks
+>
+> This mod exists because other people solved harder problems first and published their work.
+>
+> - **Night Dive Studios**, for re-releasing SiN Gold and publishing its game source.
+> - **Ritual Entertainment**, for making SiN, and **2015, Inc.** for Wages of Sin.
+> - **The Khronos Group** and the OpenXR contributors, and **Valve** for SteamVR's OpenXR runtime,
+>   which still runs a 32-bit game from 1998.
+> - **Team Beef** (Quake2Quest) and **GameOrDie007** (Quake II PCVR), whose Quake II VR ports were
+>   studied for their design. No code from them is included.
+
+Any mistakes in this mod are my own, not theirs.
