@@ -16,6 +16,7 @@ See the license.txt file for conditions and terms of use for this code.
 #include "surface.h"
 #include "misc.h"
 #include "actor.h"
+#include "player.h" // SiN Gold VR
 
 #define STINGERROCKET_SPEED  1000
 #define STINGERROCKET_RADIUS 120
@@ -264,6 +265,16 @@ void StingerPack::Shoot(Event *ev)
       up     [grav.x] = 0;
       up     [grav.y] = 0;
       up     [grav.z] = 1*grav.sign;
+
+      // SiN Gold VR: the rockets go where the hand on the remote points
+      if(((Player *)(Entity *)owner.ptr)->VRWeaponPose(NULL, NULL, NULL, NULL))
+      {
+         Vector gunpos;
+         Vector gunup;
+
+         gunpos = owner->GunPosition();
+         owner->GetGunOrientation(gunpos, &forward, &right, &gunup);
+      }
 
       // set firing position and direction
       pos = owner->origin - forward*12 + up*owner->viewheight;
