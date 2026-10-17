@@ -227,6 +227,7 @@ These console variables control the mod:
 | `vr_haptics` | 1 | The controllers buzz: as a hand reaches a shoulder or hip, as a gesture fires, when a weapon goes off (harder for the heavy ones, and in both hands while steadying a rifle), rising while the quantum destabilizer charges - full strength at five seconds, which is also when it blows up in your hands - and when a punch lands (harder on an enemy than a wall). 0 turns every buzz off. |
 | `vr_gestures` | 1 | The grips at the shoulders and hip change weapon, as in the controls above. 0 leaves the grips doing only what they do elsewhere. |
 | `vr_move_dir` | 1 | Which way the stick's forward is: 1 where your head faces, 2 where the moving hand's controller points, 0 the way you faced when you last recentred. |
+| `vr_missile_steer` | 1 | How Wages of Sin's guided missile steers: 1 with the hand that holds the weapon, pointed where it should go; 2 with your head, the missile turning to wherever you look; 0 as the flat game does, by the body's facing (left and right only in VR). |
 | `vr_roomscale` | 1 | Walking in your room walks the player. 0 leaves the body where the stick puts it, and only the view moves with your head. |
 | `vr_lean` | 0.3 | How far your head can go past your body when the body is stopped - leaning over a ledge, into a wall - in metres. Past it the room slides instead. |
 | `vr_crouch` | 1 | Crouching in your room crouches the player. 0 leaves crouching to the button. |

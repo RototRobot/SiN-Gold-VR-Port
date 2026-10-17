@@ -1228,3 +1228,11 @@ they are for the headset.
   with the weapon hand, in WoS's `Player` camera code.
 - *The stinger pack fired where the body faced.* Its `Shoot` uses the owner's orientation for a
   client; with a weapon in the hand it now takes `GetGunOrientation`, the hand on the remote.
+- *Head steering as a setting* (owner, same day): `vr_missile_steer` - 1 the hand (default), 2 the head,
+  0 the flat game's. With the head, the missile flies where the head looks, and the camera turns
+  with it; the renderer would add the head's turn on top. So the game sends
+  `SINVR_FEEDBACK_HEAD_STEERS` each frame it steers that way, and while it keeps coming
+  (`vr_view_head_steers`, 300 ms) the view's yaw is the body's as it was when steering began -
+  carried by any snap turn since, through `vr_turn_client_yaw` - plus the head's, instead of the
+  camera's plus the head's: the picture stays on the head, and the missile catches up with it.
+  Firing one is for the headset; desk, a walk in Wages of Sin unchanged.
