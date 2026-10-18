@@ -28,6 +28,7 @@
 #include "vr_room.h"
 #include "vr_turn.h"
 #include "vr_vignette.h"
+#include "vr_holster.h"
 #include "vr_weapon.h"
 #include "vr_gesture.h"
 #include "vr_view.h"
@@ -637,6 +638,7 @@ static int vr_Init(void *hinstance, void *wndproc)
 	vr_gesture_startup();
 	vr_room_startup();
 	vr_vignette_startup();
+	vr_holster_startup();
 	if (vr_enable->value != 0.0f)
 	{
 		vr_input_startup();
@@ -750,6 +752,16 @@ static void vr_Shutdown(void)
 	vrlog_close();
 }
 
+/* The eye's HUD is finished: anything of the mod's own that goes over it, in
+   the same 2D, which vr_gl has mapped into the HUD panel - the holster menus. */
+static void draw_over_hud(void)
+{
+	int width, height;
+
+	window_size(&width, &height);
+	vr_holster_draw(width, height);
+}
+
 static void vr_BeginFrame(float camera_separation)
 {
 	int pass = g_pass++;
@@ -769,6 +781,7 @@ static void vr_BeginFrame(float camera_separation)
 	   finished first, and the next one bound after. */
 	if (g_eye)
 	{
+		draw_over_hud();
 		vr_xr_end_eye();
 		g_eye = NULL;
 	}
@@ -1052,6 +1065,10 @@ static void vr_EndFrame(void)
 {
 	record_call(RE_END_FRAME);
 
+	/* Over the last eye's HUD - or the window's, flat, where only a desk test
+	   (vr_fake_holster) opens a menu. */
+	draw_over_hud();
+
 	if (vr_enable && vr_enable->value != 0.0f)
 	{
 		/* A stereo frame ends here; any other frame goes on the theatre screen.
@@ -1167,6 +1184,10 @@ refexport_t GetRefAPI(refimport_t imports)
 		g_real_slot[i] = real.slot[i];
 		g_ours.slot[i] = (void *)g_thunks[i];
 	}
+
+	vr_holster_set_draw((vr_draw_stretch_pic_t)g_real_slot[RE_DRAW_STRETCH_PIC],
+		(vr_draw_char_t)g_real_slot[RE_DRAW_CHAR], (vr_draw_fill_t)g_real_slot[RE_DRAW_FILL],
+		(vr_draw_get_pic_size_t)g_real_slot[RE_DRAW_GET_PIC_SIZE]);
 
 	g_ours.slot[RE_INIT] = (void *)vr_Init;
 	g_ours.slot[RE_SHUTDOWN] = (void *)vr_Shutdown;

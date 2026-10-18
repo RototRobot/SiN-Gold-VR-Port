@@ -29,6 +29,8 @@ add_library(ref_vr SHARED
 	../shared/sinvr_poses.h
 	vr_view.c
 	vr_view.h
+	vr_holster.c
+	vr_holster.h
 	vr_vignette.c
 	vr_vignette.h
 	vr_xr.c

@@ -63,6 +63,25 @@ void VR_Feedback(int kind, int hand, float strength)
 	}
 }
 
+static HMODULE holsters_module;
+static sinvr_holsters_fn send_holsters;
+
+void VR_SendHolsters(const void *holsters)
+{
+	HMODULE renderer = GetModuleHandleA("ref_vr.dll");
+
+	if (renderer != holsters_module)
+	{
+		holsters_module = renderer;
+		send_holsters = renderer ? (sinvr_holsters_fn)GetProcAddress(renderer, "SinVrHolsters") : NULL;
+	}
+
+	if (send_holsters && holsters)
+	{
+		send_holsters((const sinvr_holsters_t *)holsters);
+	}
+}
+
 static HMODULE pmove_module;
 static sinvr_pmove_fn room_pmove;
 

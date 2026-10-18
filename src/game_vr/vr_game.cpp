@@ -16,6 +16,7 @@
 #include "weapon.h"
 #include "fists.h"
 #include "inventoryitem.h"
+#include "shared/sinvr_poses.h"
 #include "game_vr/vr_link.h"
 #include "game_vr/vr_game.h"
 
@@ -117,6 +118,85 @@ static cvar_t    *vr_punch = NULL;
 static unsigned   vr_punch_seen[2];
 static qboolean   vr_punch_primed[2];
 
+//
+// SiN Gold VR: what the player carries, for the renderer's holster menus - the
+// weapons that can be switched to, in the order weapnext goes through them, and
+// every inventory item. Sent every server frame, with the punches, which run
+// every frame for the player at this machine.
+//
+static void VR_PublishHolsters(Sentient *player, Weapon *current_weapon, InventoryItem *current_item)
+{
+   static sinvr_holsters_t  holsters;
+   Container<int>          &inventory = player->VRInventory();
+   int                      orders[SINVR_HOLSTER_MAX];
+   int                      i, j, n;
+
+   memset(&holsters, 0, sizeof(holsters));
+   holsters.version = SINVR_HOLSTERS_VERSION;
+   holsters.current_weapon = -1;
+   holsters.current_item = -1;
+
+   n = inventory.NumObjects();
+   for(i = 1; i <= n; i++)
+   {
+      Item                  *item = (Item *)G_GetEntity(inventory.ObjectAt(i));
+      sinvr_holster_entry_t *entry;
+
+      if(!item)
+      {
+         continue;
+      }
+
+      if(item->isSubclassOf<Weapon>())
+      {
+         Weapon *weapon = (Weapon *)item;
+         int     order = weapon->Order();
+
+         if((weapon != current_weapon && (!weapon->HasAmmo() || !weapon->AutoChange())) ||
+            holsters.weapon_count >= SINVR_HOLSTER_MAX)
+         {
+            continue;
+         }
+
+         // in weapnext's order
+         for(j = holsters.weapon_count; j > 0 && orders[j - 1] > order; j--)
+         {
+            holsters.weapons[j] = holsters.weapons[j - 1];
+            orders[j] = orders[j - 1];
+         }
+         if(holsters.current_weapon >= j)
+         {
+            holsters.current_weapon++;
+         }
+         entry = &holsters.weapons[j];
+         orders[j] = order;
+         holsters.weapon_count++;
+         if(weapon == current_weapon)
+         {
+            holsters.current_weapon = j;
+         }
+      }
+      else if(item->isSubclassOf<InventoryItem>() && holsters.item_count < SINVR_HOLSTER_MAX)
+      {
+         if(item == current_item)
+         {
+            holsters.current_item = holsters.item_count;
+         }
+         entry = &holsters.items[holsters.item_count++];
+      }
+      else
+      {
+         continue;
+      }
+
+      strncpy(entry->name, item->getClassname(), sizeof(entry->name) - 1);
+      strncpy(entry->icon, item->VRIconName(), sizeof(entry->icon) - 1);
+      entry->amount = item->Amount();
+   }
+
+   VR_SendHolsters(&holsters);
+}
+
 void Player::VRPunches(void)
 {
    unsigned    number;
@@ -143,6 +223,8 @@ void Player::VRPunches(void)
    {
       return;
    }
+
+   VR_PublishHolsters(this, currentWeapon, currentItem);
 
    for(hand = 0; hand < 2; hand++)
    {

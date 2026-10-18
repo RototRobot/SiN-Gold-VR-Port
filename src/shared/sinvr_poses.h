@@ -109,4 +109,35 @@ typedef void (*sinvr_feedback_fn)(int kind, int hand, float strength);
 
 typedef void (*sinvr_pmove_fn)(void *pm, int key, void (*pmove)(void *pm));
 
+/*
+ * The holster menus (src/ref_vr/vr_holster.c): what the player carries, sent by
+ * the game every server frame through ref_vr.dll's SinVrHolsters, for the menus
+ * a grip held at a shoulder (the weapons) or at the other hip (the inventory)
+ * opens. name is the item's class, which "use <name>" takes for either; icon is
+ * the HUD picture it is drawn with; amount is how many, for an item. The current
+ * one is an index into its list, or -1.
+ */
+#define SINVR_HOLSTERS_VERSION 1
+#define SINVR_HOLSTER_MAX 32
+
+typedef struct
+{
+	char name[32];
+	char icon[48];
+	int amount;
+} sinvr_holster_entry_t;
+
+typedef struct
+{
+	int version;             /* SINVR_HOLSTERS_VERSION */
+	int weapon_count;
+	int current_weapon;
+	sinvr_holster_entry_t weapons[SINVR_HOLSTER_MAX];
+	int item_count;
+	int current_item;
+	sinvr_holster_entry_t items[SINVR_HOLSTER_MAX];
+} sinvr_holsters_t;
+
+typedef void (*sinvr_holsters_fn)(const sinvr_holsters_t *holsters);
+
 #endif /* SINVR_POSES_H */

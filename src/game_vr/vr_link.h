@@ -89,4 +89,9 @@ void VR_Pmove(void *pm, int key, vr_pmove_fn pmove);
 /* The renderer is drawing the view from the headset. */
 int VR_Tracking(void);
 
+/* What the player carries, for the holster menus: a sinvr_holsters_t
+   (src/shared/sinvr_poses.h), filled in by the game code. Does nothing without
+   the VR renderer. */
+void VR_SendHolsters(const void *holsters);
+
 #endif /* VR_LINK_H */

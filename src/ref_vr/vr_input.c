@@ -907,6 +907,13 @@ static void let_go(int index)
 
 static void press_action(int index, int down, int menu)
 {
+	/* With a holster menu open, its hand's trigger steps along it. */
+	if (!menu && (index == ACT_FIRE || index == ACT_USE) && vr_gesture_trigger(index == ACT_FIRE, down))
+	{
+		vrlog("    input: %s %s -> the holster menu", actions[index].name, down ? "pressed" : "let go");
+		return;
+	}
+
 	/* The top buttons cycle weapons only if vr_weapon_buttons says so: the
 	   shoulders do it now, and the buttons do what vr_bind_top_* say. */
 	if (!menu && (index == ACT_WEAPON_NEXT || index == ACT_WEAPON_PREV) &&

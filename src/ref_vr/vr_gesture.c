@@ -4,6 +4,7 @@
 #include "refapi.h"
 #include "ref_vr.h"
 #include "vr_gesture.h"
+#include "vr_holster.h"
 #include "vr_input.h"
 #include "vr_poses.h"
 #include "vr_weapon.h"
@@ -16,8 +17,11 @@
 #define DEG_TO_RAD 0.017453292519943295
 
 /* How long a gun hand's grip at a shoulder waits for the other hand to join it
-   before it is taken as a weapon change, in milliseconds. */
+   before it is not the fists, in milliseconds. */
 #define BOTH_HANDS_MS 350
+
+/* How long a grip is held in a holster before it is a menu rather than a tap. */
+#define MENU_HOLD_MS 300
 
 typedef enum
 {
@@ -39,25 +43,18 @@ static struct
 
 static zone_t last_zone[2];
 
-static struct
+/* A grip held in a holster: until it is let go (a tap) or held MENU_HOLD_MS
+   (a menu). The shoulders' is the gun hand's grip, the hip's the other's. */
+typedef struct
 {
 	int active;
+	int menu;
 	zone_t zone;
 	DWORD at;
-} waiting;                 /* the gun hand's grip at a shoulder, the other hand near one too */
+} holding_t;
 
-/* The other hand's grip at its own hip is the inventory: a tap uses the item
-   the HUD shows, and held, it steps to the next item, once and then every
-   INVENTORY_STEP_MS. */
-#define INVENTORY_HOLD_MS 450
-#define INVENTORY_STEP_MS 600
-
-static struct
-{
-	int active;
-	int stepped;
-	DWORD at;
-} inventory;
+static holding_t shoulder;
+static holding_t hip;
 
 static int gun_taken;      /* the gun hand's grip went to a gesture: so does its release */
 static int other_taken;
@@ -172,10 +169,18 @@ static void change_weapon(zone_t zone)
 
 static void fists(void)
 {
-	waiting.active = 0;
+	shoulder.active = 0;
 	vr_input_haptic(LEFT, 0.06f, 1.0f);
 	vr_input_haptic(RIGHT, 0.06f, 1.0f);
 	act("use Fists", "both hands at the shoulders - the fists");
+}
+
+static void hold(holding_t *h, zone_t zone)
+{
+	h->active = 1;
+	h->menu = 0;
+	h->zone = zone;
+	h->at = GetTickCount();
 }
 
 int vr_gesture_gun_grip(int down)
@@ -184,6 +189,19 @@ int vr_gesture_gun_grip(int down)
 
 	if (!down)
 	{
+		if (shoulder.active)
+		{
+			/* let go in the holster: a tap changes weapon, a menu closes as it was */
+			if (shoulder.menu)
+			{
+				vr_holster_close(0);
+			}
+			else
+			{
+				change_weapon(shoulder.zone);
+			}
+			shoulder.active = 0;
+		}
 		if (gun_taken)
 		{
 			gun_taken = 0;
@@ -205,16 +223,9 @@ int vr_gesture_gun_grip(int down)
 		{
 			fists();
 		}
-		else if (is_shoulder(zone_of(other_hand())))
-		{
-			/* the other hand may be on its way to its grip */
-			waiting.active = 1;
-			waiting.zone = zone;
-			waiting.at = GetTickCount();
-		}
 		else
 		{
-			change_weapon(zone);
+			hold(&shoulder, zone);
 		}
 		return 1;
 	}
@@ -235,14 +246,19 @@ int vr_gesture_other_grip(int down)
 	if (!down)
 	{
 		other_at_shoulder = 0;
-		if (inventory.active)
+		if (hip.active)
 		{
-			inventory.active = 0;
-			if (!inventory.stepped)
+			/* let go at the hip: a tap uses the item, a menu closes as it was */
+			if (hip.menu)
+			{
+				vr_holster_close(0);
+			}
+			else
 			{
 				vr_input_haptic(other_hand(), 0.04f, 0.8f);
 				act("invuse", "the inventory item, from the other hip");
 			}
+			hip.active = 0;
 		}
 		if (other_taken)
 		{
@@ -255,9 +271,7 @@ int vr_gesture_other_grip(int down)
 	if (enabled() && is_other_hip(zone_of(other_hand())))
 	{
 		other_taken = 1;
-		inventory.active = 1;
-		inventory.stepped = 0;
-		inventory.at = GetTickCount();
+		hold(&hip, ZONE_NONE);
 		return 1;
 	}
 
@@ -270,32 +284,73 @@ int vr_gesture_other_grip(int down)
 	other_taken = 1;
 	other_at_shoulder = 1;
 	other_pressed_at = GetTickCount();
-	if (waiting.active)
+	if (shoulder.active && !shoulder.menu && GetTickCount() - shoulder.at < BOTH_HANDS_MS)
 	{
 		fists();
 	}
 	return 1;
 }
 
+int vr_gesture_trigger(int gun, int down)
+{
+	if (!(gun ? shoulder.menu : hip.menu))
+	{
+		return 0;
+	}
+
+	if (down)
+	{
+		vr_holster_next();
+		vr_input_haptic(gun ? gun_hand() : other_hand(), 0.02f, 0.5f);
+	}
+	return 1;
+}
+
+/* A grip held long enough in its holster opens that holster's menu; a hand
+   that leaves the holster with the menu open takes what it picked. */
+static void run_holster(holding_t *h, int hand, int kind, int in_holster)
+{
+	if (!h->active)
+	{
+		return;
+	}
+
+	if (!h->menu)
+	{
+		if (GetTickCount() - h->at < MENU_HOLD_MS)
+		{
+			return;
+		}
+		if (vr_holster_open(kind))
+		{
+			h->menu = 1;
+			vr_input_haptic(hand, 0.05f, 0.7f);
+			return;
+		}
+		/* nothing to show: a shoulder is the weapon change it always was */
+		if (kind == VR_HOLSTER_WEAPONS)
+		{
+			change_weapon(h->zone);
+			h->active = 0;
+		}
+		return;
+	}
+
+	if (!in_holster)
+	{
+		vr_holster_close(1);
+		vr_input_haptic(hand, 0.06f, 1.0f);
+		h->active = 0;
+		h->menu = 0;
+	}
+}
+
 void vr_gesture_frame(void)
 {
 	int hand;
 
-	if (waiting.active && GetTickCount() - waiting.at >= BOTH_HANDS_MS)
-	{
-		waiting.active = 0;
-		change_weapon(waiting.zone);
-	}
-
-	/* Held at the other hip: the next item, and on while it is held. */
-	if (inventory.active &&
-		GetTickCount() - inventory.at >= (DWORD)(inventory.stepped ? INVENTORY_STEP_MS : INVENTORY_HOLD_MS))
-	{
-		inventory.stepped = 1;
-		inventory.at = GetTickCount();
-		vr_input_haptic(other_hand(), 0.03f, 0.5f);
-		act("invnext", "the next inventory item, held at the other hip");
-	}
+	run_holster(&shoulder, gun_hand(), VR_HOLSTER_WEAPONS, is_shoulder(zone_of(gun_hand())));
+	run_holster(&hip, other_hand(), VR_HOLSTER_ITEMS, is_other_hip(zone_of(other_hand())));
 
 	if (!enabled())
 	{

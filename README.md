@@ -87,6 +87,9 @@ all come from the runtime.
   faster you swing, with a little aim assist.
 - **Pick weapons from your body**: reach over a shoulder for the next or previous weapon, to your hip
   for the magnum, both hands up for the fists.
+- **Holster menus**: hold the grip over a shoulder and every weapon you carry comes up in front of you;
+  hold it at your other hip for your inventory. The trigger steps along, and taking your hand out of
+  the holster picks it.
 - **Haptics** for shots, punches and the quantum destabilizer's charge.
 - **Left-handed mode**: the mirror image of all of it.
 - **Wages of Sin's own weapons** too: the dual magnums in both hands, a guided missile steered with
@@ -97,6 +100,8 @@ all come from the runtime.
 - **Roomscale**: walk around your room and the player follows, stopped by walls and climbing stairs;
   turns pivot on you.
 - **Physical crouch**: crouch for real to crouch, and your view stays out of the ceiling.
+- **Ladders climb straight**: pushing the stick at a ladder climbs straight up it, without sliding
+  sideways when the stick is a little off square.
 - **Smooth or snap turning**, and movement towards where you look or where your hand points.
 - **An optional comfort vignette** that narrows the view while the stick moves you.
 
@@ -188,10 +193,11 @@ Defaults for right-handed play, on Touch-style controllers (Reverb G2, Quest, Ri
 | Y, click twice | Night-vision goggles on / off (Wages of Sin, once you have them) |
 | Left grip | Run (walk, with `cl_run 1`); at a long gun's fore-end, hold it in both hands |
 | **Right grip, held** | **Move the weapon in your hand; push the right stick up / down to resize it** |
-| Right hand over your right / left shoulder, right grip | Next / previous weapon |
+| Right hand over your right / left shoulder, right grip: a tap | Next / previous weapon |
+| Right hand over a shoulder, right grip: **held** | **The weapon menu**: right trigger steps along, take your hand away from the shoulder to switch to the one picked, let go of the grip there to cancel |
 | Right hand at your right hip, right grip | The magnum |
 | Left hand at your left hip, left grip: a tap | Use the inventory item the HUD shows (powerups) |
-| Left hand at your left hip, left grip: held | Step to the next inventory item, and on while it is held |
+| Left hand at your left hip, left grip: **held** | **The inventory menu**: left trigger steps along, take your hand away from the hip to use the one picked, let go of the grip there to cancel |
 | Both hands at your shoulders, both grips | The fists |
 | Swing a fist | Punch with that hand |
 | Walk / crouch in your room | Walk / crouch |
@@ -271,6 +277,7 @@ on), bindable to any console command.
 | `vr_lean` | 0.3 | How far your head can go past your body when the body is stopped - leaning over a ledge, into a wall - in metres. Past it the room slides instead. |
 | `vr_crouch` | 1 | Crouching in your room crouches the player. 0 leaves crouching to the button. |
 | `vr_crouch_depth` | 0.35 | How far below where you recentred your head has to go to crouch, in metres. It stands again 8 cm above that. |
+| `vr_ladder_assist` | 1 | Pushing the stick at a ladder (within 60 degrees of square on) pushes straight into it, so you climb without sliding sideways. 0 leaves the stick as it is. |
 | `vr_aim` | 1 | Shots come from the weapon in the hand rather than from the player's angles. |
 | `vr_weapon_hand` | 1 | Draw the weapon in the hand instead of in front of the camera. |
 | `vr_left_handed` | 0 | 1 puts the weapon in the left hand, mirrored, and swaps the two controllers' buttons and sticks. Read when the renderer starts, so `vid_restart` after changing it. |
