@@ -154,6 +154,18 @@ dialogue are found. Empty the box to play without VR again.
 When the game starts, **stand up straight and click the left stick twice** to recentre: forward and
 your crouching height are measured from there.
 
+> [!TIP]
+> **Every gun can be moved and resized in your hand - and you will want to.** The grips start from a
+> best guess. With a weapon out:
+>
+> 1. **Squeeze and hold the grip of the hand holding it** (about a second). The gun stops following
+>    your hand.
+> 2. **Move your hand** to where you want to hold it.
+> 3. **Push that hand's stick up or down** to make the gun bigger or smaller.
+> 4. **Let go of the grip.** The gun is held that way from now on, remembered for each weapon.
+>
+> Details in [Setting a weapon in your hand](#setting-a-weapon-in-your-hand).
+
 ---
 
 ## Controls
@@ -172,7 +184,7 @@ Defaults for right-handed play, on Touch-style controllers (Reverb G2, Quest, Ri
 | A | Jump |
 | X | Crouch |
 | Left grip | Run; at a long gun's fore-end, hold it in both hands |
-| Right grip, held | Let go of the weapon to set how it sits in your hand; the right stick sizes it |
+| **Right grip, held** | **Move the weapon in your hand; push the right stick up / down to resize it** |
 | Right hand over your right / left shoulder, right grip | Next / previous weapon |
 | Right hand at your right hip, right grip | The magnum |
 | Both hands at your shoulders, both grips | The fists |
@@ -184,11 +196,11 @@ console up, the sticks are the arrow keys, the trigger is Enter and anything els
 
 ### Setting a weapon in your hand
 
-Every weapon starts from a measured guess at where your hand holds it. To change it, hold the weapon
-and **squeeze and hold the grip of that hand**: the weapon stops following your hand and your
-controllers appear - a cross where each hand holds and a line along where it points. Move your hand to
-hold it the way you want, push the stick up or down to resize it, then let go. It is remembered per
-weapon. With the gun hand's grip held, squeezing the other hand's grip sets the fore-end there.
+Every weapon starts from a measured guess at where your hand holds it, so this is worth doing for the
+guns you use. Hold the weapon and **squeeze and hold the grip of that hand** for about a second: the
+weapon stops following your hand and your controllers appear - a cross where each hand holds and a
+line along where it points. **Move your hand** to hold it the way you want, **push the same hand's
+stick up or down to resize it**, then **let go of the grip**. It is remembered per weapon. With the gun hand's grip held, squeezing the other hand's grip sets the fore-end there.
 `vr_weapon_reset 1` puts the weapon in hand back to its first guess.
 
 ### Two hands on a long gun

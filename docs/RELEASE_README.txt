@@ -51,6 +51,13 @@ again to play without VR.
 Stand up straight and click the left stick twice to recentre when you start: crouching is measured
 from there.
 
+MOVE AND RESIZE YOUR GUNS - every grip starts from a best guess, so set the ones you use:
+  1. With the weapon out, squeeze and HOLD the grip of the hand holding it (about a second).
+     The gun stops following your hand.
+  2. Move your hand to where you want to hold it.
+  3. Push that hand's stick up or down to make the gun bigger or smaller.
+  4. Let go of the grip. It is remembered for each weapon.
+
 
 CONTROLS (right-handed; vr_left_handed 1 swaps the hands)
 
