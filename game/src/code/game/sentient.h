@@ -54,6 +54,10 @@ class EXPORT_FROM_DLL Sentient : public Entity
 private:
    Container<int>		inventory;
 
+public:
+   // SiN Gold VR: what the player carries, for the holster menus (vr_game.cpp)
+   Container<int>   &VRInventory() { return inventory; }
+
 protected:
    Weapon           *currentWeapon;
    InventoryItem    *currentItem;

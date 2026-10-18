@@ -55,6 +55,8 @@ protected:
 
 public:
    str               itemname;
+   // SiN Gold VR: the HUD picture's name, for the holster menus (vr_game.cpp)
+   const char       *VRIconName() { return icon_name.c_str(); }
 
    CLASS_PROTOTYPE(Item);
 
