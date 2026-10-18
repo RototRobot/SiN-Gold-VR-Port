@@ -13,7 +13,8 @@ See the license.txt file for conditions and terms of use for this code.
 #include "flashlight.h"
 #include "specialfx.h"
 #include "player.h" 
-#include "hoverbike.h" 
+#include "hoverbike.h"
+#include "game_vr/vr_game.h" 
 
 #define FLASHLIGHT_RANGE 1000
 
@@ -153,6 +154,9 @@ void Flashlight::EmitLight(Event *ev)
    else
    {
       start = owner->origin + Vector(0, 0, owner->viewheight);
+      // SiN Gold VR: the light goes where the head looks
+      if(owner->isClient())
+         VR_HeadView((Player *)owner.ptr, ((Player *)owner.ptr)->GetVAngle()[YAW], &start, &dir);
       pos = start + dir*FLASHLIGHT_RANGE;
       ignoreent = owner;
    }
@@ -228,6 +232,8 @@ void Flashlight::EmitLight(Event *ev)
    if(!deathmatch->value)
    {
       start = owner->origin + Vector(0, 0, owner->viewheight);
+      if(owner->isClient() && !owner->IsOnBike())
+         VR_HeadView((Player *)owner.ptr, ((Player *)owner.ptr)->GetVAngle()[YAW], &start, NULL);   // SiN Gold VR
       pos   = start + dir * 100;
       trace = G_Trace(start, vec_zero, vec_zero, pos, owner, mask, "Flashlight::EmitLight");
 
