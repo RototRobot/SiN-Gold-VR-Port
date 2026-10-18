@@ -23,4 +23,10 @@ qboolean VR_HoldWeaponStill(Sentient *owner);
 class Player;
 Vector VR_MissileSteering(Player *player, Vector fallback);
 
+/* "use <name>" for an inventory item the player carries - Wages of Sin's
+   flashlight and goggles, the powerups - uses it as invuse would, so that a
+   controller button can name one. Returns false for anything else (weapons go
+   on as before). */
+qboolean VR_UseInventoryItem(Player *player, const char *name);
+
 #endif /* VR_GAME_H */

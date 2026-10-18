@@ -15,6 +15,7 @@
 #include "player.h"
 #include "weapon.h"
 #include "fists.h"
+#include "inventoryitem.h"
 #include "game_vr/vr_link.h"
 #include "game_vr/vr_game.h"
 
@@ -561,4 +562,31 @@ Vector VR_MissileSteering(Player *player, Vector fallback)
    }
 
    return Vector(angles[0], angles[1] + player->worldangles[YAW], angles[2]);
+}
+
+// ---------------------------------------------------------------------------
+
+//
+// SiN Gold VR: "use <name>" reaches only weapons in the original game; an
+// inventory item is used only as the selected one, through invuse. A
+// controller button has to name the item it is for - the flashlight, the
+// goggles - so an item the player carries is used here by name, the same way.
+//
+qboolean VR_UseInventoryItem(Player *player, const char *name)
+{
+   Item *item;
+
+   if(!player || !name || !name[0])
+   {
+      return false;
+   }
+
+   item = player->FindItem(name);
+   if(!item || !item->isSubclassOf<InventoryItem>())
+   {
+      return false;
+   }
+
+   item->ProcessEvent(EV_InventoryItem_Use);
+   return true;
 }
