@@ -26,7 +26,9 @@
  * The renderer draws the view weapon in the tracked hand and says where: the
  * model's origin and angles in the frame it recentred - from the player's eyes,
  * with +x the way their body faces - and the size it draws it at. The player's
- * own yaw turns that into the world. GunPosition is the model's origin and
+ * view yaw turns that into the world: v_angle, which is the client's own, and
+ * not the model's angles - Wages of Sin stops turning those in a vehicle (the
+ * helicopter's minigun), where SiN went on copying v_angle's yaw into them. GunPosition is the model's origin and
  * GetGunOrientation its axes, so the barrel bone Weapon::MuzzleOffset measures
  * from the model's origin lands on the barrel the player sees.
  *
@@ -67,7 +69,7 @@ qboolean Player::VRWeaponPose(Vector *pos, Vector *angles, float *scale, qboolea
       gi.printf("SiN Gold VR: shots come from the weapon in the player's hand\n");
    }
 
-   yaw = worldangles[YAW] * (M_PI / 180.0f);
+   yaw = v_angle[YAW] * (M_PI / 180.0f);
    s = sin(yaw);
    c = cos(yaw);
 
@@ -79,7 +81,7 @@ qboolean Player::VRWeaponPose(Vector *pos, Vector *angles, float *scale, qboolea
    }
    if(angles)
    {
-      *angles = Vector(ang[0], ang[1] + worldangles[YAW], ang[2]);
+      *angles = Vector(ang[0], ang[1] + v_angle[YAW], ang[2]);
    }
    if(scale)
    {
@@ -166,7 +168,7 @@ void Player::VRPunches(void)
          continue;
       }
 
-      yaw = worldangles[YAW] * (M_PI / 180.0f);
+      yaw = v_angle[YAW] * (M_PI / 180.0f);
       s = sin(yaw);
       c = cos(yaw);
       fist = EyePosition() + Vector(origin[0] * c - origin[1] * s, origin[0] * s + origin[1] * c, origin[2]);
@@ -175,7 +177,7 @@ void Player::VRPunches(void)
       // where the head is looking, which is not where the body faces
       if(VR_HeadPose(head_origin, head_angles))
       {
-         Vector(head_angles[0], head_angles[1] + worldangles[YAW], head_angles[2]).AngleVectors(&look, NULL, NULL);
+         Vector(head_angles[0], head_angles[1] + v_angle[YAW], head_angles[2]).AngleVectors(&look, NULL, NULL);
       }
       else
       {
