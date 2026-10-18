@@ -38,6 +38,7 @@
 #include "actor.h"
 #include "ctf.h"
 #include "game_vr/vr_link.h"
+#include "game_vr/vr_game.h"
 
 #include <windows.h>
 
@@ -2507,6 +2508,10 @@ void Player::EventUseItem(Event *ev)
       return;
 
    if(flags & (FL_MUTANT | FL_SP_MUTANT))
+      return;
+
+   // SiN Gold VR: an inventory item can be used by name too (vr_game.cpp)
+   if(VR_UseInventoryItem(this, name))
       return;
 
    if(currentWeapon && !currentWeapon->ChangingWeapons())

@@ -3090,6 +3090,10 @@ void Player::EventUseItem(Event *ev)
    if(flags & (FL_MUTANT | FL_SP_MUTANT))
       return;
 
+   // SiN Gold VR: an inventory item can be used by name too (vr_game.cpp)
+   if(VR_UseInventoryItem(this, name))
+      return;
+
    if(currentWeapon && !currentWeapon->ChangingWeapons())
    {
       if(!Q_stricmp(name, currentWeapon->getClassname()))
