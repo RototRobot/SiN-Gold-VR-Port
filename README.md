@@ -259,7 +259,7 @@ on), bindable to any console command.
 | `vr_snap_turn` | 0 | 1 turns in steps: each push of the turning stick turns you `vr_snap_angle` degrees at once, and the stick has to come back to the middle before it turns you again. 0 is smooth turning. |
 | `vr_snap_angle` | 45 | How far one snap turns you, in degrees. |
 | `vr_weapon_buttons` | 0 | 1 lets the top buttons (B and Y) cycle weapons as well as the shoulders. |
-| `vr_bind_top_other` | `use Flashlight` | What the other hand's top button (Y, right-handed) does while `vr_weapon_buttons` is 0: any console command. A single click waits a third of a second for a second one. |
+| `vr_bind_top_other` | `use Flashlight` | What the other hand's top button (Y, right-handed) does while `vr_weapon_buttons` is 0: any console command. A single click waits half a second for a second one. |
 | `vr_bind_top_other_twice` | `use Goggles` | The same button clicked twice. |
 | `vr_bind_top_gun` | `weaponuse` | The gun hand's top button (B): switches the weapon's mode. |
 | `vr_haptics` | 1 | The controllers buzz: as a hand reaches a shoulder or hip, as a gesture fires, when a weapon goes off (harder for the heavy ones, and in both hands while steadying a rifle), rising while the quantum destabilizer charges - full strength at five seconds, which is also when it blows up in your hands - and when a punch lands (harder on an enemy than a wall). 0 turns every buzz off. |

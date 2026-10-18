@@ -280,7 +280,7 @@ static int said_weapon_buttons;
  * gun hand's (B) switches the weapon's mode, SiN's right mouse button. The
  * vr_bind_top_* cvars rebind them.
  */
-#define TOP_DOUBLE_MS 350
+#define TOP_DOUBLE_MS 500
 
 static action_t top_other = { "top_other", "Other hand's top button", KIND_BUTTON, "use Flashlight" };
 static action_t top_other_twice = { "top_other_twice", "Other hand's top button, twice", KIND_BUTTON,
