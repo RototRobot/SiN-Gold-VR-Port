@@ -271,6 +271,15 @@ static cvar_t *vr_haptics;
 static cvar_t *vr_move_dir;
 static cvar_t *vr_weapon_buttons;
 static int said_weapon_buttons;
+
+/*
+ * With the weapon buttons off, the two top buttons run these instead: the
+ * other hand's (Y, right-handed) turns Wages of Sin's flashlight on and off -
+ * it is an inventory item, with no key of its own - and the gun hand's (B) is
+ * free. vr_bind_top_other and vr_bind_top_gun rebind them.
+ */
+static action_t top_other = { "top_other", "Other hand's top button", KIND_BUTTON, "use Flashlight" };
+static action_t top_gun = { "top_gun", "Gun hand's top button", KIND_BUTTON, "" };
 static int snap_armed = 1;
 static int said_no_snap;
 static int steadying; /* the other hand's grip button has hold of the weapon */
@@ -318,6 +327,8 @@ void vr_input_register(void)
 	vr_haptics = vr_cvar("vr_haptics", "1", CVAR_ARCHIVE);
 	vr_move_dir = vr_cvar("vr_move_dir", "1", CVAR_ARCHIVE);
 	vr_weapon_buttons = vr_cvar("vr_weapon_buttons", "0", CVAR_ARCHIVE);
+	top_other.bind = vr_cvar("vr_bind_top_other", top_other.command, CVAR_ARCHIVE);
+	top_gun.bind = vr_cvar("vr_bind_top_gun", top_gun.command, CVAR_ARCHIVE);
 
 	for (i = 0; i < ACT_COUNT; ++i)
 	{
@@ -889,16 +900,19 @@ static void let_go(int index)
 static void press_action(int index, int down, int menu)
 {
 	/* The top buttons cycle weapons only if vr_weapon_buttons says so: the
-	   shoulders do it now, and the buttons are free for something else. */
+	   shoulders do it now, and the buttons do what vr_bind_top_* say. */
 	if (!menu && (index == ACT_WEAPON_NEXT || index == ACT_WEAPON_PREV) &&
 		vr_weapon_buttons && vr_weapon_buttons->value == 0.0f)
 	{
-		if (down && !said_weapon_buttons)
+		action_t *top = index == ACT_WEAPON_PREV ? &top_other : &top_gun;
+
+		if (down && !said_weapon_buttons && (!top->bind || !top->bind->string || !top->bind->string[0]))
 		{
 			said_weapon_buttons = 1;
 			vr_printf("VR: the weapon buttons are off - reach over a shoulder to change weapon, or set "
 				"vr_weapon_buttons 1");
 		}
+		dispatch(top, down);
 		return;
 	}
 
