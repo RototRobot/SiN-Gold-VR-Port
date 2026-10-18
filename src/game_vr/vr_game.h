@@ -29,4 +29,10 @@ Vector VR_MissileSteering(Player *player, Vector fallback);
    item. Returns false for anything else (weapons go on as before). */
 qboolean VR_UseInventoryItem(Player *player, const char *name);
 
+/* Where the player's head is and the way it looks, in the world, when the
+   renderer is tracking it - for things the head points, like Wages of Sin's
+   flashlight. yaw is the player's view yaw (v_angle's). Returns false
+   otherwise, leaving start and forward alone. */
+qboolean VR_HeadView(Player *player, float yaw, Vector *start, Vector *forward);
+
 #endif /* VR_GAME_H */

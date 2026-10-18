@@ -688,3 +688,36 @@ qboolean VR_UseInventoryItem(Player *player, const char *name)
    }
    return true;
 }
+
+// ---------------------------------------------------------------------------
+
+//
+// SiN Gold VR: the head in the world. The renderer gives it from the player's
+// eyes in the frame it recentred, which the player's view yaw turns into the
+// world, as it does the weapon (VRWeaponPose).
+//
+qboolean VR_HeadView(Player *player, float yaw, Vector *start, Vector *forward)
+{
+   float origin[3];
+   float angles[3];
+   float s, c;
+
+   if(!player || player->entnum != 1 || player->gravaxis || !VR_HeadPose(origin, angles))
+   {
+      return false;
+   }
+
+   s = sin(yaw * (M_PI / 180.0f));
+   c = cos(yaw * (M_PI / 180.0f));
+
+   if(start)
+   {
+      *start = player->EyePosition() + Vector(origin[0] * c - origin[1] * s, origin[0] * s + origin[1] * c,
+                                              origin[2]);
+   }
+   if(forward)
+   {
+      Vector(angles[0], angles[1] + yaw, angles[2]).AngleVectors(forward, NULL, NULL);
+   }
+   return true;
+}
