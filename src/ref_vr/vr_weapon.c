@@ -57,10 +57,8 @@
  * middle of its glove on the first frame of the idle the muzzle is measured
  * from, in the model's units. It is the first guess at the fore-end, in place
  * of fore - the other hand goes where the model had it, which on the rocket
- * launcher is the handle out on its left side. The chaingun's modelled hand
- * floats clear of the gun, so its hand is the outside of the loop handle round
- * its left side instead (vertices 310-357, those more than 12 units left of
- * the body's middle).
+ * launcher is the handle out on its left side. The chaingun is the exception:
+ * it keeps its modelled arms and is held in them (own_hands).
  *
  * middle is the model's own middle across: halfway between the two edges of
  * its upward-facing surfaces, which were modelled all the way across - where
@@ -92,6 +90,7 @@ typedef struct
 	int fill;
 	int keep_count;
 	int keep[1][2];
+	int own_hands; /* held as modelled, in both its own hands: no other hand drawn */
 } weapon_info_t;
 
 static const weapon_info_t weapon_table[] = {
@@ -99,7 +98,12 @@ static const weapon_info_t weapon_table[] = {
 	{ "magnum",    { 53.0f, -36.0f, -31.0f }, 0.35f, 0, 0.0f, 0, { { 0 } }, 0, { 0 }, -36.4f, 1, 1, { { 8, 116 } } },
 	{ "shotgun",   {  8.0f, -14.0f, -15.0f }, 0.60f, 0, 0.30f, 1, { { 30, 95 } }, 1, { 27.6f, -13.3f, -16.4f }, -14.85f, 1 },
 	{ "asrifle",   { 37.0f, -21.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 276, 308 } }, 1, { 79.3f, -18.5f, -39.4f }, -22.25f, 1 },
-	{ "hvgun",     { 30.0f, -25.0f, -38.0f }, 0.35f, 0, 0.30f, 2, { { 200, 309 }, { 358, 405 } }, 1, { 36.9f, -9.0f, -36.6f }, -24.1f, 0 },
+	/* The chaingun keeps both its modelled arms (vertices 200-309 and 358-405)
+	   and is carried in them, the way the game drew it: the owner's choice, as
+	   a heavy gun held in two hands that never come apart. So there is no
+	   fore-end to take hold of and no other hand drawn. Its loop handle, where
+	   the other hand went before, is at (36.9 -9.0 -36.6). */
+	{ "hvgun",     { 30.0f, -25.0f, -38.0f }, 0.35f, 0, 0.0f, 0, { { 0 } }, 0, { 0 }, -24.1f, 0, 0, { { 0 } }, 1 },
 	{ "rlaunch",   { 28.0f, -24.0f, -36.0f }, 0.35f, 0, 0.30f, 1, { { 146, 218 } }, 1, { 49.8f, -6.3f, -33.3f }, -23.5f, 1 },
 	{ "srifle",    { 15.0f, -13.0f, -14.0f }, 0.35f, 0, 0.35f, 1, { { 249, 306 } }, 1, { 30.5f, -12.7f, -13.3f }, -15.9f, 1 },
 	{ "pulse2",    { 25.0f, -18.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 358, 393 } }, 1, { 49.0f, -19.0f, -26.0f }, -23.35f, 1, 1, { { 44, 147 } } },
@@ -1581,7 +1585,7 @@ static int dress_other_hand(entity_t *out, const entity_t *gun, const float view
 	vr_pose_t relative;
 
 	if (!fist_model || (vr_other_hand && vr_other_hand->value == 0.0f) || !current || two_arms() ||
-		!hands[hand].valid)
+		current->info->own_hands || !hands[hand].valid)
 	{
 		return 0;
 	}

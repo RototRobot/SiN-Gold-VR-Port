@@ -79,7 +79,8 @@ all come from the runtime.
   original camera saw; the other side is now that side reflected, following the gun through its
   firing animation.
 - **Two hands on long guns**: grip the fore-end with your other hand to aim with both. The arms SiN
-  built into the models are taken out and your own hand is drawn instead.
+  built into the models are taken out and your own hand is drawn instead. The chaingun is the
+  exception: it is carried in its own two modelled hands, as in the original game.
 - **Set each weapon's grip in the headset**: hold the grip button and place the weapon in your hand.
 - **Punch with your fists** (and the mutant hands): a swing lands where your fist goes, harder the
   faster you swing, with a little aim assist.
