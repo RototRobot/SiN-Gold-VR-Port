@@ -65,7 +65,9 @@ CONTROLS (right-handed; vr_left_handed 1 swaps the hands)
   Right stick           turn - smoothly, or in steps with vr_snap_turn 1
   Right trigger         fire          Left trigger      use
   A                     jump          X                 crouch
-  Y                     flashlight (Wages of Sin, once picked up)
+  B                     switch the weapon's mode (right mouse button)
+  Y                     flashlight      Y, twice      night-vision goggles (Wages of Sin)
+  Grip at the other hip tap: use the inventory item; hold: next item
   Right stick click     menu          Left stick, twice recentre
   Left grip             run, or hold a long gun's front with your other hand
   Right grip, held      let go of the weapon to set how it sits in your hand

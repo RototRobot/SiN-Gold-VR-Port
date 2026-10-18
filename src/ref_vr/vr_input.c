@@ -273,13 +273,20 @@ static cvar_t *vr_weapon_buttons;
 static int said_weapon_buttons;
 
 /*
- * With the weapon buttons off, the two top buttons run these instead: the
- * other hand's (Y, right-handed) turns Wages of Sin's flashlight on and off -
- * it is an inventory item, with no key of its own - and the gun hand's (B) is
- * free. vr_bind_top_other and vr_bind_top_gun rebind them.
+ * With the weapon buttons off, the two top buttons run these instead. The
+ * other hand's (Y, right-handed) turns Wages of Sin's flashlight on and off,
+ * and clicked twice its night-vision goggles - inventory items, with no key of
+ * their own - so a single click waits to see whether a second one follows. The
+ * gun hand's (B) switches the weapon's mode, SiN's right mouse button. The
+ * vr_bind_top_* cvars rebind them.
  */
+#define TOP_DOUBLE_MS 350
+
 static action_t top_other = { "top_other", "Other hand's top button", KIND_BUTTON, "use Flashlight" };
-static action_t top_gun = { "top_gun", "Gun hand's top button", KIND_BUTTON, "" };
+static action_t top_other_twice = { "top_other_twice", "Other hand's top button, twice", KIND_BUTTON,
+	"use Goggles" };
+static action_t top_gun = { "top_gun", "Gun hand's top button", KIND_BUTTON, "weaponuse" };
+static unsigned top_other_clicked; /* a first click waiting for a second, or 0 */
 static int snap_armed = 1;
 static int said_no_snap;
 static int steadying; /* the other hand's grip button has hold of the weapon */
@@ -328,6 +335,7 @@ void vr_input_register(void)
 	vr_move_dir = vr_cvar("vr_move_dir", "1", CVAR_ARCHIVE);
 	vr_weapon_buttons = vr_cvar("vr_weapon_buttons", "0", CVAR_ARCHIVE);
 	top_other.bind = vr_cvar("vr_bind_top_other", top_other.command, CVAR_ARCHIVE);
+	top_other_twice.bind = vr_cvar("vr_bind_top_other_twice", top_other_twice.command, CVAR_ARCHIVE);
 	top_gun.bind = vr_cvar("vr_bind_top_gun", top_gun.command, CVAR_ARCHIVE);
 
 	for (i = 0; i < ACT_COUNT; ++i)
@@ -912,6 +920,24 @@ static void press_action(int index, int down, int menu)
 			vr_printf("VR: the weapon buttons are off - reach over a shoulder to change weapon, or set "
 				"vr_weapon_buttons 1");
 		}
+		if (top == &top_other)
+		{
+			/* the second click of a pair is the goggles; a first one waits */
+			if (down && top_other_clicked && GetTickCount() - top_other_clicked < TOP_DOUBLE_MS)
+			{
+				top_other_clicked = 0;
+				dispatch(&top_other_twice, 1);
+			}
+			else if (down)
+			{
+				top_other_clicked = GetTickCount();
+				if (!top_other_clicked)
+				{
+					top_other_clicked = 1;
+				}
+			}
+			return;
+		}
 		dispatch(top, down);
 		return;
 	}
@@ -1301,6 +1327,13 @@ void vr_input_frame(XrSession session)
 	if (action_set == XR_NULL_HANDLE || !vr_input || vr_input->value == 0.0f)
 	{
 		return;
+	}
+
+	/* A single click of the other top button, once no second one came. */
+	if (top_other_clicked && GetTickCount() - top_other_clicked >= TOP_DOUBLE_MS)
+	{
+		top_other_clicked = 0;
+		dispatch(&top_other, 1);
 	}
 
 	active.actionSet = action_set;

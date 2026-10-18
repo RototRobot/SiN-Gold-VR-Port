@@ -183,16 +183,20 @@ Defaults for right-handed play, on Touch-style controllers (Reverb G2, Quest, Ri
 | Left trigger | Use |
 | A | Jump |
 | X | Crouch |
+| B | Switch the weapon's mode (SiN's right mouse button), for weapons that have two |
 | Y | Flashlight on / off (Wages of Sin, once you have picked it up) |
-| Left grip | Run; at a long gun's fore-end, hold it in both hands |
+| Y, click twice | Night-vision goggles on / off (Wages of Sin, once you have them) |
+| Left grip | Run (walk, with `cl_run 1`); at a long gun's fore-end, hold it in both hands |
 | **Right grip, held** | **Move the weapon in your hand; push the right stick up / down to resize it** |
 | Right hand over your right / left shoulder, right grip | Next / previous weapon |
 | Right hand at your right hip, right grip | The magnum |
+| Left hand at your left hip, left grip: a tap | Use the inventory item the HUD shows (powerups) |
+| Left hand at your left hip, left grip: held | Step to the next inventory item, and on while it is held |
 | Both hands at your shoulders, both grips | The fists |
 | Swing a fist | Punch with that hand |
 | Walk / crouch in your room | Walk / crouch |
 
-B is free (`vr_bind_top_gun`), and Y can be rebound with `vr_bind_top_other`. With
+B and Y can be rebound (`vr_bind_top_gun`, `vr_bind_top_other`, `vr_bind_top_other_twice`). With
 `vr_weapon_buttons 1`, B and Y cycle weapons instead. In a menu, on the loading screen or with the
 console up, the sticks are the arrow keys, the trigger is Enter and anything else is Escape.
 
@@ -255,10 +259,11 @@ on), bindable to any console command.
 | `vr_snap_turn` | 0 | 1 turns in steps: each push of the turning stick turns you `vr_snap_angle` degrees at once, and the stick has to come back to the middle before it turns you again. 0 is smooth turning. |
 | `vr_snap_angle` | 45 | How far one snap turns you, in degrees. |
 | `vr_weapon_buttons` | 0 | 1 lets the top buttons (B and Y) cycle weapons as well as the shoulders. |
-| `vr_bind_top_other` | `use Flashlight` | What the other hand's top button (Y, right-handed) does while `vr_weapon_buttons` is 0: any console command. |
-| `vr_bind_top_gun` | empty | The same for the gun hand's top button (B). |
+| `vr_bind_top_other` | `use Flashlight` | What the other hand's top button (Y, right-handed) does while `vr_weapon_buttons` is 0: any console command. A single click waits a third of a second for a second one. |
+| `vr_bind_top_other_twice` | `use Goggles` | The same button clicked twice. |
+| `vr_bind_top_gun` | `weaponuse` | The gun hand's top button (B): switches the weapon's mode. |
 | `vr_haptics` | 1 | The controllers buzz: as a hand reaches a shoulder or hip, as a gesture fires, when a weapon goes off (harder for the heavy ones, and in both hands while steadying a rifle), rising while the quantum destabilizer charges - full strength at five seconds, which is also when it blows up in your hands - and when a punch lands (harder on an enemy than a wall). 0 turns every buzz off. |
-| `vr_gestures` | 1 | The grips at the shoulders and hip change weapon, as in the controls above. 0 leaves the grips doing only what they do elsewhere. |
+| `vr_gestures` | 1 | The grips at the shoulders and hips change weapon and use the inventory, as in the controls above. 0 leaves the grips doing only what they do elsewhere. |
 | `vr_move_dir` | 1 | Which way the stick's forward is: 1 where your head faces, 2 where the moving hand's controller points, 0 the way you faced when you last recentred. |
 | `vr_missile_steer` | 1 | How Wages of Sin's guided missile steers: 1 with the hand that holds the weapon, pointed where it should go; 2 with your head, the missile turning to wherever you look; 0 as the flat game does, by the body's facing (left and right only in VR). |
 | `vr_vignette` | 0 | The comfort vignette: while the stick moves or smoothly turns you, the edge of the view fades to black, as far in as this says - 0.6 is a good start, 1 closes it to a narrow window, 0 (the default) is off. Walking in your room and snap turns leave it open. |

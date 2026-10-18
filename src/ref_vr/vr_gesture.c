@@ -46,6 +46,19 @@ static struct
 	DWORD at;
 } waiting;                 /* the gun hand's grip at a shoulder, the other hand near one too */
 
+/* The other hand's grip at its own hip is the inventory: a tap uses the item
+   the HUD shows, and held, it steps to the next item, once and then every
+   INVENTORY_STEP_MS. */
+#define INVENTORY_HOLD_MS 450
+#define INVENTORY_STEP_MS 600
+
+static struct
+{
+	int active;
+	int stepped;
+	DWORD at;
+} inventory;
+
 static int gun_taken;      /* the gun hand's grip went to a gesture: so does its release */
 static int other_taken;
 static int other_at_shoulder;
@@ -133,6 +146,12 @@ static int is_gun_hip(zone_t zone)
 	return zone == (gun_hand() == LEFT ? ZONE_HIP_LEFT : ZONE_HIP_RIGHT);
 }
 
+/* And the other hand's. */
+static int is_other_hip(zone_t zone)
+{
+	return zone == (gun_hand() == LEFT ? ZONE_HIP_RIGHT : ZONE_HIP_LEFT);
+}
+
 static void act(const char *command, const char *what)
 {
 	vr_command(command);
@@ -216,12 +235,30 @@ int vr_gesture_other_grip(int down)
 	if (!down)
 	{
 		other_at_shoulder = 0;
+		if (inventory.active)
+		{
+			inventory.active = 0;
+			if (!inventory.stepped)
+			{
+				vr_input_haptic(other_hand(), 0.04f, 0.8f);
+				act("invuse", "the inventory item, from the other hip");
+			}
+		}
 		if (other_taken)
 		{
 			other_taken = 0;
 			return 1;
 		}
 		return 0;
+	}
+
+	if (enabled() && is_other_hip(zone_of(other_hand())))
+	{
+		other_taken = 1;
+		inventory.active = 1;
+		inventory.stepped = 0;
+		inventory.at = GetTickCount();
+		return 1;
 	}
 
 	if (!enabled() || !is_shoulder(zone_of(other_hand())) || !is_shoulder(zone_of(gun_hand())))
@@ -250,6 +287,16 @@ void vr_gesture_frame(void)
 		change_weapon(waiting.zone);
 	}
 
+	/* Held at the other hip: the next item, and on while it is held. */
+	if (inventory.active &&
+		GetTickCount() - inventory.at >= (DWORD)(inventory.stepped ? INVENTORY_STEP_MS : INVENTORY_HOLD_MS))
+	{
+		inventory.stepped = 1;
+		inventory.at = GetTickCount();
+		vr_input_haptic(other_hand(), 0.03f, 0.5f);
+		act("invnext", "the next inventory item, held at the other hip");
+	}
+
 	if (!enabled())
 	{
 		last_zone[LEFT] = last_zone[RIGHT] = ZONE_NONE;
@@ -260,7 +307,8 @@ void vr_gesture_frame(void)
 	for (hand = 0; hand < 2; ++hand)
 	{
 		zone_t zone = zone_of(hand);
-		int counts = is_shoulder(zone) || (hand == gun_hand() && is_gun_hip(zone));
+		int counts = is_shoulder(zone) || (hand == gun_hand() && is_gun_hip(zone)) ||
+			(hand == other_hand() && is_other_hip(zone));
 
 		if (!counts)
 		{
