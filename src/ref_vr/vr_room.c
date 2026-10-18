@@ -185,6 +185,8 @@ static cvar_t *vr_lean;
 static cvar_t *vr_crouch;
 static cvar_t *vr_crouch_depth;
 static cvar_t *vr_fake_step;
+static cvar_t *vr_ladder_assist;
+static unsigned ladder_assists;
 
 static int installed;
 static void *real_finish_move;
@@ -225,6 +227,7 @@ void vr_room_startup(void)
 	vr_crouch = vr_cvar("vr_crouch", "1", CVAR_ARCHIVE);
 	vr_crouch_depth = vr_cvar("vr_crouch_depth", "0.35", CVAR_ARCHIVE);
 	vr_fake_step = vr_cvar("vr_fake_step", "", 0);
+	vr_ladder_assist = vr_cvar("vr_ladder_assist", "1", CVAR_ARCHIVE);
 }
 
 static int recent(DWORD when)
@@ -482,11 +485,91 @@ static void follow(const float taken[2], float yaw)
 	walked += sqrtf(taken[0] * taken[0] + taken[1] * taken[1]);
 }
 
+/*
+ * The ladder helper. Quake's Pmove climbs a ladder from the stick pushing the
+ * player at it, and keeps whatever of the push runs along the wall, slowed but
+ * not stopped - so a stick a little off square, which a head-aimed stick
+ * usually is, slides the player sideways as they climb. With a ladder in the
+ * way the stick is pushing, within LADDER_ANGLE of square on, the push is
+ * turned to go straight into the ladder instead, keeping its strength. It is
+ * worked out from the command and the world alone, so the client's prediction
+ * and the server agree on it. vr_ladder_assist 0 leaves the stick alone.
+ */
+#define CONTENTS_LADDER 0x20000000
+#define LADDER_REACH 4.0f        /* game units ahead the ladder is looked for */
+#define LADDER_ANGLE 0.5f        /* cosine: 60 degrees off square at most */
+
+static void ladder_assist(sin_pmove_t *pm)
+{
+	float yaw, fwd[2], right[2], wish[2], length, origin[3], ahead[3], into[2], n;
+	float forwardmove, sidemove;
+	sin_trace_t tr;
+	int i;
+
+	/* only with the client's prediction hooked too, or the two would disagree */
+	if (!installed || !vr_ladder_assist || vr_ladder_assist->value == 0.0f || !pm->trace ||
+		(pm->s.pm_type != PM_NORMAL && pm->s.pm_type != PM_ZOOM) ||
+		(pm->cmd.forwardmove == 0 && pm->cmd.sidemove == 0))
+	{
+		return;
+	}
+
+	yaw = (float)((short)(pm->cmd.angles[1] + pm->s.delta_angles[1]) * (360.0 / 65536.0) * DEG_TO_RAD);
+	fwd[0] = cosf(yaw);
+	fwd[1] = sinf(yaw);
+	right[0] = sinf(yaw);
+	right[1] = -cosf(yaw);
+
+	forwardmove = pm->cmd.forwardmove;
+	sidemove = pm->cmd.sidemove;
+	wish[0] = fwd[0] * forwardmove + right[0] * sidemove;
+	wish[1] = fwd[1] * forwardmove + right[1] * sidemove;
+	length = sqrtf(wish[0] * wish[0] + wish[1] * wish[1]);
+	if (length < 1.0f)
+	{
+		return;
+	}
+
+	for (i = 0; i < 3; ++i)
+	{
+		origin[i] = pm->s.origin[i] * 0.125f;
+	}
+	ahead[0] = origin[0] + wish[0] / length * LADDER_REACH;
+	ahead[1] = origin[1] + wish[1] / length * LADDER_REACH;
+	ahead[2] = origin[2];
+
+	tr = trace(pm, origin, ahead);
+	if (tr.fraction >= 1.0f || tr.startsolid || !(tr.contents & CONTENTS_LADDER))
+	{
+		return;
+	}
+
+	/* into the ladder: against its face, level */
+	into[0] = -tr.plane.normal[0];
+	into[1] = -tr.plane.normal[1];
+	n = sqrtf(into[0] * into[0] + into[1] * into[1]);
+	if (n < 0.5f || (wish[0] * into[0] + wish[1] * into[1]) / (length * n) < LADDER_ANGLE)
+	{
+		return;
+	}
+	into[0] /= n;
+	into[1] /= n;
+
+	if (length > 32767.0f)
+	{
+		length = 32767.0f;
+	}
+	pm->cmd.forwardmove = (short)(length * (into[0] * fwd[0] + into[1] * fwd[1]));
+	pm->cmd.sidemove = (short)(length * (into[0] * right[0] + into[1] * right[1]));
+	ladder_assists++;
+}
+
 /* Pmove, then the command's step, for the client and the server alike. */
 static void room_pmove(sin_pmove_t *pm, int key, pmove_fn pmove, int client)
 {
 	int moving;
 
+	ladder_assist(pm);
 	pmove(pm);
 
 	moving = (pm->s.pm_type == PM_NORMAL || pm->s.pm_type == PM_ZOOM) && pm->trace;
@@ -881,6 +964,7 @@ void vr_room_uninstall(void)
 	vr_unhook_calls();
 	installed = 0;
 	vrlog("VR: roomscale asked for %u steps; the client took %u (%.0f units in all), the world refused %u, "
-		"the server ran %u; the room slid after the head %u times, and the player crouched in it %u times",
-		steps_asked, steps_taken, walked, steps_refused, steps_run_by_server, room_slid, crouches);
+		"the server ran %u; the room slid after the head %u times, and the player crouched in it %u times; "
+		"the stick was squared up to a ladder in %u moves",
+		steps_asked, steps_taken, walked, steps_refused, steps_run_by_server, room_slid, crouches, ladder_assists);
 }
