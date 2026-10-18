@@ -59,6 +59,7 @@ private:
 public:
    // SiN Gold VR: what the player carries, for the holster menus (vr_game.cpp)
    Container<int>   &VRInventory() { return inventory; }
+   void              VRSelectItem(InventoryItem *item) { currentItem = item; }
 
 protected:
    Weapon           *currentWeapon;
