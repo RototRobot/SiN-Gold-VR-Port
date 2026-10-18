@@ -71,7 +71,7 @@ and A/X on their own)
   Grip at the other hip tap: use the inventory item; hold: the inventory menu, to select one
   Grip over a shoulder, held                        the weapon menu
   In a menu: that hand's trigger steps along, take the hand out of the holster to pick,
-  let go of the grip in the holster to cancel
+  let go of the grip in the holster to cancel (vr_holster_invert 1 swaps these two)
   Right stick click     menu          Left stick, twice recentre
   Left grip             run, or hold a long gun's front with your other hand
   Right grip, held      let go of the weapon to set how it sits in your hand

@@ -205,7 +205,8 @@ Defaults for right-handed play, on Touch-style controllers (Reverb G2, Quest, Ri
 | Walk / crouch in your room | Walk / crouch |
 
 B and Y can be rebound (`vr_bind_top_gun`, `vr_bind_top_other`). With `vr_weapon_buttons 1`, B and Y
-cycle weapons instead. `vr_swap_sticks 1` swaps the two sticks, and A and X with them, so you move with
+cycle weapons instead. In the holster menus, `vr_holster_invert 1` makes letting go of the grip pick and
+taking your hand out cancel. `vr_swap_sticks 1` swaps the two sticks, and A and X with them, so you move with
 the right stick and turn with the left - in either handed mode. In a menu, on the loading screen or with the
 console up, the sticks are the arrow keys, the trigger is Enter and anything else is Escape.
 
@@ -271,6 +272,7 @@ on), bindable to any console command.
 | `vr_bind_top_other` | `invuse` | What the other hand's top button (Y, right-handed) does while `vr_weapon_buttons` is 0: any console command. By default it uses the selected inventory item. |
 | `vr_bind_top_gun` | `weaponuse` | The gun hand's top button (B): switches the weapon's mode. |
 | `vr_haptics` | 1 | The controllers buzz: as a hand reaches a shoulder or hip, as a gesture fires, when a weapon goes off (harder for the heavy ones, and in both hands while steadying a rifle), rising while the quantum destabilizer charges - full strength at five seconds, which is also when it blows up in your hands - and when a punch lands (harder on an enemy than a wall). 0 turns every buzz off. |
+| `vr_holster_invert` | 0 | 1 turns the holster menus' choosing round: letting go of the grip in the holster picks, and taking your hand out cancels. |
 | `vr_gestures` | 1 | The grips at the shoulders and hips change weapon and use the inventory, as in the controls above. 0 leaves the grips doing only what they do elsewhere. |
 | `vr_move_dir` | 1 | Which way the stick's forward is: 1 where your head faces, 2 where the moving hand's controller points, 0 the way you faced when you last recentred. |
 | `vr_missile_steer` | 1 | How Wages of Sin's guided missile steers: 1 with the hand that holds the weapon, pointed where it should go; 2 with your head, the missile turning to wherever you look; 0 as the flat game does, by the body's facing (left and right only in VR). |

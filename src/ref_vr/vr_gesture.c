@@ -33,6 +33,7 @@ typedef enum
 } zone_t;
 
 static cvar_t *vr_gestures;
+static cvar_t *vr_holster_invert; /* 1: letting go in the holster picks, leaving it cancels */
 
 static struct
 {
@@ -65,6 +66,7 @@ static unsigned done;
 void vr_gesture_startup(void)
 {
 	vr_gestures = vr_cvar("vr_gestures", "1", CVAR_ARCHIVE);
+	vr_holster_invert = vr_cvar("vr_holster_invert", "0", CVAR_ARCHIVE);
 }
 
 void vr_gesture_head(const float origin[3], const float angles[3])
@@ -175,6 +177,20 @@ static void fists(void)
 	act("use Fists", "both hands at the shoulders - the fists");
 }
 
+/* Whether letting go of the grip in the holster takes the one picked (and taking
+   the hand out of the holster cancels), rather than the other way round. */
+static int release_takes(void)
+{
+	return vr_holster_invert && vr_holster_invert->value != 0.0f;
+}
+
+/* Closes the open menu, taking the one picked or not, and says so in the hand. */
+static void close_menu(int hand, int take)
+{
+	vr_holster_close(take);
+	vr_input_haptic(hand, take ? 0.06f : 0.03f, take ? 1.0f : 0.4f);
+}
+
 static void hold(holding_t *h, zone_t zone)
 {
 	h->active = 1;
@@ -191,10 +207,11 @@ int vr_gesture_gun_grip(int down)
 	{
 		if (shoulder.active)
 		{
-			/* let go in the holster: a tap changes weapon, a menu closes as it was */
+			/* let go in the holster: a tap changes weapon, a menu closes - as it
+			   was, or taking the one picked with vr_holster_invert */
 			if (shoulder.menu)
 			{
-				vr_holster_close(0);
+				close_menu(gun_hand(), release_takes());
 			}
 			else
 			{
@@ -248,10 +265,11 @@ int vr_gesture_other_grip(int down)
 		other_at_shoulder = 0;
 		if (hip.active)
 		{
-			/* let go at the hip: a tap uses the item, a menu closes as it was */
+			/* let go at the hip: a tap uses the item, a menu closes as the
+			   shoulder's does */
 			if (hip.menu)
 			{
-				vr_holster_close(0);
+				close_menu(other_hand(), release_takes());
 			}
 			else
 			{
@@ -307,7 +325,8 @@ int vr_gesture_trigger(int gun, int down)
 }
 
 /* A grip held long enough in its holster opens that holster's menu; a hand
-   that leaves the holster with the menu open takes what it picked. */
+   that leaves the holster with the menu open takes what it picked - or, with
+   vr_holster_invert, cancels it. */
 static void run_holster(holding_t *h, int hand, int kind, int in_holster)
 {
 	if (!h->active)
@@ -338,8 +357,7 @@ static void run_holster(holding_t *h, int hand, int kind, int in_holster)
 
 	if (!in_holster)
 	{
-		vr_holster_close(1);
-		vr_input_haptic(hand, 0.06f, 1.0f);
+		close_menu(hand, !release_takes());
 		h->active = 0;
 		h->menu = 0;
 	}
