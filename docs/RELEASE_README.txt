@@ -32,10 +32,14 @@ PLAYING
 
 Start SteamVR and put the headset on, then double-click one of the launchers:
 
-  SiN VR.bat                               SiN in VR
-  SiN VR - Wages of Sin.bat                Wages of Sin in VR (its New Game also offers SiN)
+  SiN VR - Wages of Sin.bat                RECOMMENDED: Wages of Sin in VR, and its New Game
+                                           also offers the original SiN
+  SiN VR.bat                               the original SiN on its own, as it shipped
   SiN VR (flatscreen).bat                  the same mod with VR off
   SiN VR - Wages of Sin (flatscreen).bat   the same, for Wages of Sin
+
+Use "SiN VR - Wages of Sin.bat" for both campaigns: its New Game asks which adventure to play, and
+one launcher keeps one set of settings and grips.
 
 Or from Steam's own Play button: right-click SiN Gold, Properties, Launch Options, and enter
 

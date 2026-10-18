@@ -103,10 +103,12 @@ static const weapon_info_t weapon_table[] = {
 	{ "asrifle",   { 37.0f, -21.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 276, 308 } }, 1, { 79.3f, -18.5f, -39.4f }, -22.25f, 1 },
 	{ "hvgun",     { 30.0f, -25.0f, -38.0f }, 0.35f, 0, 0.30f, 2, { { 200, 309 }, { 358, 405 } }, 1, { 36.9f, -9.0f, -36.6f }, -24.1f, 0 },
 	/* The helicopter's minigun keeps both its modelled hands, one on each of
-	   its two handles, and is carried in them, the way the game drew it: there
-	   is no fore-end to take hold of and no other hand drawn. The grip is the
-	   general first guess, as it was before it had an entry. */
-	{ "heligun",   { 30.0f, -20.0f, -25.0f }, 0.35f, 0, 0.0f, 0, { { 0 } }, 0, { 0 }, 0.0f, 0, 0, { { 0 } }, 1 },
+	   its two upright handles, and is carried in them, the way the game drew
+	   it: no other hand is drawn, and both hands steer it all the time, like
+	   handlebars (own_handle_point). The handles' middles, measured: right
+	   (26.9 -12.2 -15.6), left (26.9 10.1 -15.6) - the model's middle is
+	   y = -1.05. The grip is the right one; hand is the left. */
+	{ "heligun",   { 26.9f, -12.2f, -15.6f }, 0.35f, 0, 0.0f, 0, { { 0 } }, 1, { 26.9f, 10.1f, -15.6f }, 0.0f, 0, 0, { { 0 } }, 1 },
 	{ "rlaunch",   { 28.0f, -24.0f, -36.0f }, 0.35f, 0, 0.30f, 1, { { 146, 218 } }, 1, { 49.8f, -6.3f, -33.3f }, -23.5f, 1 },
 	{ "srifle",    { 15.0f, -13.0f, -14.0f }, 0.35f, 0, 0.35f, 1, { { 249, 306 } }, 1, { 30.5f, -12.7f, -13.3f }, -15.9f, 1 },
 	{ "pulse2",    { 25.0f, -18.0f, -30.0f }, 0.35f, 0, 0.30f, 1, { { 358, 393 } }, 1, { 49.0f, -19.0f, -26.0f }, -23.35f, 1, 1, { { 44, 147 } } },
@@ -924,6 +926,32 @@ static int pivot_weapon(placement_t *p, const vr_pose_t *hand, const float fore[
 	return 1;
 }
 
+/* A weapon carried in its own two hands: where its other hand's handle is, in
+   the frame p is given in - on the other side of the model when it is drawn
+   mirrored. Returns 0 for any other weapon. */
+static int own_handle_point(const weapon_t *w, const placement_t *p, float out[3])
+{
+	float local[3];
+	int i;
+
+	if (!w || !w->info->own_hands || !w->info->has_hand || !p->valid)
+	{
+		return 0;
+	}
+
+	memcpy(local, w->info->hand, sizeof(local));
+	if (grip_mirrored(w, gun_hand()))
+	{
+		local[1] = -local[1];
+	}
+	for (i = 0; i < 3; ++i)
+	{
+		local[i] *= p->scale;
+	}
+	vr_pose_point(&p->pose, local, out);
+	return 1;
+}
+
 /* Where the fore-end is while the weapon is being adjusted: where the other
    hand is now, on the model as it is frozen. */
 static void set_fore(void)
@@ -1272,6 +1300,17 @@ void vr_weapon_publish(void)
 		{
 			steady.said = 1;
 			log_pose("both hands: weapon", &placed[gun].pose);
+		}
+	}
+	else
+	{
+		float handle[3];
+
+		/* carried in both its own hands, it goes where the two of them say */
+		if ((!vr_two_hand || vr_two_hand->value != 0.0f) && hands[other_hand()].valid &&
+			own_handle_point(current, &placed[gun], handle))
+		{
+			pivot_weapon(&placed[gun], &hands[gun].frame, handle, hands[other_hand()].frame.origin);
 		}
 	}
 	fore_valid = fore_point(current, &placed[gun], fore_at);

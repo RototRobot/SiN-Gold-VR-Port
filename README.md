@@ -80,7 +80,8 @@ all come from the runtime.
   firing animation.
 - **Two hands on long guns**: grip the fore-end with your other hand to aim with both. The arms SiN
   built into the models are taken out and your own hand is drawn instead. The helicopter's
-  minigun is the exception: it is carried in its own two modelled hands, as in the original game.
+  minigun is the exception: it is carried in its own two modelled hands, as in the original game,
+  and both your hands steer it all the time, like handlebars.
 - **Set each weapon's grip in the headset**: hold the grip button and place the weapon in your hand.
 - **Punch with your fists** (and the mutant hands): a swing lands where your fist goes, harder the
   faster you swing, with a little aim assist.
@@ -125,12 +126,17 @@ C:\Program Files (x86)\Steam\steamapps\common\SiN 1\
 
 ### 2. Start the game
 
-Start SteamVR and put the headset on, then run a launcher from the game folder:
+Start SteamVR and put the headset on, then run a launcher from the game folder.
+
+> [!TIP]
+> **Use `SiN VR - Wages of Sin.bat` for both campaigns.** Its New Game asks which adventure to play,
+> Wages of Sin or the original SiN, and one launcher keeps one set of settings and grips. Use
+> `SiN VR.bat` only if you want SiN exactly as it shipped, without the expansion's game code.
 
 | Launcher | What it does |
 |---|---|
-| `SiN VR.bat` | SiN in VR |
-| `SiN VR - Wages of Sin.bat` | Wages of Sin in VR; its New Game also offers the original SiN |
+| `SiN VR - Wages of Sin.bat` | **Recommended.** Wages of Sin in VR; its New Game also offers the original SiN |
+| `SiN VR.bat` | The original SiN on its own, as it shipped |
 | `SiN VR (flatscreen).bat` | The same mod with VR off |
 | `SiN VR - Wages of Sin (flatscreen).bat` | The same, for Wages of Sin |
 
