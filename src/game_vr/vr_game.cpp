@@ -656,19 +656,35 @@ Vector VR_MissileSteering(Player *player, Vector fallback)
 //
 qboolean VR_UseInventoryItem(Player *player, const char *name)
 {
-   Item *item;
+   Item     *item;
+   qboolean  select = false;
 
    if(!player || !name || !name[0])
    {
       return false;
    }
 
+   // "use select:<name>" only makes it the current item, as the hip's menu
+   // does: the top button then uses it (invuse)
+   if(!Q_strncasecmp(name, "select:", 7))
+   {
+      select = true;
+      name += 7;
+   }
+
    item = player->FindItem(name);
    if(!item || !item->isSubclassOf<InventoryItem>())
    {
-      return false;
+      return select;
    }
 
-   item->ProcessEvent(EV_InventoryItem_Use);
+   if(select)
+   {
+      player->VRSelectItem((InventoryItem *)item);
+   }
+   else
+   {
+      item->ProcessEvent(EV_InventoryItem_Use);
+   }
    return true;
 }

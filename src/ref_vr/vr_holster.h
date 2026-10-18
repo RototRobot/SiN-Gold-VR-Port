@@ -6,8 +6,8 @@
  * player carries come up in front of them; hold the other hand's grip at its own
  * hip and the inventory does. That hand's trigger steps along the row, and
  * taking the hand out of the holster takes the one picked - the weapon is
- * switched to, the item used. Letting go of the grip in the holster closes it
- * with nothing changed. The game sends what the player carries (SinVrHolsters);
+ * switched to, the item made the current one, for the top button to use.
+ * Letting go of the grip in the holster closes it with nothing changed. The game sends what the player carries (SinVrHolsters);
  * the gestures (vr_gesture.c) open, step and close the menu.
  */
 

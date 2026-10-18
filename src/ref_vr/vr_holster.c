@@ -11,8 +11,9 @@
  * The holster menus (vr_holster.h). The game sends what the player carries
  * every server frame; a menu is a row of the HUD pictures of one list, drawn
  * over the HUD panel in front of the player, the one picked bigger and named
- * underneath. Taking one is "use <name>", which switches to a weapon and - in
- * this mod's game code - uses an inventory item.
+ * underneath. Taking one is "use <name>", which switches to a weapon, or - in
+ * this mod's game code - "use select:<name>", which makes an item the current
+ * one.
  */
 
 #define STALE_MS 1000        /* the game has stopped sending: a level change, a menu */
@@ -180,7 +181,9 @@ void vr_holster_close(int take)
 	if (take && menu.picked >= 0 && menu.picked < menu.count && e->name[0] &&
 		!(menu.kind == VR_HOLSTER_WEAPONS && menu.picked == menu.current))
 	{
-		sprintf(command, "use %.40s", e->name);
+		/* a weapon is switched to; an item is made the current one, for the top
+		   button to use (the game code reads "select:") */
+		sprintf(command, menu.kind == VR_HOLSTER_WEAPONS ? "use %.40s" : "use select:%.40s", e->name);
 		vr_command(command);
 		vrlog("VR: from the %s menu: %s", menu.kind == VR_HOLSTER_WEAPONS ? "weapon" : "inventory", command);
 	}

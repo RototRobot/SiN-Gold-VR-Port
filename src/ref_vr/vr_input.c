@@ -270,23 +270,18 @@ static cvar_t *vr_snap_angle;
 static cvar_t *vr_haptics;
 static cvar_t *vr_move_dir;
 static cvar_t *vr_weapon_buttons;
+static cvar_t *vr_swap_sticks;
 static int said_weapon_buttons;
 
 /*
  * With the weapon buttons off, the two top buttons run these instead. The
- * other hand's (Y, right-handed) turns Wages of Sin's flashlight on and off,
- * and clicked twice its night-vision goggles - inventory items, with no key of
- * their own - so a single click waits to see whether a second one follows. The
- * gun hand's (B) switches the weapon's mode, SiN's right mouse button. The
- * vr_bind_top_* cvars rebind them.
+ * other hand's (Y, right-handed) uses the inventory item the HUD shows - the
+ * one picked from the hip's menu (vr_gesture.c): the flashlight, the goggles, a
+ * powerup. The gun hand's (B) switches the weapon's mode, SiN's right mouse
+ * button. vr_bind_top_other and vr_bind_top_gun rebind them.
  */
-#define TOP_DOUBLE_MS 500
-
-static action_t top_other = { "top_other", "Other hand's top button", KIND_BUTTON, "use Flashlight" };
-static action_t top_other_twice = { "top_other_twice", "Other hand's top button, twice", KIND_BUTTON,
-	"use Goggles" };
+static action_t top_other = { "top_other", "Other hand's top button", KIND_BUTTON, "invuse" };
 static action_t top_gun = { "top_gun", "Gun hand's top button", KIND_BUTTON, "weaponuse" };
-static unsigned top_other_clicked; /* a first click waiting for a second, or 0 */
 static int snap_armed = 1;
 static int said_no_snap;
 static int steadying; /* the other hand's grip button has hold of the weapon */
@@ -334,8 +329,8 @@ void vr_input_register(void)
 	vr_haptics = vr_cvar("vr_haptics", "1", CVAR_ARCHIVE);
 	vr_move_dir = vr_cvar("vr_move_dir", "1", CVAR_ARCHIVE);
 	vr_weapon_buttons = vr_cvar("vr_weapon_buttons", "0", CVAR_ARCHIVE);
+	vr_swap_sticks = vr_cvar("vr_swap_sticks", "0", CVAR_ARCHIVE);
 	top_other.bind = vr_cvar("vr_bind_top_other", top_other.command, CVAR_ARCHIVE);
-	top_other_twice.bind = vr_cvar("vr_bind_top_other_twice", top_other_twice.command, CVAR_ARCHIVE);
 	top_gun.bind = vr_cvar("vr_bind_top_gun", top_gun.command, CVAR_ARCHIVE);
 
 	for (i = 0; i < ACT_COUNT; ++i)
@@ -420,7 +415,7 @@ static XrPath string_to_path(XrInstance instance, const char *string)
  * that is not on a hand at all is left alone.
  */
 /* The same button on the other hand, or NULL if that hand has none. */
-static const char *for_hand(const char *path, action_kind_t kind, int halves, char *buffer, size_t size)
+static const char *for_hand(const char *path, int action, int halves, char *buffer, size_t size)
 {
 	static const char left[] = "/user/hand/left/";
 	static const char right[] = "/user/hand/right/";
@@ -428,7 +423,18 @@ static const char *for_hand(const char *path, action_kind_t kind, int halves, ch
 	const char *head, *tail;
 	int i;
 
-	if (kind == KIND_POSE || kind == KIND_HAPTIC || !vr_weapon_left_handed())
+	action_kind_t kind = actions[action].kind;
+	int other = vr_weapon_left_handed();
+
+	/* vr_swap_sticks: moving and turning, jump and crouch, on the other hands
+	   from wherever left- or right-handed play puts them */
+	if (vr_swap_sticks && vr_swap_sticks->value != 0.0f &&
+		(action == ACT_MOVE || action == ACT_TURN || action == ACT_JUMP || action == ACT_CROUCH))
+	{
+		other = !other;
+	}
+
+	if (kind == KIND_POSE || kind == KIND_HAPTIC || !other)
 	{
 		return path;
 	}
@@ -493,8 +499,8 @@ static void suggest_profile(XrInstance instance, const profile_t *profile)
 	for (i = 0; i < profile->count && count < ARRAY_COUNT(list); ++i)
 	{
 		char swapped[96];
-		const char *string = for_hand(profile->bindings[i].path,
-			actions[profile->bindings[i].action].kind, profile->halves, swapped, sizeof(swapped));
+		const char *string = for_hand(profile->bindings[i].path, profile->bindings[i].action, profile->halves,
+			swapped, sizeof(swapped));
 		XrPath path = string ? string_to_path(instance, string) : XR_NULL_PATH;
 
 		if (path == XR_NULL_PATH)
@@ -927,24 +933,6 @@ static void press_action(int index, int down, int menu)
 			vr_printf("VR: the weapon buttons are off - reach over a shoulder to change weapon, or set "
 				"vr_weapon_buttons 1");
 		}
-		if (top == &top_other)
-		{
-			/* the second click of a pair is the goggles; a first one waits */
-			if (down && top_other_clicked && GetTickCount() - top_other_clicked < TOP_DOUBLE_MS)
-			{
-				top_other_clicked = 0;
-				dispatch(&top_other_twice, 1);
-			}
-			else if (down)
-			{
-				top_other_clicked = GetTickCount();
-				if (!top_other_clicked)
-				{
-					top_other_clicked = 1;
-				}
-			}
-			return;
-		}
 		dispatch(top, down);
 		return;
 	}
@@ -1334,13 +1322,6 @@ void vr_input_frame(XrSession session)
 	if (action_set == XR_NULL_HANDLE || !vr_input || vr_input->value == 0.0f)
 	{
 		return;
-	}
-
-	/* A single click of the other top button, once no second one came. */
-	if (top_other_clicked && GetTickCount() - top_other_clicked >= TOP_DOUBLE_MS)
-	{
-		top_other_clicked = 0;
-		dispatch(&top_other, 1);
 	}
 
 	active.actionSet = action_set;

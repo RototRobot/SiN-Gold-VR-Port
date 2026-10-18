@@ -59,15 +59,16 @@ MOVE AND RESIZE YOUR GUNS - every grip starts from a best guess, so set the ones
   4. Let go of the grip. It is remembered for each weapon.
 
 
-CONTROLS (right-handed; vr_left_handed 1 swaps the hands)
+CONTROLS (right-handed; vr_left_handed 1 swaps the hands, vr_swap_sticks 1 swaps the sticks
+and A/X on their own)
 
   Left stick            move (forward is where you look; vr_move_dir changes it)
   Right stick           turn - smoothly, or in steps with vr_snap_turn 1
   Right trigger         fire          Left trigger      use
   A                     jump          X                 crouch
   B                     switch the weapon's mode (right mouse button)
-  Y                     flashlight      Y, twice      night-vision goggles (Wages of Sin)
-  Grip at the other hip tap: use the inventory item; hold: the inventory menu
+  Y                     use the selected inventory item (flashlight, goggles, powerups)
+  Grip at the other hip tap: use the inventory item; hold: the inventory menu, to select one
   Grip over a shoulder, held                        the weapon menu
   In a menu: that hand's trigger steps along, take the hand out of the holster to pick,
   let go of the grip in the holster to cancel

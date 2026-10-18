@@ -6,8 +6,9 @@
  * over the other the previous - and held, it opens the weapon menu
  * (vr_holster.h). At the gun hand's own hip it draws the magnum. The other
  * hand's grip at its own hip: a tap uses the inventory item the HUD shows, and
- * held, it opens the inventory menu. Both hands at the shoulders with both
- * grips pressed together bring up the fists. While a menu is open, the trigger
+ * held, it opens the inventory menu, which picks the item the top button uses.
+ * Both hands at the shoulders with both grips pressed together bring up the
+ * fists. While a menu is open, the trigger
  * of the hand holding it steps along it, taking that hand out of the holster
  * takes the one picked, and letting go of the grip there closes it with nothing
  * changed. Anywhere else each grip does what it did (vr_input.c, vr_weapon.c).

@@ -89,7 +89,10 @@ all come from the runtime.
   for the magnum, both hands up for the fists.
 - **Holster menus**: hold the grip over a shoulder and every weapon you carry comes up in front of you;
   hold it at your other hip for your inventory. The trigger steps along, and taking your hand out of
-  the holster picks it.
+  the holster picks it: the weapon is drawn, the item selected for Y to use - the flashlight, the
+  goggles, a powerup.
+- **Every button on the controllers**: weapon modes on B, the selected item on Y, and
+  `vr_swap_sticks` to move with the right stick in either handed mode.
 - **Haptics** for shots, punches and the quantum destabilizer's charge.
 - **Left-handed mode**: the mirror image of all of it.
 - **Wages of Sin's own weapons** too: the dual magnums in both hands, a guided missile steered with
@@ -189,21 +192,21 @@ Defaults for right-handed play, on Touch-style controllers (Reverb G2, Quest, Ri
 | A | Jump |
 | X | Crouch |
 | B | Switch the weapon's mode (SiN's right mouse button), for weapons that have two |
-| Y | Flashlight on / off (Wages of Sin, once you have picked it up) |
-| Y, click twice | Night-vision goggles on / off (Wages of Sin, once you have them) |
+| Y | Use the inventory item you have selected: the flashlight, the goggles, a powerup (pick it from the hip menu below) |
 | Left grip | Run (walk, with `cl_run 1`); at a long gun's fore-end, hold it in both hands |
 | **Right grip, held** | **Move the weapon in your hand; push the right stick up / down to resize it** |
 | Right hand over your right / left shoulder, right grip: a tap | Next / previous weapon |
 | Right hand over a shoulder, right grip: **held** | **The weapon menu**: right trigger steps along, take your hand away from the shoulder to switch to the one picked, let go of the grip there to cancel |
 | Right hand at your right hip, right grip | The magnum |
 | Left hand at your left hip, left grip: a tap | Use the inventory item the HUD shows (powerups) |
-| Left hand at your left hip, left grip: **held** | **The inventory menu**: left trigger steps along, take your hand away from the hip to use the one picked, let go of the grip there to cancel |
+| Left hand at your left hip, left grip: **held** | **The inventory menu**: left trigger steps along, take your hand away from the hip to select the one picked (Y then uses it), let go of the grip there to cancel |
 | Both hands at your shoulders, both grips | The fists |
 | Swing a fist | Punch with that hand |
 | Walk / crouch in your room | Walk / crouch |
 
-B and Y can be rebound (`vr_bind_top_gun`, `vr_bind_top_other`, `vr_bind_top_other_twice`). With
-`vr_weapon_buttons 1`, B and Y cycle weapons instead. In a menu, on the loading screen or with the
+B and Y can be rebound (`vr_bind_top_gun`, `vr_bind_top_other`). With `vr_weapon_buttons 1`, B and Y
+cycle weapons instead. `vr_swap_sticks 1` swaps the two sticks, and A and X with them, so you move with
+the right stick and turn with the left - in either handed mode. In a menu, on the loading screen or with the
 console up, the sticks are the arrow keys, the trigger is Enter and anything else is Escape.
 
 ### Setting a weapon in your hand
@@ -265,8 +268,7 @@ on), bindable to any console command.
 | `vr_snap_turn` | 0 | 1 turns in steps: each push of the turning stick turns you `vr_snap_angle` degrees at once, and the stick has to come back to the middle before it turns you again. 0 is smooth turning. |
 | `vr_snap_angle` | 45 | How far one snap turns you, in degrees. |
 | `vr_weapon_buttons` | 0 | 1 lets the top buttons (B and Y) cycle weapons as well as the shoulders. |
-| `vr_bind_top_other` | `use Flashlight` | What the other hand's top button (Y, right-handed) does while `vr_weapon_buttons` is 0: any console command. A single click waits half a second for a second one. |
-| `vr_bind_top_other_twice` | `use Goggles` | The same button clicked twice. |
+| `vr_bind_top_other` | `invuse` | What the other hand's top button (Y, right-handed) does while `vr_weapon_buttons` is 0: any console command. By default it uses the selected inventory item. |
 | `vr_bind_top_gun` | `weaponuse` | The gun hand's top button (B): switches the weapon's mode. |
 | `vr_haptics` | 1 | The controllers buzz: as a hand reaches a shoulder or hip, as a gesture fires, when a weapon goes off (harder for the heavy ones, and in both hands while steadying a rifle), rising while the quantum destabilizer charges - full strength at five seconds, which is also when it blows up in your hands - and when a punch lands (harder on an enemy than a wall). 0 turns every buzz off. |
 | `vr_gestures` | 1 | The grips at the shoulders and hips change weapon and use the inventory, as in the controls above. 0 leaves the grips doing only what they do elsewhere. |
@@ -281,6 +283,7 @@ on), bindable to any console command.
 | `vr_aim` | 1 | Shots come from the weapon in the hand rather than from the player's angles. |
 | `vr_weapon_hand` | 1 | Draw the weapon in the hand instead of in front of the camera. |
 | `vr_left_handed` | 0 | 1 puts the weapon in the left hand, mirrored, and swaps the two controllers' buttons and sticks. Read when the renderer starts, so `vid_restart` after changing it. |
+| `vr_swap_sticks` | 0 | 1 swaps the move and turn sticks, and jump and crouch (A and X), whichever hand the weapon is in. Read when the renderer starts, so `vid_restart` after changing it. |
 | `vr_show_hands` | 1 | Draw the controllers - a cross and the line they point along - while a weapon is being placed. 2 draws them all the time, 0 never. |
 | `vr_punch` | 1 | Swinging a fist punches while the fists are out. 0 leaves punching to the trigger; 2 also says in the console what each punch hit. |
 | `vr_punch_speed` | 2 | How fast a fist has to be going to punch, in metres a second. |

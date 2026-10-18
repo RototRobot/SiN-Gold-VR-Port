@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(SiNGoldVR VERSION 1.0.1 LANGUAGES C CXX)
+project(SiNGoldVR VERSION 1.0.2 LANGUAGES C CXX)
 
 if(NOT MSVC)
 	message(FATAL_ERROR "SiN Gold VR builds with MSVC only: the game DLL has to match the engine's ABI.")
